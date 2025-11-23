@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Weather Clock</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(to bottom, #1a1a2e, #0f3460);
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 300px;
+            backdrop-filter: blur(10px);
+        }
+        #info-panel h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+        .weather-info {
+            margin: 10px 0;
+        }
+        .weather-section {
+            margin: 15px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+        .weather-section h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #88d8f9;
+        }
+        .temperature {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .time-display {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .loading {
+            color: #88d8f9;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="info-panel">
+        <div class="time-display" id="time-display">--:--:--</div>
+        <h2>Weather Clock</h2>
+        <div class="weather-info">
+            <div class="weather-section">
+                <h3>📍 Location</h3>
+                <div id="location">Detecting...</div>
+            </div>
+            <div class="weather-section">
+                <h3>🌤️ Current Weather</h3>
+                <div id="current-weather" class="loading">Loading...</div>
+                <div class="temperature" id="current-temp">--°</div>
+            </div>
+            <div class="weather-section">
+                <h3>⏮️ Past (3h ago)</h3>
+                <div id="past-weather">--</div>
+                <div id="past-temp">--°</div>
+            </div>
+            <div class="weather-section">
+                <h3>⏭️ Forecast (3h)</h3>
+                <div id="forecast-weather">--</div>
+                <div id="forecast-temp">--°</div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
