@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 export function calculateMoonPhase(date = new Date()) {
     // Moon phase calculation using astronomical algorithm
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
+    let year = date.getFullYear();
+    let month = date.getMonth() + 1;
     const day = date.getDate();
     
     let c, e, jd, b;

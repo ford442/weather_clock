@@ -185,7 +185,8 @@ export class WeatherEffects {
             this.scene.remove(flash);
         }, 100);
 
-        // Random future flashes
+        // Note: Recursive lightning calls are intentionally limited by probability
+        // and will naturally stop when weather conditions change via clear()
         if (Math.random() > 0.5) {
             setTimeout(() => this.createLightning(), 2000 + Math.random() * 5000);
         }

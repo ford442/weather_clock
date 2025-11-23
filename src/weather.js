@@ -1,6 +1,6 @@
 export class WeatherService {
     constructor() {
-        this.apiKey = 'demo'; // Using demo mode for Open-Meteo (no key needed)
+        // Open-Meteo API is free and doesn't require an API key
         this.latitude = null;
         this.longitude = null;
         this.location = null;
@@ -53,7 +53,7 @@ export class WeatherService {
     async reverseGeocode(lat, lon) {
         try {
             const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`
             );
             const data = await response.json();
             
@@ -78,7 +78,7 @@ export class WeatherService {
             // Using Open-Meteo API (free, no key required)
             // Get current and forecast weather
             const currentResponse = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${this.latitude}&longitude=${this.longitude}&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
+                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
             );
             const currentData = await currentResponse.json();
 
@@ -89,7 +89,7 @@ export class WeatherService {
             const todayStr = now.toISOString().split('T')[0];
             
             const historicalResponse = await fetch(
-                `https://archive-api.open-meteo.com/v1/archive?latitude=${this.latitude}&longitude=${this.longitude}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
+                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
             );
             const historicalData = await historicalResponse.json();
 

@@ -146,11 +146,17 @@ initWeather();
 animate();
 
 // Refresh weather data every 10 minutes
+let isUpdatingWeather = false;
 setInterval(async () => {
+    if (isUpdatingWeather) return; // Prevent overlapping requests
+    
+    isUpdatingWeather = true;
     try {
         weatherData = await weatherService.fetchWeather();
         updateWeatherDisplay(weatherData);
     } catch (error) {
         console.error('Weather update failed:', error);
+    } finally {
+        isUpdatingWeather = false;
     }
 }, 10 * 60 * 1000);
