@@ -1,99 +1,46 @@
-# Weather Clock 🌤️⏰
+# 3D Weather Clock
 
-A stunning 3D sundial clock that displays real-time weather information, featuring dynamic lighting, moon phases, and animated weather effects.
-
-![Weather Clock](https://github.com/user-attachments/assets/131518ce-7ff3-4ecf-83ca-f61a7f4c770d)
+A 3D interactive weather clock built with Three.js. This application visualizes the current time and real-time weather conditions using a 3D sundial, moon, and dynamic weather effects.
 
 ## Features
 
-### Core Features ✨
-- **3D Sundial with Clock Face**: Beautiful 3D-rendered sundial with hour markers, numbers, and working clock hands (hour, minute, second)
-- **Real-time Clock**: Displays current time with animated clock hands
-- **Weather Data**: 
-  - Current weather conditions with temperature
-  - Past weather (3 hours ago) with fading visualization
-  - Weather forecast (3 hours ahead) with approaching effects
-  - Temperature comparison across time periods
-- **Dynamic Lighting**: Scene lighting adapts based on weather conditions (clear, cloudy, stormy, etc.)
-- **Geolocation**: Automatically detects user's location for local weather (with fallback to default location)
+*   **Real-time Time Display**: A functioning 3D sundial with rotating hands and shadow casting.
+*   **Live Weather Visualization**:
+    *   **Rain**: Dynamic rain simulation that interacts with the clock surface (pooling, running off).
+    *   **Snow**: Gentle snowfall effect.
+    *   **Clouds**: Floating 3D clouds.
+    *   **Lighting**: Dynamic lighting changes based on time of day and weather conditions.
+*   **Moon Phase**: Accurate moon phase visualization.
+*   **Weather Data**: Fetches live weather data based on location.
 
-### Advanced Features 🌙
-- **Moon Phase Display**: Real-time moon phase calculation and 3D visualization
-- **3D Weather Animations**: 
-  - Animated rain particles
-  - Falling snow effects
-  - Moving clouds
-  - Lightning flashes for thunderstorms
-- **Wind Speed Indicator**: Shows current wind speed
-- **Weather-responsive Colors**: Lighting and colors change based on weather conditions
+## Setup
 
-## Installation
+1.  **Install Dependencies**:
+    ```bash
+    npm install
+    ```
 
-```bash
-npm install
-```
+2.  **Run Development Server**:
+    ```bash
+    npm run dev
+    ```
 
-## Usage
+3.  **Build for Production**:
+    ```bash
+    npm run build
+    ```
 
-### Development Server
-```bash
-npm run dev
-```
-Then open your browser to `http://localhost:5173/`
+## Controls
 
-### Build for Production
-```bash
-npm run build
-```
+*   **Orbit**: Click and drag to rotate the view (if OrbitControls is enabled - currently fixed camera).
+*   **Resize**: The view automatically adjusts to the window size.
 
-### Preview Production Build
-```bash
-npm run preview
-```
+## Technologies
 
-## Technology Stack
-
-- **Three.js**: 3D graphics rendering
-- **Vite**: Fast build tool and dev server
-- **Open-Meteo API**: Free weather data (no API key required)
-- **OpenStreetMap Nominatim**: Reverse geocoding for location names
-
-## Weather Data
-
-The application uses the free Open-Meteo API which provides:
-- Current weather conditions
-- Historical weather data
-- Weather forecasts
-- Wind speed
-- Cloud cover
-- No API key required!
-
-## Geolocation
-
-The app requests your location to provide accurate local weather. If geolocation is denied or unavailable, it defaults to New York City.
-
-## Browser Compatibility
-
-Works best in modern browsers with WebGL support:
-- Chrome/Edge (recommended)
-- Firefox
-- Safari
-
-## Future Enhancements
-
-Planned features for future releases:
-- Additional weather phenomena (fog, hail)
-- More detailed moon textures
-- Timezone support
-- Multiple location management
-- Weather alerts
-- Historical weather graphs
+*   **Three.js**: 3D rendering engine.
+*   **Vite**: Build tool and development server.
+*   **Open-Meteo API**: Free weather data API (or whichever is implemented).
 
 ## License
 
 ISC
-
-## Credits
-
-Weather data provided by [Open-Meteo.com](https://open-meteo.com/)
-Geocoding by [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/)
