@@ -14,7 +14,8 @@ export class WeatherService {
     async getLocation() {
         return new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
-                reject(new Error('Geolocation not supported'));
+                this.setDefaultLocation();
+                resolve();
                 return;
             }
 
@@ -34,10 +35,19 @@ export class WeatherService {
                     resolve();
                 },
                 (error) => {
-                    reject(error);
+                    console.warn('Geolocation failed, using default location:', error.message);
+                    this.setDefaultLocation();
+                    resolve();
                 }
             );
         });
+    }
+
+    setDefaultLocation() {
+        // Default to New York City coordinates
+        this.latitude = 40.7128;
+        this.longitude = -74.0060;
+        this.location = 'New York, USA (default)';
     }
 
     async reverseGeocode(lat, lon) {
@@ -68,7 +78,7 @@ export class WeatherService {
             // Using Open-Meteo API (free, no key required)
             // Get current and forecast weather
             const currentResponse = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${this.latitude}&longitude=${this.longitude}&current=temperature_2m,weather_code,cloud_cover&hourly=temperature_2m,weather_code,cloud_cover&timezone=auto`
+                `https://api.open-meteo.com/v1/forecast?latitude=${this.latitude}&longitude=${this.longitude}&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
             );
             const currentData = await currentResponse.json();
 
@@ -79,7 +89,7 @@ export class WeatherService {
             const todayStr = now.toISOString().split('T')[0];
             
             const historicalResponse = await fetch(
-                `https://archive-api.open-meteo.com/v1/archive?latitude=${this.latitude}&longitude=${this.longitude}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,weather_code,cloud_cover&timezone=auto`
+                `https://archive-api.open-meteo.com/v1/archive?latitude=${this.latitude}&longitude=${this.longitude}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
             );
             const historicalData = await historicalResponse.json();
 
@@ -88,7 +98,8 @@ export class WeatherService {
                 temp: currentData.current.temperature_2m,
                 weatherCode: currentData.current.weather_code,
                 description: this.getWeatherDescription(currentData.current.weather_code),
-                cloudCover: currentData.current.cloud_cover
+                cloudCover: currentData.current.cloud_cover,
+                windSpeed: currentData.current.wind_speed_10m
             };
 
             // Parse past weather (3 hours ago)
@@ -97,7 +108,8 @@ export class WeatherService {
                 temp: historicalData.hourly.temperature_2m[pastHourIndex] || current.temp,
                 weatherCode: historicalData.hourly.weather_code[pastHourIndex] || current.weatherCode,
                 description: this.getWeatherDescription(historicalData.hourly.weather_code[pastHourIndex] || current.weatherCode),
-                cloudCover: historicalData.hourly.cloud_cover[pastHourIndex] || current.cloudCover
+                cloudCover: historicalData.hourly.cloud_cover[pastHourIndex] || current.cloudCover,
+                windSpeed: historicalData.hourly.wind_speed_10m[pastHourIndex] || current.windSpeed
             };
 
             // Parse forecast (3 hours from now)
@@ -107,7 +119,8 @@ export class WeatherService {
                 temp: currentData.hourly.temperature_2m[futureHourIndex] || current.temp,
                 weatherCode: currentData.hourly.weather_code[futureHourIndex] || current.weatherCode,
                 description: this.getWeatherDescription(currentData.hourly.weather_code[futureHourIndex] || current.weatherCode),
-                cloudCover: currentData.hourly.cloud_cover[futureHourIndex] || current.cloudCover
+                cloudCover: currentData.hourly.cloud_cover[futureHourIndex] || current.cloudCover,
+                windSpeed: currentData.hourly.wind_speed_10m[futureHourIndex] || current.windSpeed
             };
 
             return {

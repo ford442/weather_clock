@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { createSundial } from './sundial.js';
 import { WeatherService } from './weather.js';
 import { updateLighting } from './lighting.js';
+import { calculateMoonPhase, createMoon, positionMoon } from './moonPhase.js';
+import { WeatherEffects } from './weatherEffects.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -33,18 +35,34 @@ scene.add(sunLight);
 const sundial = createSundial();
 scene.add(sundial.group);
 
+// Create moon
+const moonPhase = calculateMoonPhase();
+const moon = createMoon(moonPhase.phase);
+scene.add(moon);
+
+// Add moon light
+const moonLight = new THREE.PointLight(0x8899cc, 0.3, 15);
+moon.add(moonLight);
+
+// Weather effects
+const weatherEffects = new WeatherEffects(scene);
+
 // Weather service
 const weatherService = new WeatherService();
 let weatherData = null;
 
 // Initialize weather
 async function initWeather() {
+    // Always show moon phase
+    document.getElementById('moon-phase').textContent = moonPhase.phaseName;
+    
     try {
         weatherData = await weatherService.initialize();
         updateWeatherDisplay(weatherData);
     } catch (error) {
         console.error('Weather initialization failed:', error);
-        document.getElementById('location').textContent = 'Unable to get location';
+        document.getElementById('location').textContent = 'Weather data unavailable';
+        document.getElementById('current-weather').textContent = 'Unable to fetch';
     }
 }
 
@@ -72,6 +90,14 @@ function updateWeatherDisplay(data) {
         document.getElementById('forecast-weather').textContent = data.forecast.description;
         document.getElementById('forecast-temp').textContent = `${Math.round(data.forecast.temp)}°C`;
     }
+
+    // Wind speed
+    if (data.current && data.current.windSpeed !== undefined) {
+        document.getElementById('wind-speed').textContent = `${Math.round(data.current.windSpeed)} km/h`;
+    }
+
+    // Moon phase
+    document.getElementById('moon-phase').textContent = moonPhase.phaseName;
 }
 
 // Update time display
@@ -90,12 +116,19 @@ function animate() {
     // Update sundial (rotates gnomon based on time)
     sundial.update();
 
+    // Update moon position
+    positionMoon(moon, { x: 0, y: 0, z: 0 });
+
     // Update time display
     updateTimeDisplay();
 
     // Update lighting based on weather
     if (weatherData) {
         updateLighting(scene, sunLight, ambientLight, weatherData);
+        
+        // Update weather effects (rain, snow, clouds, etc.)
+        const windSpeed = weatherData.current?.windSpeed || 0;
+        weatherEffects.update(weatherData.current?.weatherCode || 0, windSpeed);
     }
 
     renderer.render(scene, camera);
