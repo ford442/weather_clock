@@ -45,7 +45,7 @@ const moonLight = new THREE.PointLight(0x8899cc, 0.3, 15);
 moon.add(moonLight);
 
 // Weather effects
-const weatherEffects = new WeatherEffects(scene);
+const weatherEffects = new WeatherEffects(scene, sundial.group);
 
 // Weather service
 const weatherService = new WeatherService();
