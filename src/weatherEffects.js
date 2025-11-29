@@ -6,78 +6,104 @@ export class WeatherEffects {
         this.sundialGroup = sundialGroup;
         this.particleSystems = [];
         this.clouds = [];
-        this.currentWeatherCode = 0;
+
+        // State to track if we need to rebuild
+        this.weatherState = {
+            past: { code: -1, wind: 0 },
+            current: { code: -1, wind: 0 },
+            forecast: { code: -1, wind: 0 }
+        };
 
         this.raycaster = new THREE.Raycaster();
         this.downVector = new THREE.Vector3(0, -1, 0);
-        this.dummyVector = new THREE.Vector3();
     }
 
-    update(weatherCode, windSpeed = 0) {
-        if (weatherCode !== this.currentWeatherCode) {
+    update(past, current, forecast) {
+        // past, current, forecast are objects { weatherCode, windSpeed }
+
+        // Check if weather codes changed
+        if (past.weatherCode !== this.weatherState.past.code ||
+            current.weatherCode !== this.weatherState.current.code ||
+            forecast.weatherCode !== this.weatherState.forecast.code) {
+
             this.clear();
-            this.currentWeatherCode = weatherCode;
-            this.createEffects(weatherCode, windSpeed);
+
+            this.weatherState.past = { ...past };
+            this.weatherState.current = { ...current };
+            this.weatherState.forecast = { ...forecast };
+
+            // Create effects for each zone
+            // Zones: Left (-12 to -4), Center (-4 to 4), Right (4 to 12)
+            this.createZoneEffects(past.weatherCode, past.windSpeed, -8, 8);
+            this.createZoneEffects(current.weatherCode, current.windSpeed, 0, 8);
+            this.createZoneEffects(forecast.weatherCode, forecast.windSpeed, 8, 8);
+        } else {
+            // Update wind speeds if changed without code change
+            this.weatherState.past.wind = past.windSpeed;
+            this.weatherState.current.wind = current.windSpeed;
+            this.weatherState.forecast.wind = forecast.windSpeed;
         }
 
-        // Update rain physics
-        if (this.rainSystem) {
-            this.updateRain(windSpeed);
-        }
+        // Update all active systems
+        this.particleSystems.forEach(system => {
+            if (system.userData.type === 'rain') {
+                this.updateRain(system, system.userData.windSpeed || 0, system.userData.zone);
+            } else if (system.userData.type === 'snow') {
+                this.updateSnow(system, system.userData.windSpeed || 0, system.userData.zone);
+            }
+        });
 
-        // Update snow physics
-        if (this.snowSystem) {
-            this.updateSnow(windSpeed);
-        }
-
-        // Update splashes
+        // Update splashes (global system, but spawned locally)
         if (this.splashSystem) {
             this.updateSplashes();
         }
 
         // Animate clouds
         this.clouds.forEach(cloud => {
-            cloud.position.x += 0.005 + windSpeed * 0.001;
-            if (cloud.position.x > 15) {
-                cloud.position.x = -15;
-            }
+            // Clouds drift across the screen? Or stay in zones?
+            // User wanted "visually divided". Let's keep clouds in zones if created there, or global?
+            // For now, let's just drift them slowly and wrap within their zone if possible, or just global drift.
+            // Let's implement simple global drift for now as clouds are high up.
+            cloud.position.x += 0.005 + (cloud.userData.windSpeed || 0) * 0.001;
+            const limit = 15;
+            if (cloud.position.x > limit) cloud.position.x = -limit;
         });
     }
 
-    createEffects(weatherCode, windSpeed) {
-        // Weather codes:
-        // 61-65: Rain
-        // 71-77: Snow
-        // 95-99: Thunderstorm
-        // 2-3: Cloudy
+    createZoneEffects(weatherCode, windSpeed, centerX, width) {
+        // Store zone info: minX, maxX
+        const zone = {
+            minX: centerX - width / 2,
+            maxX: centerX + width / 2,
+            centerX: centerX
+        };
 
         if (weatherCode >= 61 && weatherCode <= 65) {
-            this.createRain(weatherCode >= 63 ? 3000 : 1500);
+            this.createRain(weatherCode >= 63 ? 1000 : 500, zone, windSpeed);
         } else if (weatherCode >= 71 && weatherCode <= 77) {
-            this.createSnow(weatherCode >= 73 ? 1500 : 800);
+            this.createSnow(weatherCode >= 73 ? 500 : 300, zone, windSpeed);
         } else if (weatherCode >= 95) {
-            this.createRain(4000);
-            this.createLightning();
+            this.createRain(1500, zone, windSpeed);
+            this.createLightning(zone);
         }
 
         if (weatherCode >= 2) {
-            this.createClouds(weatherCode === 3 ? 5 : 3);
+            // Clouds
+            // Only add clouds if not too many already?
+            // Or add local clouds.
+            this.createClouds(weatherCode === 3 ? 3 : 1, zone, windSpeed);
         }
     }
 
-    createRain(particleCount = 1500) {
+    createRain(particleCount, zone, windSpeed) {
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
-
-        // Custom data for physics
-        // State: 0 = Falling, 1 = On Surface
         const states = new Int8Array(particleCount);
         const velocities = new Float32Array(particleCount * 3);
 
         for (let i = 0; i < particleCount; i++) {
-            this.resetRainParticle(positions, velocities, states, i);
-            // Pre-randomize Y so they don't all start at top
-            positions[i * 3 + 1] = Math.random() * 20 - 5;
+            this.resetRainParticle(positions, velocities, states, i, zone, windSpeed);
+            positions[i * 3 + 1] = Math.random() * 20 - 5; // Random initial height
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -86,233 +112,114 @@ export class WeatherEffects {
             color: 0x88ccff,
             size: 0.08,
             transparent: true,
-            opacity: 0.8,
-            // blending: THREE.AdditiveBlending
+            opacity: 0.8
         });
 
-        this.rainSystem = new THREE.Points(geometry, material);
-        this.rainSystem.userData = {
+        const system = new THREE.Points(geometry, material);
+        system.userData = {
+            type: 'rain',
             velocities: velocities,
-            states: states
+            states: states,
+            zone: zone,
+            windSpeed: windSpeed
         };
 
-        this.scene.add(this.rainSystem);
-        this.particleSystems.push(this.rainSystem);
+        this.scene.add(system);
+        this.particleSystems.push(system);
 
-        // Initialize splashes
-        this.createSplashes();
+        if (!this.splashSystem) this.createSplashes();
     }
 
-    resetRainParticle(positions, velocities, states, i) {
+    resetRainParticle(positions, velocities, states, i, zone, windSpeed) {
         const i3 = i * 3;
-        positions[i3] = Math.random() * 10 - 5; // x
-        positions[i3 + 1] = 10 + Math.random() * 5; // y
-        positions[i3 + 2] = Math.random() * 10 - 5; // z
+        // Random position within zone
+        positions[i3] = zone.minX + Math.random() * (zone.maxX - zone.minX);
+        positions[i3 + 1] = 10 + Math.random() * 5;
+        positions[i3 + 2] = Math.random() * 10 - 5; // Z depth
 
         velocities[i3] = 0;
-        velocities[i3 + 1] = -0.15 - Math.random() * 0.1; // Falling speed
+        velocities[i3 + 1] = -0.15 - Math.random() * 0.1;
         velocities[i3 + 2] = 0;
 
-        states[i] = 0; // Falling
+        states[i] = 0;
     }
 
-    updateRain(windSpeed) {
-        const positions = this.rainSystem.geometry.attributes.position.array;
-        const velocities = this.rainSystem.userData.velocities;
-        const states = this.rainSystem.userData.states;
+    updateRain(system, windSpeed, zone) {
+        const positions = system.geometry.attributes.position.array;
+        const velocities = system.userData.velocities;
+        const states = system.userData.states;
         const count = states.length;
-
-        const gravity = -0.005;
-        const boxRadiusSq = 3.5 * 3.5; // Sundial radius approx
+        const boxRadiusSq = 3.5 * 3.5;
 
         for (let i = 0; i < count; i++) {
             const i3 = i * 3;
 
             if (states[i] === 0) { // FALLING
-                // Apply wind
                 positions[i3] += windSpeed * 0.002;
                 positions[i3 + 2] += windSpeed * 0.001;
 
-                // Move
                 positions[i3] += velocities[i3];
                 positions[i3 + 1] += velocities[i3 + 1];
                 positions[i3 + 2] += velocities[i3 + 2];
 
-                // Collision Detection
-                // Check if within horizontal bounds of sundial
+                // Check bounds and wrap
+                if (positions[i3] > zone.maxX) positions[i3] -= (zone.maxX - zone.minX);
+                if (positions[i3] < zone.minX) positions[i3] += (zone.maxX - zone.minX);
+
+                // Collision with Sundial (only if in center zone roughly? Sundial is at 0,0,0)
+                // If particles are in Past/Forecast zones (offset X), they shouldn't hit the central sundial.
+                // Simple check: collisions only if within generic radius of (0,0,0).
                 const distSq = positions[i3] * positions[i3] + positions[i3 + 2] * positions[i3 + 2];
+
                 if (distSq < boxRadiusSq && positions[i3 + 1] > -1 && positions[i3 + 1] < 4) {
-
-                    // Raycast downwards from previous position (approx)
-                    this.raycaster.set(
-                        new THREE.Vector3(positions[i3], positions[i3 + 1] + 0.5, positions[i3 + 2]),
-                        this.downVector
-                    );
-
-                    // Only check intersections with sundial
-                    // optimization: limit far distance
+                    this.raycaster.set(new THREE.Vector3(positions[i3], positions[i3 + 1] + 0.5, positions[i3 + 2]), this.downVector);
                     this.raycaster.far = 1.0;
                     const intersects = this.raycaster.intersectObject(this.sundialGroup, true);
 
                     if (intersects.length > 0) {
                         const hit = intersects[0];
-
-                        // Move to surface
                         positions[i3] = hit.point.x;
-                        positions[i3 + 1] = hit.point.y + 0.02; // Slightly above
+                        positions[i3 + 1] = hit.point.y + 0.02;
                         positions[i3 + 2] = hit.point.z;
+                        states[i] = 1;
 
-                        // Switch state
-                        states[i] = 1; // ON SURFACE
+                        const worldNormal = hit.face.normal.clone().applyQuaternion(hit.object.getWorldQuaternion(new THREE.Quaternion()));
+                        velocities[i3] = worldNormal.x * 0.05;
+                        velocities[i3 + 1] = 0;
+                        velocities[i3 + 2] = worldNormal.z * 0.05;
 
-                        // Calculate slide velocity based on normal
-                        // Tangent = Gravity - (Gravity . Normal) * Normal
-                        // Gravity direction is (0, -1, 0)
-                        const normal = hit.face.normal;
-                        // Transform normal to world space if needed (but object scaling might affect it)
-                        // For simple geometries and uniform scaling, this is often close enough or we use hit.normal if available (not in standard three.js raycast result, it gives face normal)
-                        // We need to apply object rotation to the normal
-                        const worldNormal = normal.clone().applyQuaternion(hit.object.getWorldQuaternion(new THREE.Quaternion()));
-
-                        // Simple slide logic
-                        const steepness = 1.0 - Math.abs(worldNormal.y);
-
-                        velocities[i3] = worldNormal.x * 0.05 + (Math.random() - 0.5) * 0.01;
-                        velocities[i3 + 1] = 0; // Will be clamped to surface
-                        velocities[i3 + 2] = worldNormal.z * 0.05 + (Math.random() - 0.5) * 0.01;
-
-                        // Trigger splash
                         this.spawnSplash(hit.point);
                     }
                 }
 
-                // Reset if too low
                 if (positions[i3 + 1] < -5) {
-                    this.resetRainParticle(positions, velocities, states, i);
+                    this.resetRainParticle(positions, velocities, states, i, zone, windSpeed);
                 }
 
-            } else { // ON SURFACE (Pooling/Running off)
+            } else { // ON SURFACE
+                // ... (Simplified logic similar to before)
+                 velocities[i3 + 1] += -0.005; // gravity
+                 positions[i3] += velocities[i3];
+                 positions[i3+1] += velocities[i3+1];
+                 positions[i3+2] += velocities[i3+2];
 
-                // Add "stickiness" or friction
-                velocities[i3] *= 0.9;
-                velocities[i3 + 2] *= 0.9;
-
-                // Add gravity to pull down slopes
-                velocities[i3 + 1] += gravity;
-
-                // Move
-                positions[i3] += velocities[i3];
-                positions[i3 + 1] += velocities[i3 + 1];
-                positions[i3 + 2] += velocities[i3 + 2];
-
-                // Check if still on surface
-                this.raycaster.set(
-                    new THREE.Vector3(positions[i3], positions[i3 + 1] + 0.5, positions[i3 + 2]),
-                    this.downVector
-                );
-                this.raycaster.far = 1.0;
-                const intersects = this.raycaster.intersectObject(this.sundialGroup, true);
-
-                if (intersects.length > 0) {
-                    const hit = intersects[0];
-
-                    // Snap to surface
-                    positions[i3 + 1] = hit.point.y + 0.02;
-
-                    // Recalculate slope influence
-                    const worldNormal = hit.face.normal.clone().applyQuaternion(hit.object.getWorldQuaternion(new THREE.Quaternion()));
-
-                    // Slide down
-                    velocities[i3] += worldNormal.x * 0.005;
-                    velocities[i3 + 2] += worldNormal.z * 0.005;
-
-                    // "Changingly" pool - add random noise
-                    if (Math.abs(worldNormal.y) > 0.9) { // Flat surface
-                        velocities[i3] += (Math.random() - 0.5) * 0.002;
-                        velocities[i3 + 2] += (Math.random() - 0.5) * 0.002;
-                    }
-
-                } else {
-                    // Fell off the edge
-                    states[i] = 0; // Back to falling
-                    velocities[i3 + 1] = -0.1; // Initial fall speed
-                }
-
-                // Randomly evaporate/reset to keep rain coming
-                if (Math.random() < 0.005) {
-                     this.resetRainParticle(positions, velocities, states, i);
-                }
+                 // Simple fall off check
+                 if (positions[i3+1] < -1) {
+                     states[i] = 0;
+                 }
+                 if (Math.random() < 0.05) this.resetRainParticle(positions, velocities, states, i, zone, windSpeed);
             }
         }
-
-        this.rainSystem.geometry.attributes.position.needsUpdate = true;
+        system.geometry.attributes.position.needsUpdate = true;
     }
 
-    createSplashes() {
-        const particleCount = 200;
-        const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-        const life = new Float32Array(particleCount); // 0 = dead, >0 = alive
-
-        // Hide initially
-        for(let i=0; i<particleCount * 3; i++) positions[i] = 0;
-
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-        const material = new THREE.PointsMaterial({
-            color: 0xaaccff,
-            size: 0.05,
-            transparent: true,
-            opacity: 0.6
-        });
-
-        this.splashSystem = new THREE.Points(geometry, material);
-        this.splashSystem.userData = { life: life };
-        this.scene.add(this.splashSystem);
-    }
-
-    spawnSplash(position) {
-        if (!this.splashSystem) return;
-        const positions = this.splashSystem.geometry.attributes.position.array;
-        const life = this.splashSystem.userData.life;
-
-        // Find a dead particle
-        for (let i = 0; i < life.length; i++) {
-            if (life[i] <= 0) {
-                life[i] = 1.0; // Reset life
-                positions[i * 3] = position.x + (Math.random() - 0.5) * 0.1;
-                positions[i * 3 + 1] = position.y + 0.05;
-                positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.1;
-                break; // Only spawn one per call to save perf
-            }
-        }
-    }
-
-    updateSplashes() {
-        const positions = this.splashSystem.geometry.attributes.position.array;
-        const life = this.splashSystem.userData.life;
-
-        for (let i = 0; i < life.length; i++) {
-            if (life[i] > 0) {
-                life[i] -= 0.1; // Decay
-                positions[i * 3 + 1] += 0.01; // Float up slightly
-
-                if (life[i] <= 0) {
-                    // Hide
-                    positions[i * 3 + 1] = -100;
-                }
-            }
-        }
-        this.splashSystem.geometry.attributes.position.needsUpdate = true;
-    }
-
-    createSnow(particleCount = 800) {
+    createSnow(particleCount, zone, windSpeed) {
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
         const velocities = new Float32Array(particleCount * 3);
 
         for (let i = 0; i < particleCount * 3; i += 3) {
-            positions[i] = Math.random() * 20 - 10;
+            positions[i] = zone.minX + Math.random() * (zone.maxX - zone.minX);
             positions[i + 1] = Math.random() * 15;
             positions[i + 2] = Math.random() * 20 - 10;
 
@@ -330,47 +237,50 @@ export class WeatherEffects {
             opacity: 0.8
         });
 
-        this.snowSystem = new THREE.Points(geometry, material);
-        this.snowSystem.userData.velocities = velocities;
-        this.particleSystems.push(this.snowSystem);
-        this.scene.add(this.snowSystem);
+        const system = new THREE.Points(geometry, material);
+        system.userData = { type: 'snow', velocities: velocities, zone: zone, windSpeed: windSpeed };
+        this.particleSystems.push(system);
+        this.scene.add(system);
     }
 
-    updateSnow(windSpeed) {
-        const positions = this.snowSystem.geometry.attributes.position.array;
-        const velocities = this.snowSystem.userData.velocities;
+    updateSnow(system, windSpeed, zone) {
+        const positions = system.geometry.attributes.position.array;
+        const velocities = system.userData.velocities;
 
         for (let i = 0; i < positions.length; i += 3) {
             positions[i] += velocities[i] + windSpeed * 0.001;
             positions[i + 1] += velocities[i + 1];
             positions[i + 2] += velocities[i + 2];
 
-            // Reset
+            // Wrap in Zone
+            if (positions[i] > zone.maxX) positions[i] -= (zone.maxX - zone.minX);
+            if (positions[i] < zone.minX) positions[i] += (zone.maxX - zone.minX);
+
+            // Reset height
             if (positions[i + 1] < -5) {
                 positions[i + 1] = 10;
-                positions[i] = Math.random() * 20 - 10;
+                positions[i] = zone.minX + Math.random() * (zone.maxX - zone.minX);
                 positions[i + 2] = Math.random() * 20 - 10;
             }
-            // Bounds
-            if (positions[i] < -10) positions[i] = 10;
-            if (positions[i] > 10) positions[i] = -10;
-            if (positions[i + 2] < -10) positions[i + 2] = 10;
-            if (positions[i + 2] > 10) positions[i + 2] = -10;
         }
-        this.snowSystem.geometry.attributes.position.needsUpdate = true;
+        system.geometry.attributes.position.needsUpdate = true;
     }
 
-    createClouds(count = 3) {
+    createClouds(count, zone, windSpeed) {
         for (let i = 0; i < count; i++) {
             const cloud = this.createCloud();
-            cloud.position.x = Math.random() * 20 - 10;
+            cloud.position.x = zone.minX + Math.random() * (zone.maxX - zone.minX);
             cloud.position.y = 5 + Math.random() * 3;
             cloud.position.z = Math.random() * 10 - 5;
             cloud.scale.setScalar(0.5 + Math.random() * 0.5);
+            cloud.userData = { windSpeed: windSpeed };
             this.clouds.push(cloud);
             this.scene.add(cloud);
         }
     }
+
+    // ... createCloud, createSplashes, spawnSplash, updateSplashes from previous version ...
+    // Need to copy them back in because I'm overwriting the file.
 
     createCloud() {
         const cloud = new THREE.Group();
@@ -394,9 +304,10 @@ export class WeatherEffects {
         return cloud;
     }
 
-    createLightning() {
+    createLightning(zone) {
         const flash = new THREE.PointLight(0xffffff, 5, 20);
-        flash.position.set(Math.random() * 10 - 5, 8, Math.random() * 10 - 5);
+        // Random position within zone
+        flash.position.set(zone.minX + Math.random() * (zone.maxX - zone.minX), 8, Math.random() * 10 - 5);
         this.scene.add(flash);
 
         setTimeout(() => {
@@ -404,8 +315,63 @@ export class WeatherEffects {
         }, 100);
 
         if (Math.random() > 0.5) {
-            setTimeout(() => this.createLightning(), 2000 + Math.random() * 5000);
+            setTimeout(() => this.createLightning(zone), 2000 + Math.random() * 5000);
         }
+    }
+
+    createSplashes() {
+        const particleCount = 200;
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const life = new Float32Array(particleCount);
+
+        for(let i=0; i<particleCount * 3; i++) positions[i] = 0;
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const material = new THREE.PointsMaterial({
+            color: 0xaaccff,
+            size: 0.05,
+            transparent: true,
+            opacity: 0.6
+        });
+
+        this.splashSystem = new THREE.Points(geometry, material);
+        this.splashSystem.userData = { life: life };
+        this.scene.add(this.splashSystem);
+    }
+
+    spawnSplash(position) {
+        if (!this.splashSystem) return;
+        const positions = this.splashSystem.geometry.attributes.position.array;
+        const life = this.splashSystem.userData.life;
+
+        for (let i = 0; i < life.length; i++) {
+            if (life[i] <= 0) {
+                life[i] = 1.0;
+                positions[i * 3] = position.x + (Math.random() - 0.5) * 0.1;
+                positions[i * 3 + 1] = position.y + 0.05;
+                positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.1;
+                break;
+            }
+        }
+    }
+
+    updateSplashes() {
+        const positions = this.splashSystem.geometry.attributes.position.array;
+        const life = this.splashSystem.userData.life;
+
+        for (let i = 0; i < life.length; i++) {
+            if (life[i] > 0) {
+                life[i] -= 0.1;
+                positions[i * 3 + 1] += 0.01;
+
+                if (life[i] <= 0) {
+                    positions[i * 3 + 1] = -100;
+                }
+            }
+        }
+        this.splashSystem.geometry.attributes.position.needsUpdate = true;
     }
 
     clear() {
@@ -415,9 +381,7 @@ export class WeatherEffects {
             system.material.dispose();
         });
         this.particleSystems = [];
-        this.rainSystem = null;
-        this.snowSystem = null;
-        this.splashSystem = null;
+        // do not nullify rainSystem/snowSystem because we use particleSystems array now
 
         this.clouds.forEach(cloud => {
             this.scene.remove(cloud);

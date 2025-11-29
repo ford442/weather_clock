@@ -9,93 +9,186 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
-            font-family: 'Arial', sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(to bottom, #1a1a2e, #0f3460);
         }
         #canvas-container {
             width: 100vw;
             height: 100vh;
-        }
-        #info-panel {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none; /* Allow clicking through to 3D scene */
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
             padding: 20px;
-            border-radius: 10px;
-            max-width: 300px;
+            box-sizing: border-box;
+        }
+
+        .panel {
+            background: rgba(0, 0, 0, 0.6);
             backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            color: white;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            height: fit-content;
+            margin-top: 15vh;
+            transition: all 0.3s ease;
         }
-        #info-panel h2 {
-            margin: 0 0 10px 0;
+
+        .panel:hover {
+            background: rgba(0, 0, 0, 0.75);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        #panel-center {
+            background: none;
+            border: none;
+            backdrop-filter: none;
+            align-items: center;
+            margin-top: 50px;
+        }
+
+        .time-display {
+            font-size: 72px;
+            font-weight: 200;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+            letter-spacing: -2px;
+        }
+
+        .location-display {
             font-size: 18px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            font-weight: 500;
         }
-        .weather-info {
+
+        .current-weather-large {
+            font-size: 24px;
+            margin-top: 5px;
+            text-align: center;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            opacity: 0.9;
+        }
+
+        .current-temp-large {
+            font-size: 56px;
+            font-weight: bold;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
             margin: 10px 0;
         }
-        .weather-section {
-            margin: 15px 0;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 5px;
-        }
-        .weather-section h3 {
-            margin: 0 0 8px 0;
+
+        h3 {
+            margin: 0 0 15px 0;
             font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
             color: #88d8f9;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px;
         }
-        .temperature {
-            font-size: 24px;
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 15px;
+        }
+
+        .stat-value {
             font-weight: bold;
+            color: #eee;
         }
-        .time-display {
-            font-size: 32px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            text-align: center;
+
+        .description {
+            font-size: 20px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            min-height: 30px;
         }
-        .loading {
-            color: #88d8f9;
-            font-style: italic;
+
+        .center-stats {
+            margin-top: 20px;
+            background: rgba(0,0,0,0.5);
+            padding: 15px 25px;
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
+            display: flex;
+            gap: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
         }
+
     </style>
 </head>
 <body>
     <div id="canvas-container"></div>
-    <div id="info-panel">
-        <div class="time-display" id="time-display">--:--:--</div>
-        <h2>Weather Clock</h2>
-        <div class="weather-info">
-            <div class="weather-section">
-                <h3>📍 Location</h3>
-                <div id="location">Detecting...</div>
+
+    <div id="ui-layer">
+        <!-- LEFT: Previous Data -->
+        <div id="panel-left" class="panel">
+            <h3>⏮️ Previous (3h ago)</h3>
+            <div id="past-description" class="description">--</div>
+            <div class="stat-row">
+                <span>Temp</span>
+                <span id="past-temp" class="stat-value">--°</span>
             </div>
-            <div class="weather-section">
-                <h3>🌤️ Current Weather</h3>
-                <div id="current-weather" class="loading">Loading...</div>
-                <div class="temperature" id="current-temp">--°</div>
+            <div class="stat-row">
+                <span>Wind</span>
+                <span id="past-wind" class="stat-value">-- km/h</span>
             </div>
-            <div class="weather-section">
-                <h3>⏮️ Past (3h ago)</h3>
-                <div id="past-weather">--</div>
-                <div id="past-temp">--°</div>
+             <div class="stat-row">
+                <span>Cloud Cover</span>
+                <span id="past-cloud" class="stat-value">--%</span>
             </div>
-            <div class="weather-section">
-                <h3>⏭️ Forecast (3h)</h3>
-                <div id="forecast-weather">--</div>
-                <div id="forecast-temp">--°</div>
+        </div>
+
+        <!-- CENTER: Current & Time -->
+        <div id="panel-center" class="panel">
+            <div id="location" class="location-display">Detecting Location...</div>
+            <div id="time-display" class="time-display">--:--</div>
+            <div id="current-temp" class="current-temp-large">--°</div>
+            <div id="current-description" class="current-weather-large">Loading...</div>
+
+            <div class="center-stats">
+                <span>💨 <span id="current-wind" class="stat-value">-- km/h</span></span>
+                <span>🌙 <span id="moon-phase" class="stat-value">--</span></span>
             </div>
-            <div class="weather-section">
-                <h3>💨 Wind Speed</h3>
-                <div id="wind-speed">-- km/h</div>
+        </div>
+
+        <!-- RIGHT: Forecast Data -->
+        <div id="panel-right" class="panel">
+            <h3>⏭️ Forecast (+3h)</h3>
+            <div id="forecast-description" class="description">--</div>
+             <div class="stat-row">
+                <span>Temp</span>
+                <span id="forecast-temp" class="stat-value">--°</span>
             </div>
-            <div class="weather-section">
-                <h3>🌙 Moon Phase</h3>
-                <div id="moon-phase">--</div>
+            <div class="stat-row">
+                <span>Wind</span>
+                <span id="forecast-wind" class="stat-value">-- km/h</span>
+            </div>
+             <div class="stat-row">
+                <span>Cloud Cover</span>
+                <span id="forecast-cloud" class="stat-value">--%</span>
             </div>
         </div>
     </div>
+
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>
