@@ -1,11 +1,21 @@
 import * as THREE from 'three';
 
 let previousIntensity = { sun: 0.8, ambient: 0.4 };
-let previousColor = { sun: 0xffffff, ambient: 0xffffff };
 const transitionSpeed = 0.02;
 
 export function updateLighting(scene, sunLight, ambientLight, weatherData) {
     if (!weatherData) return;
+
+    // Calculate day/night factor based on current sun altitude (sunLight.position.y)
+    // We assume sunLight.position has been updated to the correct astronomical position before this call
+    const sunY = sunLight.position.y;
+    let dayFactor = 1.0;
+
+    // Smooth transition around horizon (y=-2 to y=2)
+    // If sun is below horizon, dim lights
+    if (sunY < -2) dayFactor = 0;
+    else if (sunY > 2) dayFactor = 1;
+    else dayFactor = (sunY + 2) / 4;
 
     // Calculate target lighting based on past, current, and forecast
     const pastWeight = 0.2;
@@ -43,34 +53,32 @@ export function updateLighting(scene, sunLight, ambientLight, weatherData) {
         getSeverity(currentCode) * currentWeight +
         getSeverity(forecastCode) * forecastWeight;
 
-    // Calculate target sun light intensity based on cloud cover and weather
+    // Calculate target sun light intensity based on cloud cover and weather AND day/night
     const baseIntensity = 1.2;
     const cloudFactor = 1 - (weightedCloud / 100) * 0.6;
     const severityFactor = 1 - (weightedSeverity / 100) * 0.4;
-    const targetSunIntensity = baseIntensity * cloudFactor * severityFactor;
+
+    const targetSunIntensity = baseIntensity * cloudFactor * severityFactor * dayFactor;
 
     // Calculate target ambient light intensity
-    const targetAmbientIntensity = 0.3 + (1 - cloudFactor) * 0.3;
+    // Minimum ambient at night (moonlight ambient)
+    const nightAmbient = 0.05;
+    const dayAmbient = 0.3 + (1 - cloudFactor) * 0.3;
+    const targetAmbientIntensity = nightAmbient + (dayAmbient - nightAmbient) * dayFactor;
 
     // Calculate sun color based on weather
     let targetSunColor;
     if (currentCode >= 95) {
-        // Thunderstorm - dark bluish
         targetSunColor = new THREE.Color(0x8899cc);
     } else if (currentCode >= 70 && currentCode <= 77) {
-        // Snow - cool white
         targetSunColor = new THREE.Color(0xccddff);
     } else if (currentCode >= 60) {
-        // Rain - slightly blue-grey
         targetSunColor = new THREE.Color(0xaabbcc);
     } else if (weightedCloud > 70) {
-        // Heavy clouds - grey-white
         targetSunColor = new THREE.Color(0xcccccc);
     } else if (weightedCloud > 40) {
-        // Some clouds - slightly dimmed
         targetSunColor = new THREE.Color(0xffffee);
     } else {
-        // Clear - warm sunlight
         targetSunColor = new THREE.Color(0xffffcc);
     }
 
@@ -84,6 +92,11 @@ export function updateLighting(scene, sunLight, ambientLight, weatherData) {
         targetAmbientColor = new THREE.Color(0xffffff);
     }
 
+    // Tint ambient blue-ish at night
+    if (dayFactor < 0.5) {
+        targetAmbientColor.lerp(new THREE.Color(0x111122), 1.0 - dayFactor * 2);
+    }
+
     // Smoothly transition intensities
     previousIntensity.sun += (targetSunIntensity - previousIntensity.sun) * transitionSpeed;
     previousIntensity.ambient += (targetAmbientIntensity - previousIntensity.ambient) * transitionSpeed;
@@ -95,17 +108,13 @@ export function updateLighting(scene, sunLight, ambientLight, weatherData) {
     sunLight.color.lerp(targetSunColor, transitionSpeed);
     ambientLight.color.lerp(targetAmbientColor, transitionSpeed);
 
-    // Update sun position based on time of day
-    const now = new Date();
-    const hours = now.getHours() + now.getMinutes() / 60;
-    const sunAngle = ((hours - 6) / 12) * Math.PI; // 6 AM to 6 PM
+    // Default Position Update (Fake sun) - Only if we wanted to enforce it.
+    // But main.js restores the real position.
+    // We will leave this here for fallback or we can remove it.
+    // Let's remove the fake position logic since main.js handles it now via astronomy.
+    // This makes lighting.js purely about "Lighting Properties" (color, intensity) and not "Position".
     
-    const sunDistance = 10;
-    sunLight.position.x = Math.cos(sunAngle) * sunDistance;
-    sunLight.position.y = Math.sin(sunAngle) * sunDistance * 0.8 + 5;
-    sunLight.position.z = 5;
-
-    // Adjust scene background based on weather
+    // Adjust scene background based on weather and time
     if (scene.background instanceof THREE.Color) {
         const targetBgColor = new THREE.Color();
         if (weightedSeverity > 70) {
@@ -116,10 +125,14 @@ export function updateLighting(scene, sunLight, ambientLight, weatherData) {
             targetBgColor.setHex(0x3a5a8e);
         }
         
+        // Darken for night
+        const nightColor = new THREE.Color(0x050510);
+        const finalBgColor = new THREE.Color().lerpVectors(nightColor, targetBgColor, dayFactor);
+
         if (!scene.background) {
             scene.background = new THREE.Color();
         }
-        scene.background.lerp(targetBgColor, transitionSpeed);
+        scene.background.lerp(finalBgColor, transitionSpeed);
     } else {
         scene.background = new THREE.Color(0x2a3a5e);
     }

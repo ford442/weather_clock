@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { createSundial } from './sundial.js';
 import { WeatherService } from './weather.js';
 import { updateLighting } from './lighting.js';
-import { calculateMoonPhase, createMoon, positionMoon } from './moonPhase.js';
+import { calculateMoonPhase, createMoon } from './moonPhase.js';
 import { WeatherEffects } from './weatherEffects.js';
+import { AstronomyService } from './astronomy.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -25,10 +26,15 @@ scene.add(ambientLight);
 
 // Directional light (sun)
 const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
-sunLight.position.set(5, 10, 5);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.width = 2048;
 sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 50;
+sunLight.shadow.camera.left = -10;
+sunLight.shadow.camera.right = 10;
+sunLight.shadow.camera.top = 10;
+sunLight.shadow.camera.bottom = -10;
 scene.add(sunLight);
 
 // Create sundial
@@ -36,25 +42,32 @@ const sundial = createSundial();
 scene.add(sundial.group);
 
 // Create moon
-const moonPhase = calculateMoonPhase();
-const moon = createMoon(moonPhase.phase);
-scene.add(moon);
+const moonPhaseData = calculateMoonPhase();
+const moonGroup = createMoon(moonPhaseData.phase);
+scene.add(moonGroup);
 
-// Add moon light
-const moonLight = new THREE.PointLight(0x8899cc, 0.3, 15);
-moon.add(moonLight);
+// Add moon light (PointLight for local glow + Directional/Spot for shadows?
+// PointLight shadows can be expensive. Let's use SpotLight or Directional for moon shadow if needed,
+// or just PointLight with shadow enabled.)
+const moonLight = new THREE.PointLight(0x8899cc, 0.5, 50);
+moonLight.castShadow = true;
+moonLight.shadow.mapSize.width = 1024;
+moonLight.shadow.mapSize.height = 1024;
+scene.add(moonLight);
 
 // Weather effects
 const weatherEffects = new WeatherEffects(scene, sundial.group);
 
-// Weather service
+// Services
 const weatherService = new WeatherService();
+const astronomyService = new AstronomyService();
+
 let weatherData = null;
 
-// Initialize weather
-async function initWeather() {
-    // Always show moon phase
-    document.getElementById('moon-phase').textContent = moonPhase.phaseName;
+// Initialize
+async function init() {
+    // Initial UI State
+    updateTimeDisplay();
     
     try {
         weatherData = await weatherService.initialize();
@@ -62,42 +75,44 @@ async function initWeather() {
     } catch (error) {
         console.error('Weather initialization failed:', error);
         document.getElementById('location').textContent = 'Weather data unavailable';
-        document.getElementById('current-weather').textContent = 'Unable to fetch';
+        document.getElementById('current-description').textContent = 'Unable to fetch';
     }
+
+    animate();
 }
 
 // Update weather display
 function updateWeatherDisplay(data) {
     if (!data) return;
 
-    // Location
+    // CENTER PANEL (Current)
     document.getElementById('location').textContent = data.location || 'Unknown';
 
-    // Current weather
     if (data.current) {
-        document.getElementById('current-weather').textContent = data.current.description;
-        document.getElementById('current-temp').textContent = `${Math.round(data.current.temp)}°C`;
+        document.getElementById('current-description').textContent = data.current.description;
+        document.getElementById('current-temp').textContent = `${Math.round(data.current.temp)}°`;
+        document.getElementById('current-wind').textContent = `${Math.round(data.current.windSpeed)} km/h`;
     }
 
-    // Past weather
+    // LEFT PANEL (Past)
     if (data.past) {
-        document.getElementById('past-weather').textContent = data.past.description;
-        document.getElementById('past-temp').textContent = `${Math.round(data.past.temp)}°C`;
+        document.getElementById('past-description').textContent = data.past.description;
+        document.getElementById('past-temp').textContent = `${Math.round(data.past.temp)}°`;
+        document.getElementById('past-wind').textContent = `${Math.round(data.past.windSpeed)} km/h`;
+        document.getElementById('past-cloud').textContent = `${data.past.cloudCover}%`;
     }
 
-    // Forecast
+    // RIGHT PANEL (Forecast)
     if (data.forecast) {
-        document.getElementById('forecast-weather').textContent = data.forecast.description;
-        document.getElementById('forecast-temp').textContent = `${Math.round(data.forecast.temp)}°C`;
+        document.getElementById('forecast-description').textContent = data.forecast.description;
+        document.getElementById('forecast-temp').textContent = `${Math.round(data.forecast.temp)}°`;
+        document.getElementById('forecast-wind').textContent = `${Math.round(data.forecast.windSpeed)} km/h`;
+        document.getElementById('forecast-cloud').textContent = `${data.forecast.cloudCover}%`;
     }
 
-    // Wind speed
-    if (data.current && data.current.windSpeed !== undefined) {
-        document.getElementById('wind-speed').textContent = `${Math.round(data.current.windSpeed)} km/h`;
-    }
-
-    // Moon phase
-    document.getElementById('moon-phase').textContent = moonPhase.phaseName;
+    // Update Moon Phase Text
+    const mp = calculateMoonPhase();
+    document.getElementById('moon-phase').textContent = mp.phaseName;
 }
 
 // Update time display
@@ -105,30 +120,73 @@ function updateTimeDisplay() {
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    document.getElementById('time-display').textContent = `${hours}:${minutes}:${seconds}`;
+    document.getElementById('time-display').textContent = `${hours}:${minutes}`;
 }
 
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
 
-    // Update sundial (rotates gnomon based on time)
+    const now = new Date();
+
+    // Update sundial hands
     sundial.update();
 
-    // Update moon position
-    positionMoon(moon, { x: 0, y: 0, z: 0 });
+    // Update Astronomy (Sun/Moon positions)
+    // Use weather service lat/lon if available, else default
+    const lat = weatherService.latitude;
+    const lon = weatherService.longitude;
+
+    // Calculate positions (distance 20 to keep lights outside scene bounds)
+    const astroData = astronomyService.update(now, lat, lon, 20);
+
+    // Update Sun Light
+    sunLight.position.copy(astroData.sunPosition);
+
+    // Update Moon Mesh & Light
+    // We update the moonGroup position directly
+    moonGroup.position.copy(astroData.moonPosition);
+    moonGroup.lookAt(0, 0, 0); // Face earth/center
+
+    // Moon light sits at the moon
+    moonLight.position.copy(astroData.moonPosition);
 
     // Update time display
     updateTimeDisplay();
 
-    // Update lighting based on weather
+    // Update lighting intensity/color based on weather
     if (weatherData) {
+        // We still use the updateLighting helper for intensity/color transitions
+        // But we override the position it sets, because we set it above.
+        // So we pass a dummy object or modify updateLighting?
+        // Let's modify updateLighting to NOT set position if we are handling it.
+        // Or just overwrite it here.
+        // `updateLighting` sets sunLight.position. We should probably refactor `lighting.js` or just let it set color/intensity.
+        // Looking at `lighting.js`, it sets position at the end.
+        // We can pass a flag or just reset the position after calling it.
+
+        const oldPos = sunLight.position.clone();
         updateLighting(scene, sunLight, ambientLight, weatherData);
+        sunLight.position.copy(oldPos); // Restore astronomical position
         
-        // Update weather effects (rain, snow, clouds, etc.)
-        const windSpeed = weatherData.current?.windSpeed || 0;
-        weatherEffects.update(weatherData.current?.weatherCode || 0, windSpeed);
+        // Also adjust moon light intensity based on phase/cloud?
+        // Moon phase illumination
+        const moonIntensityBase = 0.5 * astroData.moonIllumination.fraction;
+        moonLight.intensity = moonIntensityBase;
+
+        // Update weather effects (Split zones)
+        weatherEffects.update(
+            weatherData.past || { weatherCode: 0, windSpeed: 0 },
+            weatherData.current || { weatherCode: 0, windSpeed: 0 },
+            weatherData.forecast || { weatherCode: 0, windSpeed: 0 }
+        );
+    } else {
+        // Default weather effects update if no data?
+         weatherEffects.update(
+            { weatherCode: 0, windSpeed: 0 },
+            { weatherCode: 0, windSpeed: 0 },
+            { weatherCode: 0, windSpeed: 0 }
+        );
     }
 
     renderer.render(scene, camera);
@@ -142,21 +200,14 @@ window.addEventListener('resize', () => {
 });
 
 // Start
-initWeather();
-animate();
+init();
 
 // Refresh weather data every 10 minutes
-let isUpdatingWeather = false;
 setInterval(async () => {
-    if (isUpdatingWeather) return; // Prevent overlapping requests
-    
-    isUpdatingWeather = true;
     try {
         weatherData = await weatherService.fetchWeather();
         updateWeatherDisplay(weatherData);
     } catch (error) {
         console.error('Weather update failed:', error);
-    } finally {
-        isUpdatingWeather = false;
     }
 }, 10 * 60 * 1000);
