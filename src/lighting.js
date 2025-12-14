@@ -108,12 +108,6 @@ export function updateLighting(scene, sunLight, ambientLight, weatherData) {
     sunLight.color.lerp(targetSunColor, transitionSpeed);
     ambientLight.color.lerp(targetAmbientColor, transitionSpeed);
 
-    // Default Position Update (Fake sun) - Only if we wanted to enforce it.
-    // But main.js restores the real position.
-    // We will leave this here for fallback or we can remove it.
-    // Let's remove the fake position logic since main.js handles it now via astronomy.
-    // This makes lighting.js purely about "Lighting Properties" (color, intensity) and not "Position".
-    
     // Adjust scene background based on weather and time
     if (scene.background instanceof THREE.Color) {
         const targetBgColor = new THREE.Color();
