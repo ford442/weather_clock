@@ -279,9 +279,6 @@ export class WeatherEffects {
         }
     }
 
-    // ... createCloud, createSplashes, spawnSplash, updateSplashes from previous version ...
-    // Need to copy them back in because I'm overwriting the file.
-
     createCloud() {
         const cloud = new THREE.Group();
         const geometry = new THREE.SphereGeometry(1, 16, 16);
