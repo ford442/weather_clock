@@ -157,17 +157,7 @@ function animate() {
     // Update lighting intensity/color based on weather
     if (weatherData) {
         // We still use the updateLighting helper for intensity/color transitions
-        // But we override the position it sets, because we set it above.
-        // So we pass a dummy object or modify updateLighting?
-        // Let's modify updateLighting to NOT set position if we are handling it.
-        // Or just overwrite it here.
-        // `updateLighting` sets sunLight.position. We should probably refactor `lighting.js` or just let it set color/intensity.
-        // Looking at `lighting.js`, it sets position at the end.
-        // We can pass a flag or just reset the position after calling it.
-
-        const oldPos = sunLight.position.clone();
         updateLighting(scene, sunLight, ambientLight, weatherData);
-        sunLight.position.copy(oldPos); // Restore astronomical position
         
         // Also adjust moon light intensity based on phase/cloud?
         // Moon phase illumination
