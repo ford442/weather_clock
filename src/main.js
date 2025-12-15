@@ -46,13 +46,17 @@ const moonPhaseData = calculateMoonPhase();
 const moonGroup = createMoon(moonPhaseData.phase);
 scene.add(moonGroup);
 
-// Add moon light (PointLight for local glow + Directional/Spot for shadows?
-// PointLight shadows can be expensive. Let's use SpotLight or Directional for moon shadow if needed,
-// or just PointLight with shadow enabled.)
-const moonLight = new THREE.PointLight(0x8899cc, 0.5, 50);
+// Add moon light (DirectionalLight for efficient shadows)
+const moonLight = new THREE.DirectionalLight(0x8899cc, 0.5);
 moonLight.castShadow = true;
 moonLight.shadow.mapSize.width = 1024;
 moonLight.shadow.mapSize.height = 1024;
+moonLight.shadow.camera.near = 0.5;
+moonLight.shadow.camera.far = 50;
+moonLight.shadow.camera.left = -10;
+moonLight.shadow.camera.right = 10;
+moonLight.shadow.camera.top = 10;
+moonLight.shadow.camera.bottom = -10;
 scene.add(moonLight);
 
 // Weather effects
@@ -65,20 +69,22 @@ const astronomyService = new AstronomyService();
 let weatherData = null;
 
 // Initialize
-async function init() {
+function init() {
     // Initial UI State
     updateTimeDisplay();
     
-    try {
-        weatherData = await weatherService.initialize();
+    // Start animation loop immediately
+    animate();
+
+    // Fetch weather asynchronously
+    weatherService.initialize().then(data => {
+        weatherData = data;
         updateWeatherDisplay(weatherData);
-    } catch (error) {
+    }).catch(error => {
         console.error('Weather initialization failed:', error);
         document.getElementById('location').textContent = 'Weather data unavailable';
         document.getElementById('current-description').textContent = 'Unable to fetch';
-    }
-
-    animate();
+    });
 }
 
 // Update weather display
