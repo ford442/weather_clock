@@ -60,13 +60,22 @@ export class WeatherEffects {
 
         // Animate clouds
         this.clouds.forEach(cloud => {
-            // Clouds drift across the screen? Or stay in zones?
-            // User wanted "visually divided". Let's keep clouds in zones if created there, or global?
-            // For now, let's just drift them slowly and wrap within their zone if possible, or just global drift.
-            // Let's implement simple global drift for now as clouds are high up.
-            cloud.position.x += 0.005 + (cloud.userData.windSpeed || 0) * 0.001;
-            const limit = 15;
-            if (cloud.position.x > limit) cloud.position.x = -limit;
+            const windSpeed = cloud.userData.windSpeed || 0;
+            cloud.position.x += 0.005 + windSpeed * 0.001;
+
+            if (cloud.userData.zone) {
+                const zone = cloud.userData.zone;
+                if (cloud.position.x > zone.maxX) {
+                    cloud.position.x = zone.minX;
+                } else if (cloud.position.x < zone.minX) {
+                    cloud.position.x = zone.maxX;
+                }
+            } else {
+                // Fallback global drift if no zone is assigned
+                const limit = 15;
+                if (cloud.position.x > limit) cloud.position.x = -limit;
+                if (cloud.position.x < -limit) cloud.position.x = limit;
+            }
         });
     }
 
@@ -273,7 +282,7 @@ export class WeatherEffects {
             cloud.position.y = 5 + Math.random() * 3;
             cloud.position.z = Math.random() * 10 - 5;
             cloud.scale.setScalar(0.5 + Math.random() * 0.5);
-            cloud.userData = { windSpeed: windSpeed };
+            cloud.userData = { windSpeed: windSpeed, zone: zone };
             this.clouds.push(cloud);
             this.scene.add(cloud);
         }
