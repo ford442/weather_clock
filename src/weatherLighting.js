@@ -122,7 +122,7 @@ export function updateWeatherLighting(scene, sunLight, ambientLight, weatherData
         
         // Darken for night
         const nightColor = new THREE.Color(0x050510);
-        const finalBgColor = new THREE.Color().lerpVectors(nightColor, targetBgColor, dayFactor);
+        const finalBgColor = new THREE.Color().lerpColors(nightColor, targetBgColor, dayFactor);
 
         if (!scene.background) {
             scene.background = new THREE.Color();
