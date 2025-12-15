@@ -3,11 +3,12 @@ import * as THREE from 'three';
 let previousIntensity = { sun: 0.8, ambient: 0.4 };
 const transitionSpeed = 0.02;
 
-export function updateLighting(scene, sunLight, ambientLight, weatherData) {
+export function updateWeatherLighting(scene, sunLight, ambientLight, weatherData) {
     if (!weatherData) return;
 
     // Calculate day/night factor based on current sun altitude (sunLight.position.y)
-    // We assume sunLight.position has been updated to the correct astronomical position before this call
+    // We assume sunLight.position has been updated to the correct astronomical position before this call.
+    // NOTE: This function must NOT modify sunLight.position, as it is controlled by the astronomy service.
     const sunY = sunLight.position.y;
     let dayFactor = 1.0;
 

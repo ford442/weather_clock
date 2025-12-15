@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createSundial } from './sundial.js';
 import { WeatherService } from './weather.js';
-import { updateLighting } from './lighting.js';
+import { updateWeatherLighting } from './weatherLighting.js';
 import { calculateMoonPhase, createMoon } from './moonPhase.js';
 import { WeatherEffects } from './weatherEffects.js';
 import { AstronomyService } from './astronomy.js';
@@ -156,8 +156,8 @@ function animate() {
 
     // Update lighting intensity/color based on weather
     if (weatherData) {
-        // We still use the updateLighting helper for intensity/color transitions
-        updateLighting(scene, sunLight, ambientLight, weatherData);
+        // We use the weather lighting helper for intensity/color transitions
+        updateWeatherLighting(scene, sunLight, ambientLight, weatherData);
         
         // Also adjust moon light intensity based on phase/cloud?
         // Moon phase illumination
