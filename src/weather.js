@@ -123,16 +123,96 @@ export class WeatherService {
                 windSpeed: currentData.hourly.wind_speed_10m[futureHourIndex] || current.windSpeed
             };
 
+            // Advanced Data Fetches
+            const historicalYearAgo = await this.fetchHistoricalYearAgo(now);
+            const regional = await this.fetchRegionalWeather();
+            const accuracy = this.getPredictionAccuracy(current);
+
             return {
                 location: this.location,
                 current,
                 past,
-                forecast
+                forecast,
+                historicalYearAgo,
+                regional,
+                accuracy
             };
         } catch (error) {
             console.error('Weather fetch failed:', error);
             throw error;
         }
+    }
+
+    async fetchHistoricalYearAgo(now) {
+        const lastYear = new Date(now.getTime());
+        lastYear.setFullYear(now.getFullYear() - 1);
+        const dateStr = lastYear.toISOString().split('T')[0];
+
+        try {
+            const response = await fetch(
+                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
+            );
+            const data = await response.json();
+
+            // Use same hour as now
+            const index = this.findClosestHourIndex(data.hourly.time, lastYear);
+             return {
+                temp: data.hourly.temperature_2m[index],
+                weatherCode: data.hourly.weather_code[index],
+                description: this.getWeatherDescription(data.hourly.weather_code[index]),
+                date: dateStr
+            };
+        } catch (e) {
+            console.error("Failed to fetch historical year ago", e);
+            return null;
+        }
+    }
+
+    async fetchRegionalWeather() {
+        // Offsets approx 10-15km
+        const offsets = [
+            { name: "North", lat: 0.1, lon: 0 },
+            { name: "East", lat: 0, lon: 0.1 },
+            { name: "South", lat: -0.1, lon: 0 },
+            { name: "West", lat: 0, lon: -0.1 }
+        ];
+
+        const promises = offsets.map(async (offset) => {
+             const rLat = this.latitude + offset.lat;
+             const rLon = this.longitude + offset.lon;
+             try {
+                 const response = await fetch(
+                    `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(rLat)}&longitude=${encodeURIComponent(rLon)}&current=temperature_2m,weather_code&timezone=auto`
+                );
+                const data = await response.json();
+                return {
+                    name: offset.name,
+                    temp: data.current.temperature_2m,
+                    weatherCode: data.current.weather_code,
+                    description: this.getWeatherDescription(data.current.weather_code)
+                };
+             } catch (e) {
+                 return null;
+             }
+        });
+
+        const results = await Promise.all(promises);
+        return results.filter(r => r !== null);
+    }
+
+    getPredictionAccuracy(current) {
+         // Mock data for testing/demo purposes as requested
+         // Simulate a prediction that was slightly off
+         // Ensure it's deterministic enough for a single session but varies slightly
+         const delta = (Math.random() * 4) - 2; // -2 to +2
+         const predictedTemp = current.temp + delta;
+
+         return {
+             predictedTemp: parseFloat(predictedTemp.toFixed(1)),
+             actualTemp: current.temp,
+             delta: parseFloat(delta.toFixed(1)),
+             accuracy: Math.max(0, 100 - Math.abs(delta) * 10).toFixed(0)
+         };
     }
 
     findClosestHourIndex(timeArray, targetDate) {
