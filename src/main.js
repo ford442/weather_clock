@@ -119,6 +119,34 @@ function updateWeatherDisplay(data) {
     // Update Moon Phase Text
     const mp = calculateMoonPhase();
     document.getElementById('moon-phase').textContent = mp.phaseName;
+
+    // ADVANCED PANEL
+    if (data.historicalYearAgo) {
+        document.getElementById('history-temp').textContent = `${Math.round(data.historicalYearAgo.temp)}°`;
+        document.getElementById('history-desc').textContent = data.historicalYearAgo.description;
+    }
+
+    if (data.accuracy) {
+        const delta = data.accuracy.delta;
+        const sign = delta > 0 ? '+' : '';
+        document.getElementById('accuracy-delta').textContent = `${sign}${delta}°`;
+        // Color code: Green if abs(delta) < 2, else Red
+        const color = Math.abs(delta) < 2 ? '#44ff44' : '#ff4444';
+        document.getElementById('accuracy-delta').style.color = color;
+
+        document.getElementById('accuracy-score').textContent = `Score: ${data.accuracy.accuracy}%`;
+    }
+
+    if (data.regional) {
+        const list = document.getElementById('regional-list');
+        list.innerHTML = '';
+        data.regional.forEach(reg => {
+            const div = document.createElement('div');
+            // e.g. "North: 20°"
+            div.innerHTML = `<b>${reg.name}:</b> ${Math.round(reg.temp)}°`;
+            list.appendChild(div);
+        });
+    }
 }
 
 // Update time display

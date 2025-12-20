@@ -133,6 +133,44 @@
             border: 1px solid rgba(255,255,255,0.1);
         }
 
+        #panel-advanced {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: auto;
+            min-width: 600px;
+            flex-direction: row;
+            justify-content: space-around;
+            gap: 30px;
+            margin-top: 0;
+            background: rgba(0, 0, 0, 0.75);
+        }
+
+        .adv-section {
+            text-align: center;
+        }
+
+        .adv-val-big {
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            margin: 5px 0;
+        }
+
+        .adv-sub {
+            font-size: 13px;
+            opacity: 0.8;
+        }
+
+        .regional-list {
+            font-size: 13px;
+            text-align: left;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px 15px;
+        }
+
     </style>
 </head>
 <body>
@@ -185,6 +223,28 @@
              <div class="stat-row">
                 <span>Cloud Cover</span>
                 <span id="forecast-cloud" class="stat-value">--%</span>
+            </div>
+        </div>
+
+        <!-- BOTTOM: Advanced Analysis -->
+        <div id="panel-advanced" class="panel">
+            <div class="adv-section">
+                <h3>📅 1 Year Ago</h3>
+                <div id="history-temp" class="adv-val-big">--°</div>
+                <div id="history-desc" class="adv-sub">--</div>
+            </div>
+
+            <div class="adv-section">
+                <h3>🎯 Forecast Accuracy</h3>
+                <div id="accuracy-delta" class="adv-val-big">--</div>
+                <div id="accuracy-score" class="adv-sub">Score: --%</div>
+            </div>
+
+            <div class="adv-section">
+                <h3>📍 Nearby Regions</h3>
+                <div id="regional-list" class="regional-list">
+                    <!-- Populated by JS -->
+                </div>
             </div>
         </div>
     </div>
