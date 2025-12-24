@@ -72,11 +72,19 @@ let weatherData = null;
 function init() {
     // Initial UI State
     updateTimeDisplay();
+    updateUnitButton();
     
     // Start animation loop immediately
     animate();
 
     // Fetch weather asynchronously
+    fetchAndDisplayWeather();
+
+    setupEventListeners();
+}
+
+function fetchAndDisplayWeather() {
+    document.getElementById('location').textContent = 'Loading...';
     weatherService.initialize().then(data => {
         weatherData = data;
         updateWeatherDisplay(weatherData);
@@ -87,23 +95,92 @@ function init() {
     });
 }
 
+function setupEventListeners() {
+    // Retry Location
+    document.getElementById('retry-location').addEventListener('click', () => {
+        document.getElementById('location').textContent = 'Retrying...';
+        weatherService.getLocation().then(() => {
+            weatherService.fetchWeather().then(data => {
+                weatherData = data;
+                updateWeatherDisplay(weatherData);
+            });
+        });
+    });
+
+    // Toggle Unit
+    document.getElementById('unit-toggle').addEventListener('click', () => {
+        weatherService.toggleUnit();
+        updateUnitButton();
+        if (weatherData) {
+            updateWeatherDisplay(weatherData);
+        }
+    });
+
+    // Search Location
+    const searchInput = document.getElementById('location-search');
+    const searchBtn = document.getElementById('search-btn');
+
+    const performSearch = () => {
+        const query = searchInput.value;
+        if (!query) return;
+
+        searchBtn.textContent = '...';
+        weatherService.searchLocation(query).then(results => {
+            searchBtn.textContent = 'Go';
+            if (results && results.length > 0) {
+                const best = results[0];
+                weatherService.setManualLocation(best.lat, best.lon, best.display_name.split(',')[0]);
+
+                // Refresh weather
+                document.getElementById('location').textContent = 'Updating...';
+                weatherService.fetchWeather().then(data => {
+                    weatherData = data;
+                    updateWeatherDisplay(weatherData);
+                });
+            } else {
+                alert('Location not found');
+            }
+        }).catch(err => {
+            searchBtn.textContent = 'Go';
+            console.error(err);
+            alert('Search failed');
+        });
+    };
+
+    searchBtn.addEventListener('click', performSearch);
+    searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') performSearch();
+    });
+}
+
+function updateUnitButton() {
+    const btn = document.getElementById('unit-toggle');
+    const nextUnit = weatherService.unit === 'metric' ? '°F' : '°C';
+    btn.textContent = `Switch to ${nextUnit}`;
+}
+
 // Update weather display
 function updateWeatherDisplay(data) {
     if (!data) return;
+
+    const t = (c) => Math.round(weatherService.convertTemp(c));
+    const unitSymbol = weatherService.unit === 'metric' ? '°C' : '°F';
+    // Actually typically display just °
+    const deg = '°';
 
     // CENTER PANEL (Current)
     document.getElementById('location').textContent = data.location || 'Unknown';
 
     if (data.current) {
         document.getElementById('current-description').textContent = data.current.description;
-        document.getElementById('current-temp').textContent = `${Math.round(data.current.temp)}°`;
+        document.getElementById('current-temp').textContent = `${t(data.current.temp)}${deg}`;
         document.getElementById('current-wind').textContent = `${Math.round(data.current.windSpeed)} km/h`;
     }
 
     // LEFT PANEL (Past)
     if (data.past) {
         document.getElementById('past-description').textContent = data.past.description;
-        document.getElementById('past-temp').textContent = `${Math.round(data.past.temp)}°`;
+        document.getElementById('past-temp').textContent = `${t(data.past.temp)}${deg}`;
         document.getElementById('past-wind').textContent = `${Math.round(data.past.windSpeed)} km/h`;
         document.getElementById('past-cloud').textContent = `${data.past.cloudCover}%`;
     }
@@ -111,7 +188,7 @@ function updateWeatherDisplay(data) {
     // RIGHT PANEL (Forecast)
     if (data.forecast) {
         document.getElementById('forecast-description').textContent = data.forecast.description;
-        document.getElementById('forecast-temp').textContent = `${Math.round(data.forecast.temp)}°`;
+        document.getElementById('forecast-temp').textContent = `${t(data.forecast.temp)}${deg}`;
         document.getElementById('forecast-wind').textContent = `${Math.round(data.forecast.windSpeed)} km/h`;
         document.getElementById('forecast-cloud').textContent = `${data.forecast.cloudCover}%`;
     }
@@ -122,16 +199,25 @@ function updateWeatherDisplay(data) {
 
     // ADVANCED PANEL
     if (data.historicalYearAgo) {
-        document.getElementById('history-temp').textContent = `${Math.round(data.historicalYearAgo.temp)}°`;
+        document.getElementById('history-temp').textContent = `${t(data.historicalYearAgo.temp)}${deg}`;
         document.getElementById('history-desc').textContent = data.historicalYearAgo.description;
     }
 
     if (data.accuracy) {
-        const delta = data.accuracy.delta;
-        const sign = delta > 0 ? '+' : '';
-        document.getElementById('accuracy-delta').textContent = `${sign}${delta}°`;
-        // Color code: Green if abs(delta) < 2, else Red
-        const color = Math.abs(delta) < 2 ? '#44ff44' : '#ff4444';
+        // Accuracy delta is temperature difference
+        // We need to convert the delta too, but delta conversion is different (it's a range, not absolute)
+        // 1 degree C delta = 1.8 degree F delta
+        let delta = data.accuracy.delta;
+        if (weatherService.unit === 'imperial') {
+            delta = delta * 1.8;
+        }
+
+        const sign = delta > 0 ? '+' : (delta < 0 ? '-' : '');
+        document.getElementById('accuracy-delta').textContent = `${sign}${Math.abs(delta).toFixed(1)}${deg}`;
+
+        // Color code: Green if abs(delta) < 2 (metric) or approx 3.6 (imperial), else Red
+        // We use the metric value for threshold to keep logic simple
+        const color = Math.abs(data.accuracy.delta) < 2 ? '#44ff44' : '#ff4444';
         document.getElementById('accuracy-delta').style.color = color;
 
         document.getElementById('accuracy-score').textContent = `Score: ${data.accuracy.accuracy}%`;
@@ -143,7 +229,7 @@ function updateWeatherDisplay(data) {
         data.regional.forEach(reg => {
             const div = document.createElement('div');
             // e.g. "North: 20°"
-            div.innerHTML = `<b>${reg.name}:</b> ${Math.round(reg.temp)}°`;
+            div.innerHTML = `<b>${reg.name}:</b> ${t(reg.temp)}${deg}`;
             list.appendChild(div);
         });
     }
