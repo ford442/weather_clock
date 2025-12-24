@@ -4,11 +4,41 @@ export class WeatherService {
         this.latitude = null;
         this.longitude = null;
         this.location = null;
+        this.unit = 'imperial'; // Default to Fahrenheit
     }
 
     async initialize() {
         await this.getLocation();
         return await this.fetchWeather();
+    }
+
+    toggleUnit() {
+        this.unit = this.unit === 'metric' ? 'imperial' : 'metric';
+        return this.unit;
+    }
+
+    convertTemp(celsius) {
+        if (this.unit === 'metric') return celsius;
+        return (celsius * 9/5) + 32;
+    }
+
+    async searchLocation(query) {
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`
+            );
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Search location failed:', error);
+            throw error;
+        }
+    }
+
+    setManualLocation(lat, lon, name) {
+        this.latitude = parseFloat(lat);
+        this.longitude = parseFloat(lon);
+        this.location = name;
     }
 
     async getLocation() {
