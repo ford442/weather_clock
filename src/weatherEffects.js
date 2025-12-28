@@ -88,11 +88,11 @@ export class WeatherEffects {
         };
 
         if (weatherCode >= 61 && weatherCode <= 65) {
-            this.createRain(weatherCode >= 63 ? 1000 : 500, zone, windSpeed);
+            this.createRain(weatherCode >= 63 ? 750 : 375, zone, windSpeed);
         } else if (weatherCode >= 71 && weatherCode <= 77) {
             this.createSnow(weatherCode >= 73 ? 500 : 300, zone, windSpeed);
         } else if (weatherCode >= 95) {
-            this.createRain(1500, zone, windSpeed);
+            this.createRain(1125, zone, windSpeed);
             this.createLightning(zone);
         }
 
@@ -106,25 +106,28 @@ export class WeatherEffects {
 
     createRain(particleCount, zone, windSpeed) {
         const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
+        // 2 vertices per particle for LineSegments
+        const positions = new Float32Array(particleCount * 6);
         const states = new Int8Array(particleCount);
         const velocities = new Float32Array(particleCount * 3);
 
         for (let i = 0; i < particleCount; i++) {
             this.resetRainParticle(positions, velocities, states, i, zone, windSpeed);
-            positions[i * 3 + 1] = Math.random() * 20 - 5; // Random initial height
+            // Random initial height for the pair
+            const y = Math.random() * 20 - 5;
+            positions[i * 6 + 1] = y + 0.3; // Tail
+            positions[i * 6 + 4] = y;       // Head
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-        const material = new THREE.PointsMaterial({
+        const material = new THREE.LineBasicMaterial({
             color: 0x88ccff,
-            size: 0.08,
             transparent: true,
-            opacity: 0.8
+            opacity: 0.6
         });
 
-        const system = new THREE.Points(geometry, material);
+        const system = new THREE.LineSegments(geometry, material);
         system.userData = {
             type: 'rain',
             velocities: velocities,
@@ -141,10 +144,22 @@ export class WeatherEffects {
 
     resetRainParticle(positions, velocities, states, i, zone, windSpeed) {
         const i3 = i * 3;
+        const i6 = i * 6;
+
         // Random position within zone
-        positions[i3] = zone.minX + Math.random() * (zone.maxX - zone.minX);
-        positions[i3 + 1] = 10 + Math.random() * 5;
-        positions[i3 + 2] = Math.random() * 10 - 5; // Z depth
+        const x = zone.minX + Math.random() * (zone.maxX - zone.minX);
+        const y = 10 + Math.random() * 5;
+        const z = Math.random() * 10 - 5; // Z depth
+
+        // Tail
+        positions[i6] = x;
+        positions[i6 + 1] = y + 0.3;
+        positions[i6 + 2] = z;
+
+        // Head
+        positions[i6 + 3] = x;
+        positions[i6 + 4] = y;
+        positions[i6 + 5] = z;
 
         velocities[i3] = 0;
         velocities[i3 + 1] = -0.15 - Math.random() * 0.1;
@@ -162,34 +177,66 @@ export class WeatherEffects {
 
         for (let i = 0; i < count; i++) {
             const i3 = i * 3;
+            const i6 = i * 6;
 
             if (states[i] === 0) { // FALLING
-                positions[i3] += windSpeed * 0.002;
-                positions[i3 + 2] += windSpeed * 0.001;
+                // Update Head first
+                const vx = velocities[i3] + windSpeed * 0.002;
+                const vy = velocities[i3 + 1];
+                const vz = velocities[i3 + 2] + windSpeed * 0.001;
 
-                positions[i3] += velocities[i3];
-                positions[i3 + 1] += velocities[i3 + 1];
-                positions[i3 + 2] += velocities[i3 + 2];
+                // Move Head
+                positions[i6 + 3] += vx;
+                positions[i6 + 4] += vy;
+                positions[i6 + 5] += vz;
 
-                // Check bounds and wrap
-                if (positions[i3] > zone.maxX) positions[i3] -= (zone.maxX - zone.minX);
-                if (positions[i3] < zone.minX) positions[i3] += (zone.maxX - zone.minX);
+                // Move Tail
+                positions[i6] += vx;
+                positions[i6 + 1] += vy;
+                positions[i6 + 2] += vz;
 
-                // Collision with Sundial (only if in center zone roughly? Sundial is at 0,0,0)
-                // If particles are in Past/Forecast zones (offset X), they shouldn't hit the central sundial.
-                // Simple check: collisions only if within generic radius of (0,0,0).
-                const distSq = positions[i3] * positions[i3] + positions[i3 + 2] * positions[i3 + 2];
+                // Adjust Tail based on velocity for streak effect
+                // Tail is Head position minus velocity * streakFactor
+                const streakFactor = 3.0; // Multiplier for length
+                positions[i6] = positions[i6 + 3] - vx * streakFactor;
+                positions[i6 + 1] = positions[i6 + 4] - vy * streakFactor;
+                positions[i6 + 2] = positions[i6 + 5] - vz * streakFactor;
 
-                if (distSq < boxRadiusSq && positions[i3 + 1] > -1 && positions[i3 + 1] < 4) {
-                    this.raycaster.set(new THREE.Vector3(positions[i3], positions[i3 + 1] + 0.5, positions[i3 + 2]), this.downVector);
+                // Check bounds and wrap (using Head position)
+                if (positions[i6 + 3] > zone.maxX) {
+                    const diff = zone.maxX - zone.minX;
+                    positions[i6 + 3] -= diff;
+                    positions[i6] -= diff;
+                }
+                if (positions[i6 + 3] < zone.minX) {
+                    const diff = zone.maxX - zone.minX;
+                    positions[i6 + 3] += diff;
+                    positions[i6] += diff;
+                }
+
+                // Collision with Sundial
+                const headX = positions[i6 + 3];
+                const headY = positions[i6 + 4];
+                const headZ = positions[i6 + 5];
+
+                const distSq = headX * headX + headZ * headZ;
+
+                if (distSq < boxRadiusSq && headY > -1 && headY < 4) {
+                    this.raycaster.set(new THREE.Vector3(headX, headY + 0.5, headZ), this.downVector);
                     this.raycaster.far = 1.0;
                     const intersects = this.raycaster.intersectObject(this.sundialGroup, true);
 
                     if (intersects.length > 0) {
                         const hit = intersects[0];
-                        positions[i3] = hit.point.x;
-                        positions[i3 + 1] = hit.point.y + 0.02;
-                        positions[i3 + 2] = hit.point.z;
+                        // Update both head and tail to hit point + slight offset for "splashed" state
+                        positions[i6] = hit.point.x;
+                        positions[i6 + 1] = hit.point.y + 0.02;
+                        positions[i6 + 2] = hit.point.z;
+
+                        positions[i6 + 3] = hit.point.x;
+                        positions[i6 + 4] = hit.point.y + 0.02;
+                        positions[i6 + 5] = hit.point.z;
+
                         states[i] = 1;
 
                         const worldNormal = hit.face.normal.clone().applyQuaternion(hit.object.getWorldQuaternion(new THREE.Quaternion()));
@@ -201,19 +248,25 @@ export class WeatherEffects {
                     }
                 }
 
-                if (positions[i3 + 1] < -5) {
+                if (headY < -5) {
                     this.resetRainParticle(positions, velocities, states, i, zone, windSpeed);
                 }
 
-            } else { // ON SURFACE
-                // ... (Simplified logic similar to before)
-                 velocities[i3 + 1] += -0.005; // gravity
-                 positions[i3] += velocities[i3];
-                 positions[i3+1] += velocities[i3+1];
-                 positions[i3+2] += velocities[i3+2];
+            } else { // ON SURFACE (Splashing/Sliding)
+                 // Gravity
+                 velocities[i3 + 1] += -0.005;
 
-                 // Simple fall off check
-                 if (positions[i3+1] < -1) {
+                 // Move both
+                 positions[i6] += velocities[i3];
+                 positions[i6 + 1] += velocities[i3 + 1];
+                 positions[i6 + 2] += velocities[i3 + 2];
+
+                 positions[i6 + 3] += velocities[i3];
+                 positions[i6 + 4] += velocities[i3 + 1];
+                 positions[i6 + 5] += velocities[i3 + 2];
+
+                 // Simple fall off check (Head Y)
+                 if (positions[i6 + 4] < -1) {
                      states[i] = 0;
                  }
                  if (Math.random() < 0.05) this.resetRainParticle(positions, velocities, states, i, zone, windSpeed);
