@@ -18,7 +18,7 @@ export class WeatherEffects {
         this.downVector = new THREE.Vector3(0, -1, 0);
     }
 
-    update(past, current, forecast) {
+    update(past, current, forecast, delta = 0.016) {
         // past, current, forecast are objects { weatherCode, windSpeed }
 
         // Check if weather codes changed
@@ -61,7 +61,12 @@ export class WeatherEffects {
         // Animate clouds
         this.clouds.forEach(cloud => {
             const windSpeed = cloud.userData.windSpeed || 0;
-            cloud.position.x += 0.005 + windSpeed * 0.001;
+            // Use delta for frame-rate independence.
+            // Base speed reduced to 0.05 units/sec for "drift".
+            // Wind speed (km/h) scaled to influence drift (0.01 factor).
+            // Example: 20km/h wind => 0.05 + 0.2 = 0.25 units/sec.
+            const moveSpeed = (0.05 + windSpeed * 0.01) * delta;
+            cloud.position.x += moveSpeed;
 
             if (cloud.userData.zone) {
                 const zone = cloud.userData.zone;

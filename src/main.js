@@ -8,6 +8,7 @@ import { AstronomyService } from './astronomy.js';
 
 // Scene setup
 const scene = new THREE.Scene();
+const clock = new THREE.Clock();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 
@@ -247,6 +248,7 @@ function updateTimeDisplay() {
 function animate() {
     requestAnimationFrame(animate);
 
+    const delta = clock.getDelta();
     const now = new Date();
 
     // Update sundial hands
@@ -314,14 +316,16 @@ function animate() {
         weatherEffects.update(
             weatherData.past || { weatherCode: 0, windSpeed: 0 },
             weatherData.current || { weatherCode: 0, windSpeed: 0 },
-            weatherData.forecast || { weatherCode: 0, windSpeed: 0 }
+            weatherData.forecast || { weatherCode: 0, windSpeed: 0 },
+            delta
         );
     } else {
         // Default weather effects update if no data?
          weatherEffects.update(
             { weatherCode: 0, windSpeed: 0 },
             { weatherCode: 0, windSpeed: 0 },
-            { weatherCode: 0, windSpeed: 0 }
+            { weatherCode: 0, windSpeed: 0 },
+            delta
         );
     }
 
