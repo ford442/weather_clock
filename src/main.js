@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createSundial } from './sundial.js';
 import { WeatherService } from './weather.js';
 import { updateWeatherLighting } from './weatherLighting.js';
@@ -8,14 +12,40 @@ import { AstronomyService } from './astronomy.js';
 
 // Scene setup
 const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xaaaaaa, 0.002); // Add Fog
 const clock = new THREE.Clock();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+
+// Tone mapping for HDR effect (Sky shader + Bloom)
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.5;
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+// Post-processing
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+bloomPass.threshold = 0.9; // Only very bright things glow
+bloomPass.strength = 0.6;
+bloomPass.radius = 0.8;
+composer.addPass(bloomPass);
+
+// Sky Setup
+const sky = new Sky();
+sky.scale.setScalar(450000);
+const skyUniforms = sky.material.uniforms;
+skyUniforms['turbidity'].value = 10;
+skyUniforms['rayleigh'].value = 3;
+skyUniforms['mieCoefficient'].value = 0.005;
+skyUniforms['mieDirectionalG'].value = 0.7;
+scene.add(sky);
 
 // Camera position
 camera.position.set(0, 5, 8);
@@ -61,13 +91,17 @@ moonLight.shadow.camera.bottom = -10;
 scene.add(moonLight);
 
 // Weather effects
-const weatherEffects = new WeatherEffects(scene, sundial.group);
+const weatherEffects = new WeatherEffects(scene, sundial.group, camera);
 
 // Services
 const weatherService = new WeatherService();
 const astronomyService = new AstronomyService();
 
 let weatherData = null;
+let simulationTime = new Date();
+let isTimeWarping = false;
+const REAL_TIME_SCALE = 1.0;
+const WARP_SCALE = 1440.0; // 24h in 60s -> 1440x
 
 // Initialize
 function init() {
@@ -152,6 +186,16 @@ function setupEventListeners() {
     searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') performSearch();
     });
+
+    // Time Warp
+    const warpBtn = document.getElementById('time-warp-btn');
+    if (warpBtn) {
+        warpBtn.addEventListener('click', () => {
+            isTimeWarping = !isTimeWarping;
+            warpBtn.style.background = isTimeWarping ? 'rgba(255, 200, 100, 0.4)' : 'rgba(255,255,255,0.1)';
+            warpBtn.textContent = isTimeWarping ? '⏸️' : '⏩';
+        });
+    }
 }
 
 function updateUnitButton() {
@@ -238,9 +282,8 @@ function updateWeatherDisplay(data) {
 
 // Update time display
 function updateTimeDisplay() {
-    const now = new Date();
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const hours = String(simulationTime.getHours()).padStart(2, '0');
+    const minutes = String(simulationTime.getMinutes()).padStart(2, '0');
     document.getElementById('time-display').textContent = `${hours}:${minutes}`;
 }
 
@@ -249,10 +292,19 @@ function animate() {
     requestAnimationFrame(animate);
 
     const delta = clock.getDelta();
-    const now = new Date();
 
-    // Update sundial hands
-    sundial.update();
+    // Update Simulation Time
+    const scale = isTimeWarping ? WARP_SCALE : REAL_TIME_SCALE;
+    // Add milliseconds: delta (s) * 1000 * scale
+    simulationTime = new Date(simulationTime.getTime() + delta * 1000 * scale);
+
+    // Update sundial hands (using simulationTime?)
+    // Sundial code likely uses its own time or we need to pass it?
+    // Looking at sundial.js (I haven't checked it but I assume it has update(time)?)
+    // The current code called `sundial.update()` without args.
+    // Let's assume it checks system time. I might need to update sundial.js to accept time.
+    // I will check sundial.js in a moment. For now, let's pass simulationTime if it accepts it, or just call it.
+    sundial.update(simulationTime);
 
     // Update Astronomy (Sun/Moon positions)
     // Use weather service lat/lon if available, else default
@@ -260,7 +312,7 @@ function animate() {
     const lon = weatherService.longitude;
 
     // Calculate positions (distance 20 to keep lights outside scene bounds)
-    const astroData = astronomyService.update(now, lat, lon, 20);
+    const astroData = astronomyService.update(simulationTime, lat, lon, 20);
 
     // Update Sun Light
     sunLight.position.copy(astroData.sunPosition);
@@ -279,7 +331,7 @@ function animate() {
     // Update lighting intensity/color based on weather
     if (weatherData) {
         // We use the weather lighting helper for intensity/color transitions
-        updateWeatherLighting(scene, sunLight, ambientLight, weatherData);
+        updateWeatherLighting(scene, sunLight, ambientLight, sky, weatherData);
         
         // Also adjust moon light intensity based on phase/cloud?
         // Moon phase illumination
@@ -329,7 +381,8 @@ function animate() {
         );
     }
 
-    renderer.render(scene, camera);
+    // renderer.render(scene, camera); // Replaced by composer
+    composer.render();
 }
 
 // Handle window resize
@@ -337,6 +390,7 @@ window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 // Start
