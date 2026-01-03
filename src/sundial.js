@@ -133,8 +133,8 @@ export function createSundial() {
     group.add(center);
 
     // Update function to rotate hands
-    function update() {
-        const now = new Date();
+    function update(time) {
+        const now = time || new Date();
         const hours = now.getHours() % 12;
         const minutes = now.getMinutes();
         const seconds = now.getSeconds();

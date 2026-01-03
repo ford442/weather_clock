@@ -280,7 +280,11 @@
                 <button id="search-btn" class="search-btn">Go</button>
             </div>
 
-            <div id="time-display" class="time-display">--:--</div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div id="time-display" class="time-display">--:--</div>
+                <button id="time-warp-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 50%; width: 40px; height: 40px; color: white; cursor: pointer; font-size: 20px; transition: all 0.2s;" title="Fast Forward (24h in 60s)">⏩</button>
+            </div>
+
             <div id="current-temp" class="current-temp-large">--°</div>
             <button id="unit-toggle" class="unit-toggle">Switch to °C</button>
             <div id="current-description" class="current-weather-large">Loading...</div>
