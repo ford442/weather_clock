@@ -64,7 +64,10 @@ export function updateWeatherLighting(scene, sunLight, ambientLight, sky, weathe
     // Update Sky Shader
     if (sky) {
         const uniforms = sky.material.uniforms;
-        uniforms['sunPosition'].value.copy(sunLight.position);
+        // Sky shader expects a normalized direction or distant position.
+        // We copy the position but should ensure it behaves as a direction.
+        // Standard Three.js example uses radius 1.
+        uniforms['sunPosition'].value.copy(sunLight.position).normalize();
 
         // Adjust Turbidity (haze) based on clouds and severity
         // Clear day: 2-5, Cloudy: 10-20
@@ -89,7 +92,20 @@ export function updateWeatherLighting(scene, sunLight, ambientLight, sky, weathe
     if (scene.fog) {
         // Fog density
         // Clear: 0.002, Heavy Cloud/Rain: 0.05
-        const targetFogDensity = 0.002 + (weightedCloud / 100) * 0.02 + (weightedSeverity / 100) * 0.03;
+        // Visibility check: If visibility is low (e.g. < 1000m), increase fog
+        // Note: weightedCloud is 0-100.
+
+        let visibilityFactor = 0;
+        if (weatherData.current && weatherData.current.visibility !== undefined) {
+             // Visibility < 2000m starts adding fog
+             const vis = weatherData.current.visibility;
+             if (vis < 2000) {
+                 visibilityFactor = 1.0 - (vis / 2000); // 0 at 2000m, 1 at 0m
+             }
+        }
+
+        const targetFogDensity = 0.002 + (weightedCloud / 100) * 0.02 + (weightedSeverity / 100) * 0.04 + visibilityFactor * 0.05;
+
         // Interpolate current density to target
         scene.fog.density += (targetFogDensity - scene.fog.density) * 0.05;
 

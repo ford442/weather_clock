@@ -1,20 +1,66 @@
 import * as THREE from 'three';
 
-// Simple Cloud Texture Generator
+// Improved Cloud Texture Generator using simple noise approximation
 function createCloudTexture() {
+    const size = 128;
     const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
+    canvas.width = size;
+    canvas.height = size;
     const context = canvas.getContext('2d');
-    const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-    gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.2)');
+
+    // Clear
+    context.fillStyle = 'rgba(0,0,0,0)';
+    context.fillRect(0,0,size,size);
+
+    // Draw base radial gradient
+    const gradient = context.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.5)');
+    gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.1)');
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
     context.fillStyle = gradient;
-    context.fillRect(0, 0, 64, 64);
+    context.fillRect(0, 0, size, size);
+
+    // Add noise "puffs"
+    for(let i=0; i<30; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const r = Math.random() * (size/3);
+        const alpha = Math.random() * 0.1;
+
+        context.beginPath();
+        context.arc(x, y, r, 0, Math.PI * 2);
+        context.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        context.fill();
+    }
+
     const texture = new THREE.CanvasTexture(canvas);
     return texture;
 }
+
+// Pseudo-random noise for curl
+function noise(x, y, z) {
+    return Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453 % 1;
+}
+
+function curlNoise(x, y, z, time) {
+    const eps = 0.1;
+    // Simple 3D noise approx using sines
+    const n = (a, b, c) => Math.sin(a * 0.5 + time) * Math.cos(b * 0.3 + time) * Math.sin(c * 0.5);
+
+    // Approximate partial derivatives for curl (Rotational)
+    // Curl F = (dFz/dy - dFy/dz, dFx/dz - dFz/dx, dFy/dx - dFx/dy)
+    // We use a potential field P = (n, n, n)
+    // But let's just create a turbulent vector directly
+
+    const dx = n(x, y + eps, z) - n(x, y - eps, z);
+    const dy = n(x - eps, y, z) - n(x + eps, y, z);
+    const dz = Math.sin(x * 0.1 + time);
+
+    return new THREE.Vector3(dx * 0.5, 0, dy * 0.5);
+}
+
 
 class CloudSystem {
     constructor(scene, camera, maxClouds = 50) {
@@ -26,10 +72,10 @@ class CloudSystem {
 
         // Soft sprite material
         const map = createCloudTexture();
-        const material = new THREE.MeshBasicMaterial({
+        this.material = new THREE.MeshBasicMaterial({
             map: map,
             transparent: true,
-            opacity: 0.6,
+            opacity: 0.0, // Start invisible, fade in
             depthWrite: false,
             side: THREE.DoubleSide
         });
@@ -37,12 +83,17 @@ class CloudSystem {
         // Sprites are planes
         const geometry = new THREE.PlaneGeometry(1, 1);
 
-        this.mesh = new THREE.InstancedMesh(geometry, material, this.totalInstances);
+        this.mesh = new THREE.InstancedMesh(geometry, this.material, this.totalInstances);
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.scene.add(this.mesh);
 
         this.clouds = [];
         this.dummy = new THREE.Object3D();
+
+        // Lifecycle
+        this.state = 'fading_in'; // fading_in, stable, fading_out
+        this.fadeTimer = 0;
+        this.fadeDuration = 5.0; // seconds
 
         // Hide all initially
         this.clear();
@@ -81,6 +132,22 @@ class CloudSystem {
     }
 
     update(delta) {
+        // Handle Fade
+        if (this.state === 'fading_in') {
+            this.fadeTimer += delta;
+            this.material.opacity = Math.min(0.8, (this.fadeTimer / this.fadeDuration) * 0.8);
+            if (this.fadeTimer >= this.fadeDuration) {
+                this.state = 'stable';
+                this.material.opacity = 0.8;
+            }
+        } else if (this.state === 'fading_out') {
+            this.fadeTimer += delta;
+            this.material.opacity = Math.max(0.0, 0.8 - (this.fadeTimer / this.fadeDuration) * 0.8);
+            if (this.fadeTimer >= this.fadeDuration) {
+                return false; // Signal to destroy
+            }
+        }
+
         // Billboard rotation
         const camQuat = this.camera.quaternion;
 
@@ -113,6 +180,18 @@ class CloudSystem {
         });
 
         this.mesh.instanceMatrix.needsUpdate = true;
+        return true;
+    }
+
+    fadeOut() {
+        this.state = 'fading_out';
+        this.fadeTimer = 0;
+    }
+
+    dispose() {
+        this.scene.remove(this.mesh);
+        this.mesh.geometry.dispose();
+        this.material.dispose();
     }
 
     clear() {
@@ -131,9 +210,10 @@ export class WeatherEffects {
         this.scene = scene;
         this.sundialGroup = sundialGroup;
         this.camera = camera;
-        this.particleSystems = [];
 
-        this.cloudSystem = new CloudSystem(scene, camera);
+        // Active systems (Rain/Snow/Clouds)
+        // Array of objects: { system: Object, type: 'rain'|'snow'|'cloud', update: Function }
+        this.activeSystems = [];
 
         this.weatherState = {
             past: { code: -1, wind: 0 },
@@ -149,39 +229,45 @@ export class WeatherEffects {
     }
 
     update(past, current, forecast, delta = 0.016) {
+        // Check for changes
         if (past.weatherCode !== this.weatherState.past.code ||
             current.weatherCode !== this.weatherState.current.code ||
             forecast.weatherCode !== this.weatherState.forecast.code) {
 
-            this.clearParticles();
-            this.cloudSystem.clear();
+            // Mark all current systems to fade out
+            this.activeSystems.forEach(s => {
+                if (s.system && s.system.userData) s.system.userData.state = 'fading_out'; // For rain/snow
+                if (s.system instanceof CloudSystem) s.system.fadeOut();
+            });
 
             this.weatherState.past = { ...past };
             this.weatherState.current = { ...current };
             this.weatherState.forecast = { ...forecast };
 
+            // Create new systems
             this.createZoneEffects(past.weatherCode, past.windSpeed, -8, 8);
             this.createZoneEffects(current.weatherCode, current.windSpeed, 0, 8);
             this.createZoneEffects(forecast.weatherCode, forecast.windSpeed, 8, 8);
-        } else {
-             // Update wind if needed, but for now we just use the initial state's wind for simpler logic
-             // or update it:
-             // But existing particles have wind baked in or we pass it?
-             // We pass it in updateParticleSystem.
         }
 
-        // Update active particle systems
-        this.particleSystems.forEach(system => {
-            if (system.userData.type === 'rain') {
-                // Use current windSpeed from args if available, or stored
-                // We'll use stored zone wind for now to match the "zone" logic
-                this.updateRain(system, system.userData.windSpeed, system.userData.zone, delta);
-            } else if (system.userData.type === 'snow') {
-                this.updateSnow(system, system.userData.windSpeed, system.userData.zone, delta);
+        // Update active systems and clean up dead ones
+        this.activeSystems = this.activeSystems.filter(s => {
+            let keep = true;
+            if (s.type === 'cloud') {
+                keep = s.system.update(delta);
+                if (!keep) s.system.dispose();
+            } else {
+                // Rain/Snow
+                keep = this.updateParticleSystem(s.system, delta);
+                if (!keep) {
+                    this.scene.remove(s.system);
+                    s.system.geometry.dispose();
+                    s.system.material.dispose();
+                }
             }
+            return keep;
         });
 
-        this.cloudSystem.update(delta);
         this.updateSplashes();
     }
 
@@ -204,9 +290,11 @@ export class WeatherEffects {
         if (weatherCode >= 2) {
             // Add clouds
             const count = weatherCode === 3 ? 5 : 2;
+            const cloudSys = new CloudSystem(this.scene, this.camera);
             for(let i=0; i<count; i++) {
-                this.cloudSystem.addCloud(zone, windSpeed);
+                cloudSys.addCloud(zone, windSpeed);
             }
+            this.activeSystems.push({ type: 'cloud', system: cloudSys });
         }
     }
 
@@ -225,7 +313,7 @@ export class WeatherEffects {
         const material = new THREE.LineBasicMaterial({
             color: 0x88ccff,
             transparent: true,
-            opacity: 0.6
+            opacity: 0.0 // Start invisible
         });
 
         const system = new THREE.LineSegments(geometry, material);
@@ -234,11 +322,15 @@ export class WeatherEffects {
             velocities: velocities,
             states: states,
             zone: zone,
-            windSpeed: windSpeed
+            windSpeed: windSpeed,
+            state: 'fading_in',
+            fadeTimer: 0,
+            fadeDuration: 5.0,
+            targetOpacity: 0.6
         };
 
         this.scene.add(system);
-        this.particleSystems.push(system);
+        this.activeSystems.push({ type: 'rain', system: system });
     }
 
     resetRainParticle(positions, velocities, states, i, zone, windSpeed) {
@@ -265,6 +357,37 @@ export class WeatherEffects {
         states[i] = 0;
     }
 
+    updateParticleSystem(system, delta) {
+        const userData = system.userData;
+
+        // Handle Fade
+        if (userData.state === 'fading_in') {
+            userData.fadeTimer += delta;
+            system.material.opacity = Math.min(userData.targetOpacity, (userData.fadeTimer / userData.fadeDuration) * userData.targetOpacity);
+            if (userData.fadeTimer >= userData.fadeDuration) {
+                userData.state = 'stable';
+                system.material.opacity = userData.targetOpacity;
+            }
+        } else if (userData.state === 'fading_out') {
+            if (userData.fadingOutTimer === undefined) userData.fadingOutTimer = 0;
+
+            userData.fadingOutTimer += delta;
+            system.material.opacity = Math.max(0.0, userData.targetOpacity - (userData.fadingOutTimer / userData.fadeDuration) * userData.targetOpacity);
+
+            if (userData.fadingOutTimer >= userData.fadeDuration) {
+                return false; // Destroy
+            }
+        }
+
+        if (userData.type === 'rain') {
+            this.updateRain(system, userData.windSpeed, userData.zone, delta);
+        } else if (userData.type === 'snow') {
+            this.updateSnow(system, userData.windSpeed, userData.zone, delta);
+        }
+
+        return true;
+    }
+
     updateRain(system, windSpeed, zone, delta) {
         const positions = system.geometry.attributes.position.array;
         const velocities = system.userData.velocities;
@@ -281,7 +404,6 @@ export class WeatherEffects {
 
             if (states[i] === 0) { // Falling
                 // Apply gravity/wind to velocity
-                // Rain falls straight down relative to air, so wind adds horizontal velocity
                 velocities[i3] += (windX - velocities[i3]) * 0.1;
                 velocities[i3 + 2] += (windZ - velocities[i3 + 2]) * 0.1;
 
@@ -295,7 +417,6 @@ export class WeatherEffects {
                 positions[i6 + 5] += vz;
 
                 // Update TAIL (streak)
-                // Tail follows head minus velocity vector scaled
                 const streak = 3.0;
                 positions[i6] = positions[i6 + 3] - vx * streak;
                 positions[i6 + 1] = positions[i6 + 4] - vy * streak;
@@ -315,8 +436,9 @@ export class WeatherEffects {
                 if (headY > -1 && headY < 4) {
                     const headX = positions[i6 + 3];
                     const headZ = positions[i6 + 5];
-                    // Simple Box check for sundial center
-                    if (headX * headX + headZ * headZ < 12) {
+
+                    // Safety check for sundialGroup
+                    if (this.sundialGroup && headX * headX + headZ * headZ < 12) {
                         this.raycaster.set(new THREE.Vector3(headX, headY+1, headZ), this.downVector);
                         this.raycaster.far = 2.0;
                         const intersects = this.raycaster.intersectObject(this.sundialGroup, true);
@@ -324,7 +446,6 @@ export class WeatherEffects {
                             const hit = intersects[0];
                             this.spawnSplash(hit.point);
                             this.resetRainParticle(positions, velocities, states, i, zone, windSpeed);
-                            // Or bounce? Rain just splashes and disappears usually.
                             continue;
                         }
                     }
@@ -363,14 +484,24 @@ export class WeatherEffects {
             color: 0xffffff,
             size: 0.15,
             transparent: true,
-            opacity: 0.8,
-            map: createCloudTexture(), // Use soft texture for snow too?
+            opacity: 0.0, // Fade in
+            map: createCloudTexture(),
             depthWrite: false
         });
 
         const system = new THREE.Points(geometry, material);
-        system.userData = { type: 'snow', velocities: velocities, offsets: offsets, zone: zone, windSpeed: windSpeed };
-        this.particleSystems.push(system);
+        system.userData = {
+            type: 'snow',
+            velocities: velocities,
+            offsets: offsets,
+            zone: zone,
+            windSpeed: windSpeed,
+            state: 'fading_in',
+            fadeTimer: 0,
+            fadeDuration: 5.0,
+            targetOpacity: 0.8
+        };
+        this.activeSystems.push({ type: 'snow', system: system });
         this.scene.add(system);
     }
 
@@ -383,13 +514,22 @@ export class WeatherEffects {
 
         for (let i = 0; i < positions.length; i += 3) {
             const idx = i/3;
-            // Curl/Turbulence
-            const noise = Math.sin(time + offsets[idx]) * 0.02;
-            const noiseZ = Math.cos(time * 0.8 + offsets[idx]) * 0.02;
 
-            positions[i] += velocities[i] + windX + noise;
-            positions[i + 1] += velocities[i + 1];
-            positions[i + 2] += velocities[i + 2] + noiseZ;
+            // Curl Noise Simulation
+            // We use the curlNoise helper
+            const px = positions[i];
+            const py = positions[i+1];
+            const pz = positions[i+2];
+
+            // Add randomness from offsets
+            const curl = curlNoise(px * 0.1, py * 0.1, pz * 0.1, time + offsets[idx] * 0.01);
+
+            // Apply curl influence to movement (flutter)
+            // Snow falls (velocities.y) + wind + curl
+
+            positions[i] += velocities[i] + windX + curl.x * 0.05;
+            positions[i + 1] += velocities[i + 1] + curl.y * 0.05;
+            positions[i + 2] += velocities[i + 2] + curl.z * 0.05;
 
             // Wrap
             if (positions[i] > zone.maxX) positions[i] -= (zone.maxX - zone.minX);
@@ -463,11 +603,15 @@ export class WeatherEffects {
     }
 
     clearParticles() {
-        this.particleSystems.forEach(s => {
-            this.scene.remove(s);
-            s.geometry.dispose();
-            s.material.dispose();
+        this.activeSystems.forEach(s => {
+            if (s.type === 'cloud') {
+                s.system.dispose();
+            } else {
+                this.scene.remove(s.system);
+                s.system.geometry.dispose();
+                s.system.material.dispose();
+            }
         });
-        this.particleSystems = [];
+        this.activeSystems = [];
     }
 }

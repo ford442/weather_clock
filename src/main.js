@@ -14,7 +14,8 @@ import { AstronomyService } from './astronomy.js';
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0xaaaaaa, 0.002); // Add Fog
 const clock = new THREE.Clock();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+// Increased far plane to ensure Sky (scaled 450000) is visible
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000000);
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 
 // Tone mapping for HDR effect (Sky shader + Bloom)
@@ -32,9 +33,9 @@ const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
 
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-bloomPass.threshold = 0.9; // Only very bright things glow
-bloomPass.strength = 0.6;
-bloomPass.radius = 0.8;
+bloomPass.threshold = 0.85; // Slightly lower threshold to catch more sun glow
+bloomPass.strength = 1.2;   // Increased intensity for "intense glow"
+bloomPass.radius = 0.6;     // Tighter bloom
 composer.addPass(bloomPass);
 
 // Sky Setup
