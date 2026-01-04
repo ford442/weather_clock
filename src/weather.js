@@ -107,8 +107,9 @@ export class WeatherService {
         try {
             // Using Open-Meteo API (free, no key required)
             // Get current and forecast weather
+            // Added 'visibility' to current params
             const currentResponse = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
+                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m,visibility&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m,visibility&timezone=auto`
             );
             const currentData = await currentResponse.json();
 
@@ -129,7 +130,8 @@ export class WeatherService {
                 weatherCode: currentData.current.weather_code,
                 description: this.getWeatherDescription(currentData.current.weather_code),
                 cloudCover: currentData.current.cloud_cover,
-                windSpeed: currentData.current.wind_speed_10m
+                windSpeed: currentData.current.wind_speed_10m,
+                visibility: currentData.current.visibility // meters
             };
 
             // Parse past weather (3 hours ago)
