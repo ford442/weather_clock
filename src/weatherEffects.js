@@ -1,5 +1,34 @@
 import * as THREE from 'three';
 
+// Rain Shader: Fades out particles based on distance from camera
+const rainVertexShader = `
+uniform float uOpacity;
+varying float vOpacity;
+
+void main() {
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+
+    // Calculate distance from camera
+    float dist = length(mvPosition.xyz);
+
+    // Fade out if too close (< 2.0) or too far (> 40.0)
+    // smoothstep(min, max, val) returns 0 if val < min, 1 if val > max
+    float alpha = smoothstep(2.0, 5.0, dist) * (1.0 - smoothstep(30.0, 50.0, dist));
+
+    vOpacity = alpha * uOpacity;
+}
+`;
+
+const rainFragmentShader = `
+uniform vec3 uColor;
+varying float vOpacity;
+
+void main() {
+    gl_FragColor = vec4(uColor, vOpacity);
+}
+`;
+
 // Improved Cloud Texture Generator using simple noise approximation
 function createCloudTexture() {
     const size = 128;
@@ -83,6 +112,7 @@ class CloudSystem {
         // Sprites are planes
         const geometry = new THREE.PlaneGeometry(1, 1);
 
+        // InstancedMesh for efficient cloud rendering
         this.mesh = new THREE.InstancedMesh(geometry, this.material, this.totalInstances);
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.scene.add(this.mesh);
@@ -224,11 +254,20 @@ export class WeatherEffects {
         this.raycaster = new THREE.Raycaster();
         this.downVector = new THREE.Vector3(0, -1, 0);
 
+        // Flash intensity for lightning (boosts ambient light)
+        this.flashIntensity = 0;
+
         // Initialize Splash System
         this.createSplashes();
     }
 
     update(past, current, forecast, delta = 0.016) {
+        // Decay flash intensity
+        if (this.flashIntensity > 0) {
+            this.flashIntensity -= delta * 5.0; // Decay speed
+            if (this.flashIntensity < 0) this.flashIntensity = 0;
+        }
+
         // Check for changes
         if (past.weatherCode !== this.weatherState.past.code ||
             current.weatherCode !== this.weatherState.current.code ||
@@ -271,6 +310,11 @@ export class WeatherEffects {
         this.updateSplashes();
     }
 
+    // Accessor for the main loop to grab the extra ambient intensity
+    getLightningFlash() {
+        return this.flashIntensity;
+    }
+
     createZoneEffects(weatherCode, windSpeed, centerX, width) {
         const zone = {
             minX: centerX - width / 2,
@@ -310,10 +354,17 @@ export class WeatherEffects {
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-        const material = new THREE.LineBasicMaterial({
-            color: 0x88ccff,
+        // Upgraded: Use ShaderMaterial for distance fading
+        const material = new THREE.ShaderMaterial({
+            uniforms: {
+                uColor: { value: new THREE.Color(0x88ccff) },
+                uOpacity: { value: 0.0 }
+            },
+            vertexShader: rainVertexShader,
+            fragmentShader: rainFragmentShader,
             transparent: true,
-            opacity: 0.0 // Start invisible
+            depthWrite: false,
+            side: THREE.DoubleSide
         });
 
         const system = new THREE.LineSegments(geometry, material);
@@ -359,26 +410,39 @@ export class WeatherEffects {
 
     updateParticleSystem(system, delta) {
         const userData = system.userData;
+        let currentOpacity = 0;
 
-        // Handle Fade
+        // Handle Fade Logic (Calculate target opacity)
         if (userData.state === 'fading_in') {
             userData.fadeTimer += delta;
-            system.material.opacity = Math.min(userData.targetOpacity, (userData.fadeTimer / userData.fadeDuration) * userData.targetOpacity);
+            currentOpacity = Math.min(userData.targetOpacity, (userData.fadeTimer / userData.fadeDuration) * userData.targetOpacity);
             if (userData.fadeTimer >= userData.fadeDuration) {
                 userData.state = 'stable';
-                system.material.opacity = userData.targetOpacity;
+                currentOpacity = userData.targetOpacity;
             }
         } else if (userData.state === 'fading_out') {
             if (userData.fadingOutTimer === undefined) userData.fadingOutTimer = 0;
-
             userData.fadingOutTimer += delta;
-            system.material.opacity = Math.max(0.0, userData.targetOpacity - (userData.fadingOutTimer / userData.fadeDuration) * userData.targetOpacity);
-
+            currentOpacity = Math.max(0.0, userData.targetOpacity - (userData.fadingOutTimer / userData.fadeDuration) * userData.targetOpacity);
             if (userData.fadingOutTimer >= userData.fadeDuration) {
                 return false; // Destroy
             }
+        } else {
+            currentOpacity = userData.targetOpacity;
         }
 
+        // Apply Opacity
+        if (userData.type === 'rain') {
+            // ShaderMaterial uses uniform
+            if (system.material.uniforms) {
+                system.material.uniforms.uOpacity.value = currentOpacity;
+            }
+        } else {
+            // Standard Material
+            system.material.opacity = currentOpacity;
+        }
+
+        // Update Physics
         if (userData.type === 'rain') {
             this.updateRain(system, userData.windSpeed, userData.zone, delta);
         } else if (userData.type === 'snow') {
@@ -548,6 +612,9 @@ export class WeatherEffects {
         flash.position.set(zone.minX + Math.random() * (zone.maxX - zone.minX), 10, Math.random() * 10 - 5);
         this.scene.add(flash);
         setTimeout(() => this.scene.remove(flash), 100 + Math.random()*100);
+
+        // Trigger global flash
+        this.flashIntensity = 2.0;
 
         if (Math.random() > 0.6) {
              setTimeout(() => this.createLightning(zone), 1000 + Math.random() * 4000);

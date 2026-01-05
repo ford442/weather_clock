@@ -382,6 +382,11 @@ function animate() {
         );
     }
 
+    // Apply Lightning Flash (Global Ambient Boost)
+    if (weatherEffects.getLightningFlash && weatherEffects.getLightningFlash() > 0) {
+        ambientLight.intensity += weatherEffects.getLightningFlash();
+    }
+
     // renderer.render(scene, camera); // Replaced by composer
     composer.render();
 }
