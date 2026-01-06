@@ -31,7 +31,7 @@ void main() {
 
 // Improved Cloud Texture Generator using simple noise approximation
 function createCloudTexture() {
-    const size = 128;
+    const size = 256;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -41,26 +41,31 @@ function createCloudTexture() {
     context.fillStyle = 'rgba(0,0,0,0)';
     context.fillRect(0,0,size,size);
 
-    // Draw base radial gradient
-    const gradient = context.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.5)');
-    gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.1)');
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    // Draw improved fluffy cloud texture
+    // Center glow
+    const cx = size/2;
+    const cy = size/2;
 
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, size, size);
+    // Create multiple overlapping puffs for organic shape
+    const puffs = 15;
 
-    // Add noise "puffs"
-    for(let i=0; i<30; i++) {
-        const x = Math.random() * size;
-        const y = Math.random() * size;
-        const r = Math.random() * (size/3);
-        const alpha = Math.random() * 0.1;
+    for (let i = 0; i < puffs; i++) {
+        // Random offset from center
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * (size * 0.2);
+        const px = cx + Math.cos(angle) * dist;
+        const py = cy + Math.sin(angle) * dist;
+        const r = size * (0.15 + Math.random() * 0.25);
 
+        const grad = context.createRadialGradient(px, py, 0, px, py, r);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+        grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.3)');
+        grad.addColorStop(0.8, 'rgba(255, 255, 255, 0.05)');
+        grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
+
+        context.fillStyle = grad;
         context.beginPath();
-        context.arc(x, y, r, 0, Math.PI * 2);
-        context.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        context.arc(px, py, r, 0, Math.PI * 2);
         context.fill();
     }
 

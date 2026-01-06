@@ -20,7 +20,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 
 // Tone mapping for HDR effect (Sky shader + Bloom)
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.5;
+renderer.toneMappingExposure = 1.0;
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
