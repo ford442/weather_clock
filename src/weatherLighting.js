@@ -55,8 +55,9 @@ export function updateWeatherLighting(scene, sunLight, ambientLight, sky, weathe
         getSeverity(forecastCode) * forecastWeight;
 
     // Calculate target sun light intensity based on cloud cover and weather AND day/night
-    const baseIntensity = 1.2;
-    const cloudFactor = 1 - (weightedCloud / 100) * 0.6;
+    const baseIntensity = 2.0;
+    // Don't reduce intensity too much for clouds, just diffuse it
+    const cloudFactor = 1 - (weightedCloud / 100) * 0.4;
     const severityFactor = 1 - (weightedSeverity / 100) * 0.4;
 
     const targetSunIntensity = baseIntensity * cloudFactor * severityFactor * dayFactor;
@@ -118,7 +119,9 @@ export function updateWeatherLighting(scene, sunLight, ambientLight, sky, weathe
     // Calculate target ambient light intensity
     // Minimum ambient at night (moonlight ambient)
     const nightAmbient = 0.05;
-    const dayAmbient = 0.3 + (1 - cloudFactor) * 0.3;
+    // Ambient should be higher when cloudy (scattering) relative to sun
+    // Base day ambient 0.5
+    const dayAmbient = 0.5;
     const targetAmbientIntensity = nightAmbient + (dayAmbient - nightAmbient) * dayFactor;
 
     // Calculate sun color based on weather
