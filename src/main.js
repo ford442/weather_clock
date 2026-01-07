@@ -332,38 +332,7 @@ function animate() {
     // Update lighting intensity/color based on weather
     if (weatherData) {
         // We use the weather lighting helper for intensity/color transitions
-        updateWeatherLighting(scene, sunLight, ambientLight, sky, weatherData);
-        
-        // Also adjust moon light intensity based on phase/cloud?
-        // Moon phase illumination
-        const moonIntensityBase = 0.5 * astroData.moonIllumination.fraction;
-
-        // Calculate weighted cloud cover
-        const pastWeight = 0.2;
-        const currentWeight = 0.5;
-        const forecastWeight = 0.3;
-
-        const pastCloud = weatherData.past?.cloudCover || 0;
-        const currentCloud = weatherData.current?.cloudCover || 0;
-        const forecastCloud = weatherData.forecast?.cloudCover || 0;
-
-        const weightedCloud =
-            pastCloud * pastWeight +
-            currentCloud * currentWeight +
-            forecastCloud * forecastWeight;
-
-        // Calculate cloud attenuation (0.2 to 1.0)
-        // 100% cloud cover reduces light to 20%
-        const cloudFactor = 1 - (weightedCloud / 100) * 0.8;
-
-        // Calculate horizon dimming (similar to sun)
-        const moonY = astroData.moonPosition.y;
-        let moonHorizonFactor = 1.0;
-        if (moonY < -2) moonHorizonFactor = 0;
-        else if (moonY > 2) moonHorizonFactor = 1;
-        else moonHorizonFactor = (moonY + 2) / 4;
-
-        moonLight.intensity = moonIntensityBase * cloudFactor * moonHorizonFactor;
+        updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, weatherData, astroData);
 
         // Update weather effects (Split zones)
         weatherEffects.update(

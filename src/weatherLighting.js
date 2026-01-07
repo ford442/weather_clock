@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 
-let previousIntensity = { sun: 0.8, ambient: 0.4 };
+let previousIntensity = { sun: 0.8, moon: 0.0, ambient: 0.4 };
 const transitionSpeed = 0.02;
 
-export function updateWeatherLighting(scene, sunLight, ambientLight, sky, weatherData) {
+export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, weatherData, astroData) {
     if (!weatherData) return;
 
     // Calculate day/night factor based on current sun altitude (sunLight.position.y)
@@ -54,13 +54,48 @@ export function updateWeatherLighting(scene, sunLight, ambientLight, sky, weathe
         getSeverity(currentCode) * currentWeight +
         getSeverity(forecastCode) * forecastWeight;
 
+    // --- SUN LIGHTING ---
     // Calculate target sun light intensity based on cloud cover and weather AND day/night
-    const baseIntensity = 2.0;
+    const baseSunIntensity = 2.0;
     // Don't reduce intensity too much for clouds, just diffuse it
-    const cloudFactor = 1 - (weightedCloud / 100) * 0.4;
+    const cloudSunFactor = 1 - (weightedCloud / 100) * 0.4;
     const severityFactor = 1 - (weightedSeverity / 100) * 0.4;
 
-    const targetSunIntensity = baseIntensity * cloudFactor * severityFactor * dayFactor;
+    const targetSunIntensity = baseSunIntensity * cloudSunFactor * severityFactor * dayFactor;
+
+    // --- MOON LIGHTING ---
+    let targetMoonIntensity = 0;
+    let targetMoonColor = new THREE.Color(0x8899cc); // Default blue-ish
+
+    if (astroData && moonLight) {
+        // Moon phase illumination
+        const moonIllum = astroData.moonIllumination ? astroData.moonIllumination.fraction : 0.5;
+        const moonIntensityBase = 0.5 * moonIllum;
+
+        // Calculate cloud attenuation for moon (more aggressive than sun)
+        // 100% cloud cover reduces light to 10%
+        const cloudMoonFactor = 1 - (weightedCloud / 100) * 0.9;
+
+        // Horizon dimming
+        const moonY = moonLight.position.y;
+        let moonHorizonFactor = 1.0;
+        if (moonY < -2) moonHorizonFactor = 0;
+        else if (moonY > 2) moonHorizonFactor = 1;
+        else moonHorizonFactor = (moonY + 2) / 4;
+
+        targetMoonIntensity = moonIntensityBase * cloudMoonFactor * moonHorizonFactor;
+
+        // Calculate Moon Color
+        // Low illum: Deep Blue (0x223366) -> High illum: Silver/White (0xddddff)
+        const minColor = new THREE.Color(0x445588);
+        const maxColor = new THREE.Color(0xddddff);
+        targetMoonColor.copy(minColor).lerp(maxColor, moonIllum);
+
+        // Tint with weather? If storming, maybe darker/greener?
+        if (weightedSeverity > 50) {
+             targetMoonColor.lerp(new THREE.Color(0x333344), 0.5);
+        }
+    }
 
     // Update Sky Shader
     if (sky) {
@@ -158,9 +193,14 @@ export function updateWeatherLighting(scene, sunLight, ambientLight, sky, weathe
     // Smoothly transition intensities
     previousIntensity.sun += (targetSunIntensity - previousIntensity.sun) * transitionSpeed;
     previousIntensity.ambient += (targetAmbientIntensity - previousIntensity.ambient) * transitionSpeed;
+    previousIntensity.moon += (targetMoonIntensity - previousIntensity.moon) * transitionSpeed;
 
     sunLight.intensity = previousIntensity.sun;
     ambientLight.intensity = previousIntensity.ambient;
+    if (moonLight) {
+        moonLight.intensity = previousIntensity.moon;
+        moonLight.color.lerp(targetMoonColor, transitionSpeed);
+    }
 
     // Smoothly transition colors
     sunLight.color.lerp(targetSunColor, transitionSpeed);
