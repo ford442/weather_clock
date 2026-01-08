@@ -1,45 +1,42 @@
-# Project Plan: 3D Weather Clock
+# Project Plan: The Aether Architect (3D Weather & Time)
 
-## Overview
-This document outlines the development roadmap and technical requirements for the 3D Weather Clock. It is intended to guide AI agents (Gemini, Copilot, etc.) in generating code and understanding project goals.
+## Vision
+Transform `weather_clock` from a data dashboard into a **photorealistic window to the sky**. The user should "Feel the Time" through atmospheric rendering, particle evolution, and simulation logic.
 
-## Core Architecture
-- **Entry Point**: `src/main.js`
-- **Weather Logic**: `src/weather.js` (Data fetching)
-- **Visual Effects**: `src/weatherEffects.js` (Particle systems, clouds, lighting)
-- **Scene**: 3D Sundial with distinct spatial zones for time-based weather.
+## Core Directives
+- **Atmosphere**: GLSL Sky Shader, Volumetric Fog, Bloom (Implemented).
+- **Time**: Decoupled simulation time, Time-Lapse/Fast Forward (Implemented, refining).
+- **Weather**: Particle systems for rain/snow/clouds, wind influence (Implemented, refining).
 
-## Feature Implementation Roadmap
+## Implementation Status
 
-### 1. Multi-Temporal Weather Display (Primary Goal)
-**Objective**: Visualize weather conditions across three distinct timelines simultaneously.
+### 1. Atmosphere & Lighting (Completed)
+- [x] **Sky Upgrade**: `three/addons/objects/Sky.js` implemented with Rayleigh/Mie scattering.
+- [x] **Volumetric Fog**: `THREE.FogExp2` with dynamic density based on weather.
+- [x] **Post-Processing**: `EffectComposer` with `UnrealBloomPass` for intense sun/moon glow.
+- [x] **Lighting**: Dynamic sun/moon intensity and color based on cloud cover and elevation.
 
-- **Zones**:
-  - **Past**: Left spatial zone (Offset X: -8). Represents weather from ~3 hours ago.
-  - **Present**: Center spatial zone (Offset X: 0). Represents live weather conditions.
-  - **Future**: Right spatial zone (Offset X: +8). Represents forecasted weather (+3 hours).
+### 2. Particle Evolution (Completed & Polishing)
+- [x] **Clouds**: `InstancedMesh` with noise textures.
+- [x] **Precipitation**: `RainSystem` and `SnowSystem` using object pooling.
+- [x] **Interaction**: Rain splashes on sundial (Collision detection implemented).
+- [x] **Wind**: Particles respond to wind speed.
+- [ ] **Polish**: Fix Raycaster range for splashes.
 
-- **Technical Requirements**:
-  - Maintain independent particle systems (Rain, Snow) for each zone.
-  - Ensure visual separation while maintaining scene cohesion.
-  - Data Source: `WeatherService` must provide `past`, `current`, and `forecast` objects.
+### 3. Time Logic (Refining)
+- [x] **Decouple Time**: `simulationTime` variable drives sun/moon position.
+- [x] **Time-Lapse**: `WARP_SCALE` (1440x) implemented.
+- [ ] **True Weather Simulation**: Ensure weather *conditions* (rain, clouds) change according to `simulationTime` during fast-forward, not just static "current" weather.
 
-### 2. Advanced Weather Comparisons (Upcoming)
-**Objective**: Enhance data visualization with comparative metrics to provide deeper insight into weather patterns.
+## Next Steps (The Aether Polish)
+1.  **True Time-Lapse Weather**:
+    - Modify `WeatherService` to expose a full 24h timeline of hourly weather.
+    - Update `main.js` to sample this timeline based on `simulationTime`.
+2.  **Visual Polish**:
+    - Fix collision detection range for rain splashes.
+    - Ensure smooth interpolation between hourly weather data points.
 
-- **Prediction Accuracy**:
-  - Implement logic to compare *current actual* weather against *past predictions* for the current time.
-  - Visual indicators (e.g., color shifts, UI overlays) to represent the delta/error in prediction.
-
-- **Historical Context (Year-over-Year)**:
-  - Fetch and display weather data from exactly **1 year ago** for the current location.
-  - Allow users to compare today's conditions (temp, precipitation) against the historical baseline.
-
-- **Regional Context**:
-  - Fetch weather data for **nearby towns** or surrounding regions.
-  - Display comparative markers or a mini-map visualization to show local weather variances.
-
-## Instructions for AI Agents
-- When modifying `weatherEffects.js`, ensure changes support the 3-zone architecture defined above.
-- Future implementations for "Advanced Comparisons" should consider separating UI/HUD elements from the 3D scene logic to avoid clutter.
-- Prioritize performance when adding new comparison layers; use efficient instancing for additional indicators.
+## Developer Notes
+- `src/weatherLighting.js` handles all lighting transitions.
+- `src/weatherEffects.js` manages particle systems.
+- `src/astronomy.js` handles celestial positioning.

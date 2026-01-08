@@ -234,7 +234,7 @@ class RainSystem extends ParticleSystemBase {
                     const headZ = positions[i6+5];
                     if (sundialGroup && headX*headX + headZ*headZ < 12) {
                         raycaster.set(new THREE.Vector3(headX, headY+1, headZ), new THREE.Vector3(0,-1,0));
-                        raycaster.far = 2.0;
+                        raycaster.far = 5.0;
                         const intersects = raycaster.intersectObject(sundialGroup, true);
                         if (intersects.length > 0) {
                             spawnSplashCallback(intersects[0].point);
