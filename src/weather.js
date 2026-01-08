@@ -124,6 +124,28 @@ export class WeatherService {
             );
             const historicalData = await historicalResponse.json();
 
+            // Create Timeline (Hourly Data)
+            // Combine historical (past hours) and current/forecast (future hours) if needed
+            // But Open-Meteo Forecast usually provides full day hourly data including past hours of the day.
+            // Let's verify: Forecast returns 7 days by default. Hourly array covers 00:00 to 23:00+...
+
+            const timeline = [];
+            const hourly = currentData.hourly;
+
+            if (hourly && hourly.time) {
+                for (let i = 0; i < hourly.time.length; i++) {
+                    timeline.push({
+                        time: new Date(hourly.time[i]),
+                        temp: hourly.temperature_2m[i],
+                        weatherCode: hourly.weather_code[i],
+                        description: this.getWeatherDescription(hourly.weather_code[i]),
+                        cloudCover: hourly.cloud_cover[i],
+                        windSpeed: hourly.wind_speed_10m[i],
+                        visibility: hourly.visibility ? hourly.visibility[i] : 10000
+                    });
+                }
+            }
+
             // Parse current weather
             const current = {
                 temp: currentData.current.temperature_2m,
@@ -165,6 +187,7 @@ export class WeatherService {
                 current,
                 past,
                 forecast,
+                timeline, // Add timeline to return
                 historicalYearAgo,
                 regional,
                 accuracy

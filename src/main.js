@@ -104,6 +104,53 @@ let isTimeWarping = false;
 const REAL_TIME_SCALE = 1.0;
 const WARP_SCALE = 1440.0; // 24h in 60s -> 1440x
 
+// Helper to find interpolated weather from timeline
+function getWeatherAtTime(time, timeline) {
+    if (!timeline || timeline.length === 0) return null;
+
+    const t = time.getTime();
+
+    // Find surrounding data points
+    // We assume timeline is sorted
+    let prev = timeline[0];
+    let next = timeline[timeline.length - 1];
+
+    for (let i = 0; i < timeline.length - 1; i++) {
+        const t1 = timeline[i].time.getTime();
+        const t2 = timeline[i+1].time.getTime();
+        if (t >= t1 && t <= t2) {
+            prev = timeline[i];
+            next = timeline[i+1];
+            break;
+        }
+    }
+
+    // Interpolation factor
+    const range = next.time.getTime() - prev.time.getTime();
+    let factor = 0;
+    if (range > 0) {
+        factor = (t - prev.time.getTime()) / range;
+    }
+
+    // If outside range (e.g. past or future beyond data), clamp to nearest
+    if (t < prev.time.getTime()) return prev;
+    if (t > next.time.getTime()) return next;
+
+    // Interpolate simple values, pick discrete for codes
+    // For weather code, we just pick the nearest to avoid "half rain"
+    const weatherCode = factor < 0.5 ? prev.weatherCode : next.weatherCode;
+    const description = factor < 0.5 ? prev.description : next.description;
+
+    return {
+        temp: prev.temp + (next.temp - prev.temp) * factor,
+        weatherCode: weatherCode,
+        description: description,
+        cloudCover: prev.cloudCover + (next.cloudCover - prev.cloudCover) * factor,
+        windSpeed: prev.windSpeed + (next.windSpeed - prev.windSpeed) * factor,
+        visibility: (prev.visibility || 10000) + ((next.visibility || 10000) - (prev.visibility || 10000)) * factor
+    };
+}
+
 // Initialize
 function init() {
     // Initial UI State
@@ -148,6 +195,7 @@ function setupEventListeners() {
         weatherService.toggleUnit();
         updateUnitButton();
         if (weatherData) {
+            // Re-update display with current weather data
             updateWeatherDisplay(weatherData);
         }
     });
@@ -250,9 +298,6 @@ function updateWeatherDisplay(data) {
     }
 
     if (data.accuracy) {
-        // Accuracy delta is temperature difference
-        // We need to convert the delta too, but delta conversion is different (it's a range, not absolute)
-        // 1 degree C delta = 1.8 degree F delta
         let delta = data.accuracy.delta;
         if (weatherService.unit === 'imperial') {
             delta = delta * 1.8;
@@ -260,12 +305,8 @@ function updateWeatherDisplay(data) {
 
         const sign = delta > 0 ? '+' : (delta < 0 ? '-' : '');
         document.getElementById('accuracy-delta').textContent = `${sign}${Math.abs(delta).toFixed(1)}${deg}`;
-
-        // Color code: Green if abs(delta) < 2 (metric) or approx 3.6 (imperial), else Red
-        // We use the metric value for threshold to keep logic simple
         const color = Math.abs(data.accuracy.delta) < 2 ? '#44ff44' : '#ff4444';
         document.getElementById('accuracy-delta').style.color = color;
-
         document.getElementById('accuracy-score').textContent = `Score: ${data.accuracy.accuracy}%`;
     }
 
@@ -274,18 +315,10 @@ function updateWeatherDisplay(data) {
         list.innerHTML = '';
         data.regional.forEach(reg => {
             const div = document.createElement('div');
-            // e.g. "North: 20°"
             div.innerHTML = `<b>${reg.name}:</b> ${t(reg.temp)}${deg}`;
             list.appendChild(div);
         });
     }
-}
-
-// Update time display
-function updateTimeDisplay() {
-    const hours = String(simulationTime.getHours()).padStart(2, '0');
-    const minutes = String(simulationTime.getMinutes()).padStart(2, '0');
-    document.getElementById('time-display').textContent = `${hours}:${minutes}`;
 }
 
 // Animation loop
@@ -296,53 +329,85 @@ function animate() {
 
     // Update Simulation Time
     const scale = isTimeWarping ? WARP_SCALE : REAL_TIME_SCALE;
-    // Add milliseconds: delta (s) * 1000 * scale
     simulationTime = new Date(simulationTime.getTime() + delta * 1000 * scale);
 
-    // Update sundial hands (using simulationTime?)
-    // Sundial code likely uses its own time or we need to pass it?
-    // Looking at sundial.js (I haven't checked it but I assume it has update(time)?)
-    // The current code called `sundial.update()` without args.
-    // Let's assume it checks system time. I might need to update sundial.js to accept time.
-    // I will check sundial.js in a moment. For now, let's pass simulationTime if it accepts it, or just call it.
+    // Update sundial
     sundial.update(simulationTime);
 
-    // Update Astronomy (Sun/Moon positions)
-    // Use weather service lat/lon if available, else default
+    // Update Astronomy
     const lat = weatherService.latitude;
     const lon = weatherService.longitude;
-
-    // Calculate positions (distance 20 to keep lights outside scene bounds)
     const astroData = astronomyService.update(simulationTime, lat, lon, 20);
 
-    // Update Sun Light
     sunLight.position.copy(astroData.sunPosition);
-
-    // Update Moon Mesh & Light
-    // We update the moonGroup position directly
     moonGroup.position.copy(astroData.moonPosition);
-    moonGroup.lookAt(0, 0, 0); // Face earth/center
-
-    // Moon light sits at the moon
+    moonGroup.lookAt(0, 0, 0);
     moonLight.position.copy(astroData.moonPosition);
 
-    // Update time display
     updateTimeDisplay();
 
-    // Update lighting intensity/color based on weather
-    if (weatherData) {
-        // We use the weather lighting helper for intensity/color transitions
-        updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, weatherData, astroData);
+    // Determine Simulated Weather
+    let simWeather = null;
+    if (weatherData && weatherData.timeline) {
+        // Get interpolated weather for the simulation time
+        simWeather = getWeatherAtTime(simulationTime, weatherData.timeline);
+    }
 
-        // Update weather effects (Split zones)
+    // Fallback if no timeline or simulation fails
+    if (!simWeather && weatherData) simWeather = weatherData.current;
+
+    if (simWeather) {
+        // Construct a temporary "weatherData" object for lighting update
+        // We only replace 'current' with 'simWeather' for visual effects
+        // We keep past/forecast relative to the *real* fetch time or should we shift them?
+        // For visual simplicity, Past/Forecast zones in 3D usually represent "Left" and "Right" relative to "Center".
+        // If we warp time, maybe "Past" becomes "3 hours before simulationTime"?
+        // Implementing dynamic Past/Forecast relative to simulationTime requires finding those points in timeline too.
+
+        const simPast = weatherData.timeline ? getWeatherAtTime(new Date(simulationTime.getTime() - 3*3600*1000), weatherData.timeline) : (weatherData.past || simWeather);
+        const simForecast = weatherData.timeline ? getWeatherAtTime(new Date(simulationTime.getTime() + 3*3600*1000), weatherData.timeline) : (weatherData.forecast || simWeather);
+
+        const activeWeatherData = {
+            current: simWeather,
+            past: simPast,
+            forecast: simForecast
+        };
+
+        // Update Lighting
+        updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, activeWeatherData, astroData);
+
+        // Update Effects
         weatherEffects.update(
-            weatherData.past || { weatherCode: 0, windSpeed: 0 },
-            weatherData.current || { weatherCode: 0, windSpeed: 0 },
-            weatherData.forecast || { weatherCode: 0, windSpeed: 0 },
-            delta
+            simPast || { weatherCode: 0, windSpeed: 0 },
+            simWeather || { weatherCode: 0, windSpeed: 0 },
+            simForecast || { weatherCode: 0, windSpeed: 0 },
+            delta // We pass real delta for animation smoothness, not warped time
         );
+
+        // Optionally update UI to reflect simulation time weather?
+        // "Watch a 24-hour weather cycle". The UI should probably show the simulated values.
+        // But the UI panel says "Current", "Past", "Forecast".
+        // If we are warping, "Current" means "Simulated Current".
+        // Let's update the UI less frequently or just update the DOM elements directly here?
+        // Calling updateWeatherDisplay every frame is bad for DOM performance.
+        // Maybe update every 10 frames or if second changes?
+        // For now, let's leave UI as "Real Time Data" or update it?
+        // Aether's Journal says "Watch a 24-hour weather cycle". Seeing the numbers change is cool.
+        // Let's update only if isTimeWarping is true, and throttle it.
+
+        if (isTimeWarping && Math.random() < 0.1) { // Simple throttle
+             // Create a dummy object matching the structure updateWeatherDisplay expects
+             // We can reuse the `activeWeatherData` but add location/etc
+             const displayData = {
+                 ...weatherData,
+                 current: activeWeatherData.current,
+                 past: activeWeatherData.past,
+                 forecast: activeWeatherData.forecast,
+             };
+             updateWeatherDisplay(displayData);
+        }
+
     } else {
-        // Default weather effects update if no data?
          weatherEffects.update(
             { weatherCode: 0, windSpeed: 0 },
             { weatherCode: 0, windSpeed: 0 },
@@ -351,12 +416,10 @@ function animate() {
         );
     }
 
-    // Apply Lightning Flash (Global Ambient Boost)
     if (weatherEffects.getLightningFlash && weatherEffects.getLightningFlash() > 0) {
         ambientLight.intensity += weatherEffects.getLightningFlash();
     }
 
-    // renderer.render(scene, camera); // Replaced by composer
     composer.render();
 }
 
