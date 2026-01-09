@@ -147,7 +147,10 @@ function getWeatherAtTime(time, timeline) {
         description: description,
         cloudCover: prev.cloudCover + (next.cloudCover - prev.cloudCover) * factor,
         windSpeed: prev.windSpeed + (next.windSpeed - prev.windSpeed) * factor,
-        visibility: (prev.visibility || 10000) + ((next.visibility || 10000) - (prev.visibility || 10000)) * factor
+        visibility: (prev.visibility || 10000) + ((next.visibility || 10000) - (prev.visibility || 10000)) * factor,
+        rain: (prev.rain || 0) + ((next.rain || 0) - (prev.rain || 0)) * factor,
+        showers: (prev.showers || 0) + ((next.showers || 0) - (prev.showers || 0)) * factor,
+        snowfall: (prev.snowfall || 0) + ((next.snowfall || 0) - (prev.snowfall || 0)) * factor
     };
 }
 

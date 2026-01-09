@@ -65,55 +65,30 @@ function curlNoise(x, y, z, time) {
 class ParticleSystemBase {
     constructor(scene) {
         this.scene = scene;
-        this.isActive = false;
-        this.state = 'idle';
-        this.fadeTimer = 0;
-        this.fadeDuration = 5.0;
-        this.targetOpacity = 1.0;
+        this.isActive = true; // Always "active" but maybe invisible
+        this.targetOpacity = 0.0; // Controlled by intensity
+        this.currentOpacity = 0.0;
+        this.fadeSpeed = 2.0; // Speed of opacity change per second
     }
 
-    activate() {
-        this.isActive = true;
-        this.state = 'fading_in';
-        this.fadeTimer = 0;
-    }
-
-    deactivate() {
-        this.isActive = false;
-        this.state = 'idle';
-    }
-
-    fadeOut() {
-        this.state = 'fading_out';
-        this.fadeTimer = 0;
-    }
-
-    updateFade(delta, currentOpacity) {
-        if (this.state === 'fading_in') {
-            this.fadeTimer += delta;
-            currentOpacity = Math.min(this.targetOpacity, (this.fadeTimer / this.fadeDuration) * this.targetOpacity);
-            if (this.fadeTimer >= this.fadeDuration) {
-                this.state = 'stable';
-                currentOpacity = this.targetOpacity;
-            }
-        } else if (this.state === 'fading_out') {
-            this.fadeTimer += delta;
-            currentOpacity = Math.max(0.0, this.targetOpacity - (this.fadeTimer / this.fadeDuration) * this.targetOpacity);
-            if (this.fadeTimer >= this.fadeDuration) {
-                this.deactivate();
-                return { opacity: 0, done: true };
-            }
-        } else {
-            currentOpacity = this.targetOpacity;
+    updateOpacity(delta, target) {
+        this.targetOpacity = target;
+        if (this.currentOpacity < this.targetOpacity) {
+            this.currentOpacity += delta * this.fadeSpeed;
+            if (this.currentOpacity > this.targetOpacity) this.currentOpacity = this.targetOpacity;
+        } else if (this.currentOpacity > this.targetOpacity) {
+            this.currentOpacity -= delta * this.fadeSpeed;
+            if (this.currentOpacity < this.targetOpacity) this.currentOpacity = this.targetOpacity;
         }
-        return { opacity: currentOpacity, done: false };
+        return this.currentOpacity;
     }
 }
 
 class RainSystem extends ParticleSystemBase {
-    constructor(scene, maxParticles = 2000) {
+    constructor(scene, maxParticles = 3000) {
         super(scene);
         this.maxParticles = maxParticles;
+        this.zone = { minX: -8, maxX: 8 };
 
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(maxParticles * 6);
@@ -135,32 +110,16 @@ class RainSystem extends ParticleSystemBase {
         });
 
         this.mesh = new THREE.LineSegments(geometry, material);
-        this.mesh.visible = false;
         this.scene.add(this.mesh);
 
         this.velocities = velocities;
         this.states = states;
-        this.targetOpacity = 0.6;
-    }
 
-    activate(count, zone, windSpeed) {
-        super.activate();
-        this.mesh.visible = true;
-        this.count = Math.min(count, this.maxParticles);
-        this.mesh.geometry.setDrawRange(0, this.count * 2);
-        this.zone = zone;
-        this.windSpeed = windSpeed;
-
-        // Init particles
-        for (let i = 0; i < this.count; i++) {
+        // Initialize all particles
+        for (let i = 0; i < maxParticles; i++) {
             this.resetParticle(i, true);
         }
-        this.mesh.material.uniforms.uOpacity.value = 0;
-    }
-
-    deactivate() {
-        super.deactivate();
-        this.mesh.visible = false;
+        this.mesh.visible = true;
     }
 
     resetParticle(i, randomY = false) {
@@ -168,6 +127,7 @@ class RainSystem extends ParticleSystemBase {
         const i6 = i * 6;
         const positions = this.mesh.geometry.attributes.position.array;
 
+        // Spawn anywhere in the zone width, but centered around 0
         const x = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
         const y = randomY ? (Math.random() * 20 - 5) : (15 + Math.random() * 5);
         const z = Math.random() * 10 - 5;
@@ -186,18 +146,40 @@ class RainSystem extends ParticleSystemBase {
         this.states[i] = 0;
     }
 
-    update(delta, raycaster, sundialGroup, spawnSplashCallback) {
-        if (!this.isActive) return false;
+    update(delta, windSpeed, intensity, raycaster, sundialGroup, spawnSplashCallback) {
+        // Intensity is 0.0 to 1.0 (approx mm/h scaled)
+        // Map intensity to opacity and count
+        // Light rain (<0.5mm): Low count, low opacity
+        // Heavy rain (>2.0mm): High count, high opacity
 
-        const fade = this.updateFade(delta, 0); // initial opacity doesn't matter, we use uniform
-        this.mesh.material.uniforms.uOpacity.value = fade.opacity;
-        if (fade.done) return false;
+        let targetOp = 0;
+        let activeCount = 0;
+
+        if (intensity > 0.01) {
+            targetOp = Math.min(0.8, 0.2 + intensity * 0.2);
+            activeCount = Math.min(this.maxParticles, Math.floor(intensity * 1000));
+            // Clamp min count for visibility if it's raining at all
+            if (activeCount < 100) activeCount = 100;
+            if (activeCount > this.maxParticles) activeCount = this.maxParticles;
+        }
+
+        const opacity = this.updateOpacity(delta, targetOp);
+        this.mesh.material.uniforms.uOpacity.value = opacity;
+
+        if (opacity <= 0.01) {
+            this.mesh.visible = false;
+            return;
+        }
+        this.mesh.visible = true;
+
+        // Set draw range to control density
+        this.mesh.geometry.setDrawRange(0, activeCount * 2);
 
         const positions = this.mesh.geometry.attributes.position.array;
-        const windX = this.windSpeed * 0.005;
-        const windZ = this.windSpeed * 0.002;
+        const windX = windSpeed * 0.005;
+        const windZ = windSpeed * 0.002;
 
-        for (let i = 0; i < this.count; i++) {
+        for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
             const i6 = i * 6;
 
@@ -232,9 +214,10 @@ class RainSystem extends ParticleSystemBase {
                 if (headY > -1 && headY < 4) {
                     const headX = positions[i6+3];
                     const headZ = positions[i6+5];
+                    // Simple radial check first
                     if (sundialGroup && headX*headX + headZ*headZ < 12) {
                         raycaster.set(new THREE.Vector3(headX, headY+1, headZ), new THREE.Vector3(0,-1,0));
-                        raycaster.far = 5.0;
+                        raycaster.far = 10.0; // Increased range
                         const intersects = raycaster.intersectObject(sundialGroup, true);
                         if (intersects.length > 0) {
                             spawnSplashCallback(intersects[0].point);
@@ -248,14 +231,14 @@ class RainSystem extends ParticleSystemBase {
             }
         }
         this.mesh.geometry.attributes.position.needsUpdate = true;
-        return true;
     }
 }
 
 class SnowSystem extends ParticleSystemBase {
-    constructor(scene, maxParticles = 1000) {
+    constructor(scene, maxParticles = 2000) {
         super(scene);
         this.maxParticles = maxParticles;
+        this.zone = { minX: -8, maxX: 8 };
 
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(maxParticles * 3);
@@ -274,28 +257,17 @@ class SnowSystem extends ParticleSystemBase {
         });
 
         this.mesh = new THREE.Points(geometry, material);
-        this.mesh.visible = false;
         this.scene.add(this.mesh);
 
         this.velocities = velocities;
         this.offsets = offsets;
-        this.targetOpacity = 0.8;
-    }
-
-    activate(count, zone, windSpeed) {
-        super.activate();
-        this.mesh.visible = true;
-        this.count = Math.min(count, this.maxParticles);
-        this.mesh.geometry.setDrawRange(0, this.count);
-        this.zone = zone;
-        this.windSpeed = windSpeed;
 
         // Init
-        const positions = this.mesh.geometry.attributes.position.array;
-        for (let i = 0; i < this.count; i++) {
-            positions[i*3] = zone.minX + Math.random() * (zone.maxX - zone.minX);
-            positions[i*3+1] = Math.random() * 15;
-            positions[i*3+2] = Math.random() * 20 - 10;
+        const posAttr = this.mesh.geometry.attributes.position.array;
+        for (let i = 0; i < maxParticles; i++) {
+            posAttr[i*3] = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
+            posAttr[i*3+1] = Math.random() * 15;
+            posAttr[i*3+2] = Math.random() * 20 - 10;
 
             this.velocities[i*3] = 0;
             this.velocities[i*3+1] = -0.02 - Math.random() * 0.03;
@@ -303,26 +275,36 @@ class SnowSystem extends ParticleSystemBase {
 
             this.offsets[i] = Math.random() * 100;
         }
-        this.mesh.material.opacity = 0;
+        this.mesh.visible = true;
     }
 
-    deactivate() {
-        super.deactivate();
-        this.mesh.visible = false;
-    }
+    update(delta, windSpeed, intensity) {
+        // Intensity 0-1 (cm of snow)
+        let targetOp = 0;
+        let activeCount = 0;
 
-    update(delta) {
-        if (!this.isActive) return false;
+        if (intensity > 0.01) {
+            targetOp = Math.min(0.9, 0.3 + intensity * 0.3);
+            activeCount = Math.min(this.maxParticles, Math.floor(intensity * 1000));
+            if (activeCount < 100) activeCount = 100;
+            if (activeCount > this.maxParticles) activeCount = this.maxParticles;
+        }
 
-        const fade = this.updateFade(delta, 0);
-        this.mesh.material.opacity = fade.opacity;
-        if (fade.done) return false;
+        const opacity = this.updateOpacity(delta, targetOp);
+        this.mesh.material.opacity = opacity;
+
+        if (opacity <= 0.01) {
+            this.mesh.visible = false;
+            return;
+        }
+        this.mesh.visible = true;
+        this.mesh.geometry.setDrawRange(0, activeCount);
 
         const positions = this.mesh.geometry.attributes.position.array;
         const time = Date.now() * 0.001;
-        const windX = this.windSpeed * 0.005;
+        const windX = windSpeed * 0.005;
 
-        for (let i = 0; i < this.count; i++) {
+        for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
             const px = positions[i3];
             const py = positions[i3+1];
@@ -344,7 +326,6 @@ class SnowSystem extends ParticleSystemBase {
             }
         }
         this.mesh.geometry.attributes.position.needsUpdate = true;
-        return true;
     }
 }
 
@@ -355,6 +336,7 @@ class CloudSystem extends ParticleSystemBase {
         this.maxClouds = maxClouds;
         this.puffsPerCloud = 8;
         this.totalInstances = maxClouds * this.puffsPerCloud;
+        this.zone = { minX: -12, maxX: 12 }; // Wider zone for clouds
 
         const map = createCloudTexture();
         this.material = new THREE.MeshBasicMaterial({
@@ -372,48 +354,32 @@ class CloudSystem extends ParticleSystemBase {
 
         this.clouds = [];
         this.dummy = new THREE.Object3D();
-        this.targetOpacity = 0.8;
 
-        this.clear();
-    }
-
-    activate(zone, windSpeed, count) {
-        super.activate();
-        this.clear();
-        for(let i=0; i<count; i++) {
-            this.addCloud(zone, windSpeed);
+        // Init clouds
+        for(let i=0; i<maxClouds; i++) {
+            this.addCloud();
         }
-        this.mesh.visible = true;
-    }
 
-    deactivate() {
-        super.deactivate();
-        this.mesh.visible = false;
-    }
-
-    clear() {
-        this.clouds = [];
+        // Hide initially
         for(let i=0; i<this.totalInstances; i++) {
              this.dummy.position.set(0, -1000, 0);
              this.dummy.updateMatrix();
              this.mesh.setMatrixAt(i, this.dummy.matrix);
         }
         this.mesh.instanceMatrix.needsUpdate = true;
+        this.mesh.visible = true;
     }
 
-    addCloud(zone, windSpeed) {
-        if (this.clouds.length >= this.maxClouds) return;
+    addCloud() {
         const startIndex = this.clouds.length * this.puffsPerCloud;
         const indices = [];
         for(let i=0; i<this.puffsPerCloud; i++) indices.push(startIndex + i);
 
         const cloud = {
-            x: zone.minX + Math.random() * (zone.maxX - zone.minX),
+            x: this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX),
             y: 6 + Math.random() * 4,
             z: Math.random() * 10 - 5,
             scale: 2.0 + Math.random() * 2.0,
-            zone: zone,
-            windSpeed: windSpeed,
             indices: indices,
             puffs: []
         };
@@ -430,35 +396,61 @@ class CloudSystem extends ParticleSystemBase {
         this.clouds.push(cloud);
     }
 
-    update(delta) {
-        if (!this.isActive) return false;
+    update(delta, windSpeed, cloudCover) {
+        // CloudCover 0-100
+        let targetOp = 0;
+        let activeClouds = 0;
 
-        const fade = this.updateFade(delta, 0);
-        this.material.opacity = fade.opacity;
-        if (fade.done) return false;
+        if (cloudCover > 10) {
+            targetOp = Math.min(0.9, cloudCover / 100.0);
+            activeClouds = Math.floor((cloudCover / 100.0) * this.maxClouds);
+        }
+
+        const opacity = this.updateOpacity(delta, targetOp);
+        this.material.opacity = opacity;
+
+        if (opacity <= 0.01) {
+            this.mesh.visible = false;
+            return;
+        }
+        this.mesh.visible = true;
 
         const camQuat = this.camera.quaternion;
-        this.clouds.forEach(cloud => {
-            const moveSpeed = (0.05 + cloud.windSpeed * 0.01) * delta;
-            cloud.x += moveSpeed;
-            if (cloud.x > cloud.zone.maxX) cloud.x = cloud.zone.minX;
-            if (cloud.x < cloud.zone.minX) cloud.x = cloud.zone.maxX;
 
-            cloud.indices.forEach((idx, i) => {
-                const puff = cloud.puffs[i];
-                this.dummy.position.set(
-                    cloud.x + puff.x * cloud.scale * 0.5,
-                    cloud.y + puff.y * cloud.scale * 0.5,
-                    cloud.z + puff.z * cloud.scale * 0.5
-                );
-                this.dummy.quaternion.copy(camQuat);
-                this.dummy.scale.setScalar(puff.scale * cloud.scale);
-                this.dummy.updateMatrix();
-                this.mesh.setMatrixAt(idx, this.dummy.matrix);
+        // Only update active clouds
+        for (let i = 0; i < this.clouds.length; i++) {
+            const cloud = this.clouds[i];
+
+            // Move cloud
+            const moveSpeed = (0.05 + windSpeed * 0.01) * delta;
+            cloud.x += moveSpeed;
+            if (cloud.x > this.zone.maxX) cloud.x = this.zone.minX;
+            if (cloud.x < this.zone.minX) cloud.x = this.zone.maxX;
+
+            // If this cloud is "active" (based on density), draw it. Else hide it.
+            // We can just hide it by moving to -1000
+            const isVisible = i < activeClouds;
+
+            cloud.indices.forEach((idx, j) => {
+                if (isVisible) {
+                    const puff = cloud.puffs[j];
+                    this.dummy.position.set(
+                        cloud.x + puff.x * cloud.scale * 0.5,
+                        cloud.y + puff.y * cloud.scale * 0.5,
+                        cloud.z + puff.z * cloud.scale * 0.5
+                    );
+                    this.dummy.quaternion.copy(camQuat);
+                    this.dummy.scale.setScalar(puff.scale * cloud.scale);
+                    this.dummy.updateMatrix();
+                    this.mesh.setMatrixAt(idx, this.dummy.matrix);
+                } else {
+                    this.dummy.position.set(0, -1000, 0);
+                    this.dummy.updateMatrix();
+                    this.mesh.setMatrixAt(idx, this.dummy.matrix);
+                }
             });
-        });
+        }
         this.mesh.instanceMatrix.needsUpdate = true;
-        return true;
     }
 }
 
@@ -468,15 +460,10 @@ export class WeatherEffects {
         this.sundialGroup = sundialGroup;
         this.camera = camera;
 
-        this.rainPool = [];
-        this.snowPool = [];
-        this.cloudPool = [];
-
-        this.weatherState = {
-            past: { code: -1, wind: 0 },
-            current: { code: -1, wind: 0 },
-            forecast: { code: -1, wind: 0 }
-        };
+        // Persistent systems
+        this.rainSystem = new RainSystem(scene);
+        this.snowSystem = new SnowSystem(scene);
+        this.cloudSystem = new CloudSystem(scene, camera);
 
         this.raycaster = new THREE.Raycaster();
         this.downVector = new THREE.Vector3(0, -1, 0);
@@ -484,68 +471,37 @@ export class WeatherEffects {
         this.createSplashes();
     }
 
-    getRainSystem() {
-        let sys = this.rainPool.find(s => !s.isActive);
-        if (!sys) {
-            sys = new RainSystem(this.scene);
-            this.rainPool.push(sys);
-        }
-        return sys;
-    }
-
-    getSnowSystem() {
-        let sys = this.snowPool.find(s => !s.isActive);
-        if (!sys) {
-            sys = new SnowSystem(this.scene);
-            this.snowPool.push(sys);
-        }
-        return sys;
-    }
-
-    getCloudSystem() {
-        let sys = this.cloudPool.find(s => !s.isActive);
-        if (!sys) {
-            sys = new CloudSystem(this.scene, this.camera);
-            this.cloudPool.push(sys);
-        }
-        return sys;
-    }
-
     update(past, current, forecast, delta = 0.016) {
+        // current is the 'simWeather' object which contains interpolated values
+
         if (this.flashIntensity > 0) {
             this.flashIntensity -= delta * 5.0;
             if (this.flashIntensity < 0) this.flashIntensity = 0;
         }
 
-        if (past.weatherCode !== this.weatherState.past.code ||
-            current.weatherCode !== this.weatherState.current.code ||
-            forecast.weatherCode !== this.weatherState.forecast.code) {
+        // Calculate intensities based on interpolated data
+        // Open-Meteo Rain: mm (preceding hour)
+        // Showers: mm (preceding hour)
+        // Snowfall: cm (preceding hour)
 
-            // Mark all active systems as fading out
-            [...this.rainPool, ...this.snowPool, ...this.cloudPool].forEach(s => {
-                if (s.isActive && s.state !== 'fading_out') s.fadeOut();
-            });
+        const rainIntensity = (current.rain || 0) + (current.showers || 0);
+        const snowIntensity = (current.snowfall || 0);
+        const cloudCover = current.cloudCover || 0;
+        const windSpeed = current.windSpeed || 0;
 
-            this.weatherState.past = { ...past };
-            this.weatherState.current = { ...current };
-            this.weatherState.forecast = { ...forecast };
+        // Update systems continuously
+        this.rainSystem.update(delta, windSpeed, rainIntensity, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos));
+        this.snowSystem.update(delta, windSpeed, snowIntensity);
+        this.cloudSystem.update(delta, windSpeed, cloudCover);
 
-            this.createZoneEffects(past.weatherCode, past.windSpeed, -8, 8);
-            this.createZoneEffects(current.weatherCode, current.windSpeed, 0, 8);
-            this.createZoneEffects(forecast.weatherCode, forecast.windSpeed, 8, 8);
+        // Lightning check (still based on discrete code for trigger)
+        // Only trigger if weather code implies thunderstorm
+        if (current.weatherCode >= 95) {
+             // Random lightning trigger
+             if (Math.random() < 0.01) { // 1% chance per frame roughly
+                 this.createLightning();
+             }
         }
-
-        // Update all pools
-        [...this.rainPool, ...this.snowPool, ...this.cloudPool].forEach(s => {
-            if (s.isActive) {
-                // Rain needs extra args
-                if (s instanceof RainSystem) {
-                    s.update(delta, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos));
-                } else {
-                    s.update(delta);
-                }
-            }
-        });
 
         this.updateSplashes();
     }
@@ -554,39 +510,15 @@ export class WeatherEffects {
         return this.flashIntensity;
     }
 
-    createZoneEffects(weatherCode, windSpeed, centerX, width) {
-        const zone = {
-            minX: centerX - width / 2,
-            maxX: centerX + width / 2,
-            centerX: centerX
-        };
+    createLightning() {
+        if (this.flashIntensity > 0.5) return; // Don't double flash too fast
 
-        if (weatherCode >= 61 && weatherCode <= 65) {
-            const count = weatherCode >= 63 ? 750 : 375;
-            this.getRainSystem().activate(count, zone, windSpeed);
-        } else if (weatherCode >= 71 && weatherCode <= 77) {
-            const count = weatherCode >= 73 ? 500 : 300;
-            this.getSnowSystem().activate(count, zone, windSpeed);
-        } else if (weatherCode >= 95) {
-            this.getRainSystem().activate(1125, zone, windSpeed);
-            this.createLightning(zone);
-        }
-
-        if (weatherCode >= 2) {
-            const count = weatherCode === 3 ? 5 : 2;
-            this.getCloudSystem().activate(zone, windSpeed, count);
-        }
-    }
-
-    createLightning(zone) {
+        const zone = { minX: -8, maxX: 8 };
         const flash = new THREE.PointLight(0xaaddff, 5, 50);
         flash.position.set(zone.minX + Math.random() * (zone.maxX - zone.minX), 10, Math.random() * 10 - 5);
         this.scene.add(flash);
         setTimeout(() => this.scene.remove(flash), 100 + Math.random()*100);
         this.flashIntensity = 2.0;
-        if (Math.random() > 0.6) {
-             setTimeout(() => this.createLightning(zone), 1000 + Math.random() * 4000);
-        }
     }
 
     createSplashes() {
