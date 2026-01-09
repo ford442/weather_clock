@@ -109,7 +109,7 @@ export class WeatherService {
             // Get current and forecast weather
             // Added 'visibility' to current params
             const currentResponse = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m,visibility&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m,visibility&timezone=auto`
+                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m,visibility,rain,showers,snowfall&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m,visibility,rain,showers,snowfall&timezone=auto`
             );
             const currentData = await currentResponse.json();
 
@@ -120,7 +120,7 @@ export class WeatherService {
             const todayStr = now.toISOString().split('T')[0];
             
             const historicalResponse = await fetch(
-                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
+                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m,rain,showers,snowfall&timezone=auto`
             );
             const historicalData = await historicalResponse.json();
 
@@ -141,7 +141,10 @@ export class WeatherService {
                         description: this.getWeatherDescription(hourly.weather_code[i]),
                         cloudCover: hourly.cloud_cover[i],
                         windSpeed: hourly.wind_speed_10m[i],
-                        visibility: hourly.visibility ? hourly.visibility[i] : 10000
+                        visibility: hourly.visibility ? hourly.visibility[i] : 10000,
+                        rain: hourly.rain ? hourly.rain[i] : 0,
+                        showers: hourly.showers ? hourly.showers[i] : 0,
+                        snowfall: hourly.snowfall ? hourly.snowfall[i] : 0
                     });
                 }
             }
@@ -153,7 +156,10 @@ export class WeatherService {
                 description: this.getWeatherDescription(currentData.current.weather_code),
                 cloudCover: currentData.current.cloud_cover,
                 windSpeed: currentData.current.wind_speed_10m,
-                visibility: currentData.current.visibility // meters
+                visibility: currentData.current.visibility, // meters
+                rain: currentData.current.rain,
+                showers: currentData.current.showers,
+                snowfall: currentData.current.snowfall
             };
 
             // Parse past weather (3 hours ago)
@@ -163,7 +169,10 @@ export class WeatherService {
                 weatherCode: historicalData.hourly.weather_code[pastHourIndex] || current.weatherCode,
                 description: this.getWeatherDescription(historicalData.hourly.weather_code[pastHourIndex] || current.weatherCode),
                 cloudCover: historicalData.hourly.cloud_cover[pastHourIndex] || current.cloudCover,
-                windSpeed: historicalData.hourly.wind_speed_10m[pastHourIndex] || current.windSpeed
+                windSpeed: historicalData.hourly.wind_speed_10m[pastHourIndex] || current.windSpeed,
+                rain: historicalData.hourly.rain ? historicalData.hourly.rain[pastHourIndex] : 0,
+                showers: historicalData.hourly.showers ? historicalData.hourly.showers[pastHourIndex] : 0,
+                snowfall: historicalData.hourly.snowfall ? historicalData.hourly.snowfall[pastHourIndex] : 0
             };
 
             // Parse forecast (3 hours from now)
@@ -174,7 +183,10 @@ export class WeatherService {
                 weatherCode: currentData.hourly.weather_code[futureHourIndex] || current.weatherCode,
                 description: this.getWeatherDescription(currentData.hourly.weather_code[futureHourIndex] || current.weatherCode),
                 cloudCover: currentData.hourly.cloud_cover[futureHourIndex] || current.cloudCover,
-                windSpeed: currentData.hourly.wind_speed_10m[futureHourIndex] || current.windSpeed
+                windSpeed: currentData.hourly.wind_speed_10m[futureHourIndex] || current.windSpeed,
+                rain: currentData.hourly.rain ? currentData.hourly.rain[futureHourIndex] : 0,
+                showers: currentData.hourly.showers ? currentData.hourly.showers[futureHourIndex] : 0,
+                snowfall: currentData.hourly.snowfall ? currentData.hourly.snowfall[futureHourIndex] : 0
             };
 
             // Advanced Data Fetches
