@@ -154,6 +154,15 @@ function getWeatherAtTime(time, timeline) {
     };
 }
 
+function updateTimeDisplay() {
+    const timeDisplay = document.getElementById('time-display');
+    if (timeDisplay) {
+        const hours = simulationTime.getHours().toString().padStart(2, '0');
+        const minutes = simulationTime.getMinutes().toString().padStart(2, '0');
+        timeDisplay.textContent = `${hours}:${minutes}`;
+    }
+}
+
 // Initialize
 function init() {
     // Initial UI State

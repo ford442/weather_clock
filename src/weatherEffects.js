@@ -68,7 +68,7 @@ class ParticleSystemBase {
         this.isActive = true; // Always "active" but maybe invisible
         this.targetOpacity = 0.0; // Controlled by intensity
         this.currentOpacity = 0.0;
-        this.fadeSpeed = 2.0; // Speed of opacity change per second
+        this.fadeSpeed = 0.2; // Speed of opacity change per second (5 seconds transition)
     }
 
     updateOpacity(delta, target) {
@@ -85,10 +85,10 @@ class ParticleSystemBase {
 }
 
 class RainSystem extends ParticleSystemBase {
-    constructor(scene, maxParticles = 3000) {
+    constructor(scene, zone, maxParticles = 1500) {
         super(scene);
         this.maxParticles = maxParticles;
-        this.zone = { minX: -8, maxX: 8 };
+        this.zone = zone || { minX: -8, maxX: 8 };
 
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(maxParticles * 6);
@@ -127,7 +127,7 @@ class RainSystem extends ParticleSystemBase {
         const i6 = i * 6;
         const positions = this.mesh.geometry.attributes.position.array;
 
-        // Spawn anywhere in the zone width, but centered around 0
+        // Spawn anywhere in the zone width
         const x = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
         const y = randomY ? (Math.random() * 20 - 5) : (15 + Math.random() * 5);
         const z = Math.random() * 10 - 5;
@@ -159,7 +159,7 @@ class RainSystem extends ParticleSystemBase {
             targetOp = Math.min(0.8, 0.2 + intensity * 0.2);
             activeCount = Math.min(this.maxParticles, Math.floor(intensity * 1000));
             // Clamp min count for visibility if it's raining at all
-            if (activeCount < 100) activeCount = 100;
+            if (activeCount < 50) activeCount = 50; // Reduced min for smaller zones
             if (activeCount > this.maxParticles) activeCount = this.maxParticles;
         }
 
@@ -212,17 +212,20 @@ class RainSystem extends ParticleSystemBase {
                 // Collision
                 const headY = positions[i6+4];
                 if (headY > -1 && headY < 4) {
-                    const headX = positions[i6+3];
-                    const headZ = positions[i6+5];
-                    // Simple radial check first
-                    if (sundialGroup && headX*headX + headZ*headZ < 12) {
-                        raycaster.set(new THREE.Vector3(headX, headY+1, headZ), new THREE.Vector3(0,-1,0));
-                        raycaster.far = 10.0; // Increased range
-                        const intersects = raycaster.intersectObject(sundialGroup, true);
-                        if (intersects.length > 0) {
-                            spawnSplashCallback(intersects[0].point);
-                            this.resetParticle(i);
-                            continue;
+                    // Only check collision if sundialGroup is provided (Present zone)
+                    if (sundialGroup) {
+                        const headX = positions[i6+3];
+                        const headZ = positions[i6+5];
+                        // Simple radial check first
+                        if (headX*headX + headZ*headZ < 12) {
+                            raycaster.set(new THREE.Vector3(headX, headY+1, headZ), new THREE.Vector3(0,-1,0));
+                            raycaster.far = 10.0;
+                            const intersects = raycaster.intersectObject(sundialGroup, true);
+                            if (intersects.length > 0) {
+                                if(spawnSplashCallback) spawnSplashCallback(intersects[0].point);
+                                this.resetParticle(i);
+                                continue;
+                            }
                         }
                     }
                 }
@@ -235,10 +238,10 @@ class RainSystem extends ParticleSystemBase {
 }
 
 class SnowSystem extends ParticleSystemBase {
-    constructor(scene, maxParticles = 2000) {
+    constructor(scene, zone, maxParticles = 1000) {
         super(scene);
         this.maxParticles = maxParticles;
-        this.zone = { minX: -8, maxX: 8 };
+        this.zone = zone || { minX: -8, maxX: 8 };
 
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(maxParticles * 3);
@@ -286,7 +289,7 @@ class SnowSystem extends ParticleSystemBase {
         if (intensity > 0.01) {
             targetOp = Math.min(0.9, 0.3 + intensity * 0.3);
             activeCount = Math.min(this.maxParticles, Math.floor(intensity * 1000));
-            if (activeCount < 100) activeCount = 100;
+            if (activeCount < 50) activeCount = 50;
             if (activeCount > this.maxParticles) activeCount = this.maxParticles;
         }
 
@@ -330,13 +333,13 @@ class SnowSystem extends ParticleSystemBase {
 }
 
 class CloudSystem extends ParticleSystemBase {
-    constructor(scene, camera, maxClouds = 50) {
+    constructor(scene, camera, zone, maxClouds = 20) {
         super(scene);
         this.camera = camera;
         this.maxClouds = maxClouds;
         this.puffsPerCloud = 8;
         this.totalInstances = maxClouds * this.puffsPerCloud;
-        this.zone = { minX: -12, maxX: 12 }; // Wider zone for clouds
+        this.zone = zone || { minX: -12, maxX: 12 };
 
         const map = createCloudTexture();
         this.material = new THREE.MeshBasicMaterial({
@@ -460,10 +463,25 @@ export class WeatherEffects {
         this.sundialGroup = sundialGroup;
         this.camera = camera;
 
-        // Persistent systems
-        this.rainSystem = new RainSystem(scene);
-        this.snowSystem = new SnowSystem(scene);
-        this.cloudSystem = new CloudSystem(scene, camera);
+        const pastZone = { minX: -12, maxX: -4 };
+        const currZone = { minX: -4, maxX: 4 };
+        const futureZone = { minX: 4, maxX: 12 };
+
+        // Persistent systems for 3 Zones
+        // Past (Left)
+        this.pastRain = new RainSystem(scene, pastZone, 1500);
+        this.pastSnow = new SnowSystem(scene, pastZone, 700);
+        this.pastCloud = new CloudSystem(scene, camera, pastZone, 20);
+
+        // Current (Center)
+        this.currRain = new RainSystem(scene, currZone, 1500);
+        this.currSnow = new SnowSystem(scene, currZone, 700);
+        this.currCloud = new CloudSystem(scene, camera, currZone, 20);
+
+        // Future (Right)
+        this.futureRain = new RainSystem(scene, futureZone, 1500);
+        this.futureSnow = new SnowSystem(scene, futureZone, 700);
+        this.futureCloud = new CloudSystem(scene, camera, futureZone, 20);
 
         this.raycaster = new THREE.Raycaster();
         this.downVector = new THREE.Vector3(0, -1, 0);
@@ -472,33 +490,42 @@ export class WeatherEffects {
     }
 
     update(past, current, forecast, delta = 0.016) {
-        // current is the 'simWeather' object which contains interpolated values
-
         if (this.flashIntensity > 0) {
             this.flashIntensity -= delta * 5.0;
             if (this.flashIntensity < 0) this.flashIntensity = 0;
         }
 
-        // Calculate intensities based on interpolated data
-        // Open-Meteo Rain: mm (preceding hour)
-        // Showers: mm (preceding hour)
-        // Snowfall: cm (preceding hour)
+        const extractData = (data) => ({
+            rain: (data.rain || 0) + (data.showers || 0),
+            snow: (data.snowfall || 0),
+            cloud: data.cloudCover || 0,
+            wind: data.windSpeed || 0,
+            code: data.weatherCode || 0
+        });
 
-        const rainIntensity = (current.rain || 0) + (current.showers || 0);
-        const snowIntensity = (current.snowfall || 0);
-        const cloudCover = current.cloudCover || 0;
-        const windSpeed = current.windSpeed || 0;
+        const p = extractData(past);
+        const c = extractData(current);
+        const f = extractData(forecast);
 
-        // Update systems continuously
-        this.rainSystem.update(delta, windSpeed, rainIntensity, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos));
-        this.snowSystem.update(delta, windSpeed, snowIntensity);
-        this.cloudSystem.update(delta, windSpeed, cloudCover);
+        // Update Past
+        this.pastRain.update(delta, p.wind, p.rain, this.raycaster, null, null);
+        this.pastSnow.update(delta, p.wind, p.snow);
+        this.pastCloud.update(delta, p.wind, p.cloud);
 
-        // Lightning check (still based on discrete code for trigger)
-        // Only trigger if weather code implies thunderstorm
-        if (current.weatherCode >= 95) {
+        // Update Current (Center) - Passes sundial for collision
+        this.currRain.update(delta, c.wind, c.rain, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos));
+        this.currSnow.update(delta, c.wind, c.snow);
+        this.currCloud.update(delta, c.wind, c.cloud);
+
+        // Update Future
+        this.futureRain.update(delta, f.wind, f.rain, this.raycaster, null, null);
+        this.futureSnow.update(delta, f.wind, f.snow);
+        this.futureCloud.update(delta, f.wind, f.cloud);
+
+        // Lightning check - if any zone has storms
+        if (p.code >= 95 || c.code >= 95 || f.code >= 95) {
              // Random lightning trigger
-             if (Math.random() < 0.01) { // 1% chance per frame roughly
+             if (Math.random() < 0.01) {
                  this.createLightning();
              }
         }
@@ -511,7 +538,7 @@ export class WeatherEffects {
     }
 
     createLightning() {
-        if (this.flashIntensity > 0.5) return; // Don't double flash too fast
+        if (this.flashIntensity > 0.5) return;
 
         const zone = { minX: -8, maxX: 8 };
         const flash = new THREE.PointLight(0xaaddff, 5, 50);
