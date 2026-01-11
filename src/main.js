@@ -16,11 +16,11 @@ scene.fog = new THREE.FogExp2(0xaaaaaa, 0.002); // Add Fog
 const clock = new THREE.Clock();
 // Increased far plane to ensure Sky (scaled 450000) is visible
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000000);
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false }); // Opaque for proper Sky rendering
 
 // Tone mapping for HDR effect (Sky shader + Bloom)
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.5; // Reduced from 1.0 to prevent washout
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -34,8 +34,8 @@ composer.addPass(renderPass);
 
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
 bloomPass.threshold = 0.85; // Slightly lower threshold to catch more sun glow
-bloomPass.strength = 1.2;   // Increased intensity for "intense glow"
-bloomPass.radius = 0.6;     // Tighter bloom
+bloomPass.strength = 0.5;   // Moderate intensity
+bloomPass.radius = 0.4;     // Tighter bloom
 composer.addPass(bloomPass);
 
 // Sky Setup
@@ -46,6 +46,12 @@ skyUniforms['turbidity'].value = 10;
 skyUniforms['rayleigh'].value = 3;
 skyUniforms['mieCoefficient'].value = 0.005;
 skyUniforms['mieDirectionalG'].value = 0.7;
+// Ensure Sky is not affected by Fog (if possible via material property, though ShaderMaterial needs manual handling)
+// Since Sky is a large box, and FogExp2 is distance based, we just need to ensure Sky renders correctly.
+// Disabling depth write for Sky is common.
+sky.material.depthWrite = false;
+sky.material.fog = false;
+sky.frustumCulled = false; // Ensure it's not culled
 scene.add(sky);
 
 // Camera position
@@ -103,6 +109,29 @@ let simulationTime = new Date();
 let isTimeWarping = false;
 const REAL_TIME_SCALE = 1.0;
 const WARP_SCALE = 1440.0; // 24h in 60s -> 1440x
+
+// Debug API for Verification
+window.setDebugWeather = (weatherCode) => {
+    console.log("Setting debug weather code:", weatherCode);
+    const mock = {
+        current: {
+            temp: 20,
+            weatherCode: weatherCode,
+            description: "Debug Weather",
+            windSpeed: 10,
+            cloudCover: weatherCode > 0 ? 80 : 0,
+            visibility: 10000,
+            rain: weatherCode >= 60 ? 5.0 : 0,
+            showers: weatherCode >= 50 ? 2.0 : 0,
+            snowfall: weatherCode >= 70 ? 5.0 : 0
+        },
+        past: { weatherCode: 0, cloudCover: 0, windSpeed: 0 },
+        forecast: { weatherCode: 0, cloudCover: 0, windSpeed: 0 }
+    };
+    weatherData = mock;
+    updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, mock, astronomyService.update(simulationTime, weatherService.latitude, weatherService.longitude, 20));
+    updateWeatherDisplay(mock);
+};
 
 // Helper to find interpolated weather from timeline
 function getWeatherAtTime(time, timeline) {
@@ -253,7 +282,8 @@ function setupEventListeners() {
     if (warpBtn) {
         warpBtn.addEventListener('click', () => {
             isTimeWarping = !isTimeWarping;
-            warpBtn.style.background = isTimeWarping ? 'rgba(255, 200, 100, 0.4)' : 'rgba(255,255,255,0.1)';
+            // Visual feedback
+            warpBtn.style.background = isTimeWarping ? 'rgba(255, 100, 100, 0.8)' : 'rgba(100, 255, 100, 0.4)';
             warpBtn.textContent = isTimeWarping ? '⏸️' : '⏩';
         });
     }
@@ -288,7 +318,7 @@ function updateWeatherDisplay(data) {
         document.getElementById('past-description').textContent = data.past.description;
         document.getElementById('past-temp').textContent = `${t(data.past.temp)}${deg}`;
         document.getElementById('past-wind').textContent = `${Math.round(data.past.windSpeed)} km/h`;
-        document.getElementById('past-cloud').textContent = `${data.past.cloudCover}%`;
+        document.getElementById('past-cloud').textContent = `${Math.round(data.past.cloudCover)}%`;
     }
 
     // RIGHT PANEL (Forecast)
@@ -296,7 +326,7 @@ function updateWeatherDisplay(data) {
         document.getElementById('forecast-description').textContent = data.forecast.description;
         document.getElementById('forecast-temp').textContent = `${t(data.forecast.temp)}${deg}`;
         document.getElementById('forecast-wind').textContent = `${Math.round(data.forecast.windSpeed)} km/h`;
-        document.getElementById('forecast-cloud').textContent = `${data.forecast.cloudCover}%`;
+        document.getElementById('forecast-cloud').textContent = `${Math.round(data.forecast.cloudCover)}%`;
     }
 
     // Update Moon Phase Text
@@ -369,13 +399,6 @@ function animate() {
     if (!simWeather && weatherData) simWeather = weatherData.current;
 
     if (simWeather) {
-        // Construct a temporary "weatherData" object for lighting update
-        // We only replace 'current' with 'simWeather' for visual effects
-        // We keep past/forecast relative to the *real* fetch time or should we shift them?
-        // For visual simplicity, Past/Forecast zones in 3D usually represent "Left" and "Right" relative to "Center".
-        // If we warp time, maybe "Past" becomes "3 hours before simulationTime"?
-        // Implementing dynamic Past/Forecast relative to simulationTime requires finding those points in timeline too.
-
         const simPast = weatherData.timeline ? getWeatherAtTime(new Date(simulationTime.getTime() - 3*3600*1000), weatherData.timeline) : (weatherData.past || simWeather);
         const simForecast = weatherData.timeline ? getWeatherAtTime(new Date(simulationTime.getTime() + 3*3600*1000), weatherData.timeline) : (weatherData.forecast || simWeather);
 
@@ -396,20 +419,7 @@ function animate() {
             delta // We pass real delta for animation smoothness, not warped time
         );
 
-        // Optionally update UI to reflect simulation time weather?
-        // "Watch a 24-hour weather cycle". The UI should probably show the simulated values.
-        // But the UI panel says "Current", "Past", "Forecast".
-        // If we are warping, "Current" means "Simulated Current".
-        // Let's update the UI less frequently or just update the DOM elements directly here?
-        // Calling updateWeatherDisplay every frame is bad for DOM performance.
-        // Maybe update every 10 frames or if second changes?
-        // For now, let's leave UI as "Real Time Data" or update it?
-        // Aether's Journal says "Watch a 24-hour weather cycle". Seeing the numbers change is cool.
-        // Let's update only if isTimeWarping is true, and throttle it.
-
         if (isTimeWarping && Math.random() < 0.1) { // Simple throttle
-             // Create a dummy object matching the structure updateWeatherDisplay expects
-             // We can reuse the `activeWeatherData` but add location/etc
              const displayData = {
                  ...weatherData,
                  current: activeWeatherData.current,

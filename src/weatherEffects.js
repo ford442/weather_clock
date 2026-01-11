@@ -23,6 +23,41 @@ void main() {
 }
 `;
 
+// Splash Shader: Fades out and expands
+const splashVertexShader = `
+attribute float life;
+varying float vLife;
+
+void main() {
+    vLife = life;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    // Expand size as life decreases (1.0 -> 0.0)
+    // Larger size for visibility
+    gl_PointSize = 15.0 * (1.0 + (1.0 - life) * 1.5);
+}
+`;
+
+const splashFragmentShader = `
+uniform vec3 uColor;
+varying float vLife;
+
+void main() {
+    float alpha = vLife;
+    if (alpha <= 0.0) discard;
+
+    // Circular particle
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float len = length(coord);
+    if(len > 0.5) discard;
+
+    // Soft edge
+    float softness = 1.0 - smoothstep(0.3, 0.5, len);
+
+    gl_FragColor = vec4(uColor, alpha * 1.0 * softness);
+}
+`;
+
 function createCloudTexture() {
     const size = 256;
     const canvas = document.createElement('canvas');
@@ -409,6 +444,9 @@ class CloudSystem extends ParticleSystemBase {
             activeClouds = Math.floor((cloudCover / 100.0) * this.maxClouds);
         }
 
+        // Increase base visibility for verification if high cloud cover
+        if (cloudCover > 80) targetOp = Math.max(targetOp, 0.6);
+
         const opacity = this.updateOpacity(delta, targetOp);
         this.material.opacity = opacity;
 
@@ -549,34 +587,50 @@ export class WeatherEffects {
     }
 
     createSplashes() {
-        const particleCount = 200;
+        const particleCount = 500; // Increased count further
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
         const life = new Float32Array(particleCount);
+
+        // Init offscreen
         for(let i=0; i<particleCount*3; i++) positions[i] = -100;
+        for(let i=0; i<particleCount; i++) life[i] = 0;
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const material = new THREE.PointsMaterial({
-            color: 0x88ccff,
-            size: 0.1,
+        geometry.setAttribute('life', new THREE.BufferAttribute(life, 1));
+
+        const material = new THREE.ShaderMaterial({
+            uniforms: {
+                uColor: { value: new THREE.Color(0xffffff) } // Pure White
+            },
+            vertexShader: splashVertexShader,
+            fragmentShader: splashFragmentShader,
             transparent: true,
-            opacity: 0.8
+            depthWrite: false
         });
 
         this.splashSystem = new THREE.Points(geometry, material);
-        this.splashSystem.userData = { life: life };
+        // Ensure not frustrated by frustum culling if bounds are weird
+        this.splashSystem.frustumCulled = false;
         this.scene.add(this.splashSystem);
     }
 
     spawnSplash(pos) {
         const positions = this.splashSystem.geometry.attributes.position.array;
-        const life = this.splashSystem.userData.life;
+        const life = this.splashSystem.geometry.attributes.life.array;
+
+        // Find a dead particle
         for(let i=0; i<life.length; i++) {
             if (life[i] <= 0) {
                 life[i] = 1.0;
                 positions[i*3] = pos.x;
-                positions[i*3+1] = pos.y + 0.05;
+                // Lift slightly above surface to avoid z-fighting if colliding with flat surface
+                positions[i*3+1] = pos.y + 0.02;
                 positions[i*3+2] = pos.z;
+
+                // Mark for update
+                this.splashSystem.geometry.attributes.life.needsUpdate = true;
+                this.splashSystem.geometry.attributes.position.needsUpdate = true;
                 break;
             }
         }
@@ -584,14 +638,23 @@ export class WeatherEffects {
 
     updateSplashes() {
         const positions = this.splashSystem.geometry.attributes.position.array;
-        const life = this.splashSystem.userData.life;
+        const life = this.splashSystem.geometry.attributes.life.array;
+        let needsUpdate = false;
+
         for(let i=0; i<life.length; i++) {
             if (life[i] > 0) {
-                life[i] -= 0.05;
-                positions[i*3+1] += 0.02;
-                if (life[i] <= 0) positions[i*3+1] = -100;
+                life[i] -= 0.05; // Fade out speed
+                if (life[i] <= 0) {
+                    life[i] = 0;
+                    positions[i*3] = -100; // Hide
+                }
+                needsUpdate = true;
             }
         }
-        this.splashSystem.geometry.attributes.position.needsUpdate = true;
+
+        if (needsUpdate) {
+            this.splashSystem.geometry.attributes.life.needsUpdate = true;
+            this.splashSystem.geometry.attributes.position.needsUpdate = true;
+        }
     }
 }
