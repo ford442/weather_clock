@@ -100,17 +100,19 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
     // Update Sky Shader
     if (sky) {
         const uniforms = sky.material.uniforms;
-        // Sky shader expects a normalized direction or distant position.
-        // We copy the position but should ensure it behaves as a direction.
-        // Standard Three.js example uses radius 1.
-        uniforms['sunPosition'].value.copy(sunLight.position).normalize();
 
-        // Ensure Y-up
-        if (uniforms['sunPosition'].value.y < -0.3) {
-             // If sun is very low, Sky shader might black out. Clamp slightly or just let it be night.
-             // At night, we might want to position the 'moon' as the light source for scattering?
-             // Or just let it be dark.
+        // Use Sun position for scattering
+        let scatteringSource = sunLight.position.clone();
+
+        // If Sun is down, use Moon for scattering to keep sky interesting (Moonlight)
+        // Check elevation
+        if (scatteringSource.y < -0.1 && moonLight && moonLight.position.y > 0) {
+            scatteringSource.copy(moonLight.position);
+            // Lower intensity/Rayleigh for moon?
+            // For now just position.
         }
+
+        uniforms['sunPosition'].value.copy(scatteringSource).normalize();
 
         // Adjust Turbidity (haze) based on clouds and severity
         // Clear day: 2-5, Cloudy: 10-20

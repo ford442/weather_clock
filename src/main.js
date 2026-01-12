@@ -40,7 +40,7 @@ composer.addPass(bloomPass);
 
 // Sky Setup
 const sky = new Sky();
-sky.scale.setScalar(450000);
+sky.scale.setScalar(10000);
 const skyUniforms = sky.material.uniforms;
 skyUniforms['turbidity'].value = 10;
 skyUniforms['rayleigh'].value = 3;
@@ -113,20 +113,55 @@ const WARP_SCALE = 1440.0; // 24h in 60s -> 1440x
 // Debug API for Verification
 window.setDebugWeather = (weatherCode) => {
     console.log("Setting debug weather code:", weatherCode);
-    const mock = {
-        current: {
-            temp: 20,
-            weatherCode: weatherCode,
-            description: "Debug Weather",
-            windSpeed: 10,
-            cloudCover: weatherCode > 0 ? 80 : 0,
+
+    // Generate Timeline
+    const timeline = [];
+    // Start timeline from current simulation time aligned to hour
+    const start = new Date(simulationTime);
+    start.setMinutes(0, 0, 0);
+    start.setMilliseconds(0);
+
+    for (let i = -3; i < 24; i++) {
+        const t = new Date(start.getTime() + i * 3600 * 1000);
+        let code = weatherCode;
+
+        // Dynamic Mode: -1
+        // Cycle: Clear -> Rain -> Snow -> Clear
+        if (weatherCode === -1) {
+            const cycle = 6; // Hours per phase
+            const phase = Math.floor((i + 3) / cycle) % 3;
+            if (phase === 0) code = 0; // Clear
+            else if (phase === 1) code = 63; // Rain
+            else code = 71; // Snow
+        }
+
+        const isRain = code >= 60 && code < 70;
+        const isSnow = code >= 70;
+        const isCloudy = code > 0;
+
+        timeline.push({
+            time: t,
+            temp: 20 + Math.sin(i * 0.5) * 10,
+            weatherCode: code,
+            description: "Debug " + code,
+            cloudCover: isCloudy ? 90 : 0,
+            windSpeed: 10 + Math.sin(i) * 10,
             visibility: 10000,
-            rain: weatherCode >= 60 ? 5.0 : 0,
-            showers: weatherCode >= 50 ? 2.0 : 0,
-            snowfall: weatherCode >= 70 ? 5.0 : 0
-        },
-        past: { weatherCode: 0, cloudCover: 0, windSpeed: 0 },
-        forecast: { weatherCode: 0, cloudCover: 0, windSpeed: 0 }
+            rain: isRain ? 5.0 : 0,
+            showers: 0,
+            snowfall: isSnow ? 5.0 : 0
+        });
+    }
+
+    // Find current mock
+    const currentMock = timeline.find(t => Math.abs(t.time.getTime() - simulationTime.getTime()) < 3600*1000) || timeline[3];
+
+    const mock = {
+        current: currentMock,
+        past: timeline[0],
+        forecast: timeline[6],
+        timeline: timeline,
+        location: "Debug Simulation (" + (weatherCode === -1 ? "Dynamic" : "Static") + ")"
     };
     weatherData = mock;
     updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, mock, astronomyService.update(simulationTime, weatherService.latitude, weatherService.longitude, 20));

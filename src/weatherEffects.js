@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-// Rain Shader: Fades out particles based on distance from camera
+// Rain Shader: Fades out and expands
 const rainVertexShader = `
 uniform float uOpacity;
 varying float vOpacity;
@@ -32,9 +32,11 @@ void main() {
     vLife = life;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-    // Expand size as life decreases (1.0 -> 0.0)
-    // Larger size for visibility
-    gl_PointSize = 15.0 * (1.0 + (1.0 - life) * 1.5);
+
+    // Attenuate size based on distance
+    float dist = length(mvPosition.xyz);
+    float size = 6.0 * (1.0 + (1.0 - life) * 1.0);
+    gl_PointSize = size * (20.0 / max(dist, 1.0));
 }
 `;
 
@@ -54,7 +56,7 @@ void main() {
     // Soft edge
     float softness = 1.0 - smoothstep(0.3, 0.5, len);
 
-    gl_FragColor = vec4(uColor, alpha * 1.0 * softness);
+    gl_FragColor = vec4(uColor, alpha * 0.8 * softness);
 }
 `;
 
@@ -191,7 +193,7 @@ class RainSystem extends ParticleSystemBase {
         let activeCount = 0;
 
         if (intensity > 0.01) {
-            targetOp = Math.min(0.8, 0.2 + intensity * 0.2);
+            targetOp = Math.min(0.9, 0.3 + intensity * 0.2);
             activeCount = Math.min(this.maxParticles, Math.floor(intensity * 1000));
             // Clamp min count for visibility if it's raining at all
             if (activeCount < 50) activeCount = 50; // Reduced min for smaller zones
@@ -507,18 +509,18 @@ export class WeatherEffects {
 
         // Persistent systems for 3 Zones
         // Past (Left)
-        this.pastRain = new RainSystem(scene, pastZone, 1500);
-        this.pastSnow = new SnowSystem(scene, pastZone, 700);
+        this.pastRain = new RainSystem(scene, pastZone, 2000);
+        this.pastSnow = new SnowSystem(scene, pastZone, 1500);
         this.pastCloud = new CloudSystem(scene, camera, pastZone, 20);
 
         // Current (Center)
-        this.currRain = new RainSystem(scene, currZone, 1500);
-        this.currSnow = new SnowSystem(scene, currZone, 700);
+        this.currRain = new RainSystem(scene, currZone, 2000);
+        this.currSnow = new SnowSystem(scene, currZone, 1500);
         this.currCloud = new CloudSystem(scene, camera, currZone, 20);
 
         // Future (Right)
-        this.futureRain = new RainSystem(scene, futureZone, 1500);
-        this.futureSnow = new SnowSystem(scene, futureZone, 700);
+        this.futureRain = new RainSystem(scene, futureZone, 2000);
+        this.futureSnow = new SnowSystem(scene, futureZone, 1500);
         this.futureCloud = new CloudSystem(scene, camera, futureZone, 20);
 
         this.raycaster = new THREE.Raycaster();
@@ -587,7 +589,7 @@ export class WeatherEffects {
     }
 
     createSplashes() {
-        const particleCount = 500; // Increased count further
+        const particleCount = 1000;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
         const life = new Float32Array(particleCount);
