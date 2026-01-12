@@ -105,9 +105,17 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         // Standard Three.js example uses radius 1.
         uniforms['sunPosition'].value.copy(sunLight.position).normalize();
 
+        // Ensure Y-up
+        if (uniforms['sunPosition'].value.y < -0.3) {
+             // If sun is very low, Sky shader might black out. Clamp slightly or just let it be night.
+             // At night, we might want to position the 'moon' as the light source for scattering?
+             // Or just let it be dark.
+        }
+
         // Adjust Turbidity (haze) based on clouds and severity
         // Clear day: 2-5, Cloudy: 10-20
-        const targetTurbidity = 2 + (weightedCloud / 100) * 15 + (weightedSeverity / 100) * 5;
+        // Reduced max turbidity to keep sky blue-ish even when cloudy
+        const targetTurbidity = 2 + (weightedCloud / 100) * 8 + (weightedSeverity / 100) * 5;
         uniforms['turbidity'].value = targetTurbidity;
 
         // Rayleigh (scattering) - lowered for "heavy" atmosphere/rain
@@ -140,7 +148,10 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
              }
         }
 
-        const targetFogDensity = 0.002 + (weightedCloud / 100) * 0.02 + (weightedSeverity / 100) * 0.04 + visibilityFactor * 0.05;
+        let targetFogDensity = 0.002 + (weightedCloud / 100) * 0.01 + (weightedSeverity / 100) * 0.02 + visibilityFactor * 0.05;
+        // CAP Fog density to avoid "Grey Screen of Death"
+        // 0.02 is reasonably thick (50m visibility approx).
+        if (targetFogDensity > 0.02) targetFogDensity = 0.02;
 
         // Interpolate current density to target
         scene.fog.density += (targetFogDensity - scene.fog.density) * 0.05;
@@ -205,18 +216,4 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
     // Smoothly transition colors
     sunLight.color.lerp(targetSunColor, transitionSpeed);
     ambientLight.color.lerp(targetAmbientColor, transitionSpeed);
-
-    // Adjust scene background - if Sky is present, we don't need to lerp background color manually
-    // EXCEPT if we want to fallback or control "ambient" background if sky is hidden (unlikely here)
-    // But Sky shader handles the visuals.
-    // However, for reflections or if sky is not covering everything, we might keep it.
-    // For now, let's keep it but it might be overridden by Sky rendering if not handled carefully.
-    // Actually, Sky is a mesh, so scene.background is behind it?
-    // Sky is usually a huge Box/Sphere.
-    // If we use Sky, scene.background is occluded.
-    // So we can remove this block or leave it as fallback. I'll leave it but commented out or simplified
-    // to avoid fighting with Sky if Sky opacity is 1.
-
-    // NOTE: Aether Architect wants Sky Shader.
-    // We will assume Sky covers the background.
 }

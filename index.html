@@ -10,7 +10,7 @@
             padding: 0;
             overflow: hidden;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(to bottom, #1a1a2e, #0f3460);
+            background: #000; /* Let Three.js handle the background */
         }
         #canvas-container {
             width: 100vw;
@@ -244,6 +244,24 @@
             gap: 5px 15px;
         }
 
+        #time-warp-btn {
+            background: rgba(100, 255, 100, 0.4);
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            color: white;
+            cursor: pointer;
+            font-size: 24px;
+            transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+
+        #time-warp-btn:hover {
+            transform: scale(1.1);
+            background: rgba(100, 255, 100, 0.6);
+        }
+
     </style>
 </head>
 <body>
@@ -280,9 +298,9 @@
                 <button id="search-btn" class="search-btn">Go</button>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
                 <div id="time-display" class="time-display">--:--</div>
-                <button id="time-warp-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 50%; width: 40px; height: 40px; color: white; cursor: pointer; font-size: 20px; transition: all 0.2s;" title="Fast Forward (24h in 60s)">⏩</button>
+                <button id="time-warp-btn" title="Fast Forward (24h in 60s)">⏩</button>
             </div>
 
             <div id="current-temp" class="current-temp-large">--°</div>
