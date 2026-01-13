@@ -68,25 +68,49 @@ function createCloudTexture() {
     const context = canvas.getContext('2d');
     context.fillStyle = 'rgba(0,0,0,0)';
     context.fillRect(0,0,size,size);
+
+    // Simple noise-like puffs
     const cx = size/2;
     const cy = size/2;
-    const puffs = 15;
+    const puffs = 30; // More puffs for fluffier look
+
     for (let i = 0; i < puffs; i++) {
+        // Distribute puffs centrally but with some spread
         const angle = Math.random() * Math.PI * 2;
-        const dist = Math.random() * (size * 0.2);
+        const dist = Math.random() * (size * 0.3); // Wider spread
         const px = cx + Math.cos(angle) * dist;
         const py = cy + Math.sin(angle) * dist;
-        const r = size * (0.15 + Math.random() * 0.25);
+        const r = size * (0.1 + Math.random() * 0.2); // Varied sizes
+
         const grad = context.createRadialGradient(px, py, 0, px, py, r);
-        grad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-        grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.3)');
-        grad.addColorStop(0.8, 'rgba(255, 255, 255, 0.05)');
+        // Soft white with varying opacity for depth
+        const opacity = 0.5 + Math.random() * 0.5;
+        grad.addColorStop(0, `rgba(255, 255, 255, ${opacity})`);
+        grad.addColorStop(0.4, `rgba(240, 240, 255, ${opacity * 0.4})`);
+        grad.addColorStop(0.8, 'rgba(255, 255, 255, 0.01)');
         grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
+
         context.fillStyle = grad;
         context.beginPath();
         context.arc(px, py, r, 0, Math.PI * 2);
         context.fill();
     }
+
+    // Add some noise grain on top
+    const imgData = context.getImageData(0,0,size,size);
+    const data = imgData.data;
+    for(let i=0; i<data.length; i+=4) {
+        if(data[i+3] > 0) { // If visible
+             const noise = (Math.random() - 0.5) * 20;
+             data[i] = Math.max(0, Math.min(255, data[i] + noise));
+             data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise));
+             data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise));
+             // Also modulate alpha slightly for texture
+             data[i+3] = Math.max(0, Math.min(255, data[i+3] + (Math.random()-0.5)*10));
+        }
+    }
+    context.putImageData(imgData, 0, 0);
+
     return new THREE.CanvasTexture(canvas);
 }
 
@@ -253,16 +277,15 @@ class RainSystem extends ParticleSystemBase {
                     if (sundialGroup) {
                         const headX = positions[i6+3];
                         const headZ = positions[i6+5];
-                        // Simple radial check first
-                        if (headX*headX + headZ*headZ < 12) {
-                            raycaster.set(new THREE.Vector3(headX, headY+1, headZ), new THREE.Vector3(0,-1,0));
-                            raycaster.far = 10.0;
-                            const intersects = raycaster.intersectObject(sundialGroup, true);
-                            if (intersects.length > 0) {
-                                if(spawnSplashCallback) spawnSplashCallback(intersects[0].point);
-                                this.resetParticle(i);
-                                continue;
-                            }
+                        const distSq = headX*headX + headZ*headZ;
+
+                        // Geometric check for Sundial (Approx Cylinder: Radius ~3.2, Height ~0.3)
+                        // Radius squared 3.2^2 = 10.24. We use 10.5 for margin.
+                        // Height 0.3. We check if it falls below 0.35.
+                        if (distSq < 10.5 && headY < 0.35) {
+                            if(spawnSplashCallback) spawnSplashCallback(new THREE.Vector3(headX, 0.3, headZ));
+                            this.resetParticle(i);
+                            continue;
                         }
                     }
                 }
