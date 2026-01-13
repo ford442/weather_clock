@@ -152,8 +152,8 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
 
         let targetFogDensity = 0.002 + (weightedCloud / 100) * 0.01 + (weightedSeverity / 100) * 0.02 + visibilityFactor * 0.05;
         // CAP Fog density to avoid "Grey Screen of Death"
-        // 0.02 is reasonably thick (50m visibility approx).
-        if (targetFogDensity > 0.02) targetFogDensity = 0.02;
+        // Reduced max density from 0.02 to 0.015 to ensure Sky Shader remains visible
+        if (targetFogDensity > 0.015) targetFogDensity = 0.015;
 
         // Interpolate current density to target
         scene.fog.density += (targetFogDensity - scene.fog.density) * 0.05;
@@ -192,6 +192,9 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
     let targetAmbientColor;
     if (weightedSeverity > 70) {
         targetAmbientColor = new THREE.Color(0x444466);
+    } else if (weightedSeverity > 40) { // Rain/Moderate weather (Code 63 is here)
+        // Darker, bluer grey for rain
+        targetAmbientColor = new THREE.Color(0x555577);
     } else if (weightedCloud > 60) {
         targetAmbientColor = new THREE.Color(0x888899);
     } else {

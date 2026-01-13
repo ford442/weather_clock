@@ -34,8 +34,8 @@ composer.addPass(renderPass);
 
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
 bloomPass.threshold = 0.85; // Slightly lower threshold to catch more sun glow
-bloomPass.strength = 0.5;   // Moderate intensity
-bloomPass.radius = 0.4;     // Tighter bloom
+bloomPass.strength = 0.6;   // Increased intensity for "intense glow"
+bloomPass.radius = 0.5;     // Slightly softer
 composer.addPass(bloomPass);
 
 // Sky Setup
