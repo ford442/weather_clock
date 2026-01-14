@@ -5,7 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createSundial } from './sundial.js';
 import { WeatherService } from './weather.js';
-import { updateWeatherLighting } from './weatherLighting.js';
+import { updateWeatherLighting, getSeverity } from './weatherLighting.js';
 import { calculateMoonPhase, createMoon } from './moonPhase.js';
 import { WeatherEffects } from './weatherEffects.js';
 import { AstronomyService } from './astronomy.js';
@@ -214,6 +214,11 @@ function getWeatherAtTime(time, timeline) {
     const weatherCode = factor < 0.5 ? prev.weatherCode : next.weatherCode;
     const description = factor < 0.5 ? prev.description : next.description;
 
+    // Calculate interpolated severity for smooth lighting transitions
+    const prevSev = getSeverity(prev.weatherCode);
+    const nextSev = getSeverity(next.weatherCode);
+    const severity = prevSev + (nextSev - prevSev) * factor;
+
     return {
         temp: prev.temp + (next.temp - prev.temp) * factor,
         weatherCode: weatherCode,
@@ -223,7 +228,8 @@ function getWeatherAtTime(time, timeline) {
         visibility: (prev.visibility || 10000) + ((next.visibility || 10000) - (prev.visibility || 10000)) * factor,
         rain: (prev.rain || 0) + ((next.rain || 0) - (prev.rain || 0)) * factor,
         showers: (prev.showers || 0) + ((next.showers || 0) - (prev.showers || 0)) * factor,
-        snowfall: (prev.snowfall || 0) + ((next.snowfall || 0) - (prev.snowfall || 0)) * factor
+        snowfall: (prev.snowfall || 0) + ((next.snowfall || 0) - (prev.snowfall || 0)) * factor,
+        severity: severity
     };
 }
 

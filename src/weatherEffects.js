@@ -279,13 +279,29 @@ class RainSystem extends ParticleSystemBase {
                         const headZ = positions[i6+5];
                         const distSq = headX*headX + headZ*headZ;
 
-                        // Geometric check for Sundial (Approx Cylinder: Radius ~3.2, Height ~0.3)
-                        // Radius squared 3.2^2 = 10.24. We use 10.5 for margin.
-                        // Height 0.3. We check if it falls below 0.35.
-                        if (distSq < 10.5 && headY < 0.35) {
-                            if(spawnSplashCallback) spawnSplashCallback(new THREE.Vector3(headX, 0.3, headZ));
-                            this.resetParticle(i);
-                            continue;
+                        // Precise geometric check for Sundial
+                        // Bounding circle: Radius 3.25 (squared ~10.56)
+                        if (distSq < 10.6) {
+                            const dist = Math.sqrt(distSq);
+                            let surfaceY = -100;
+
+                            // Tiers:
+                            // 1. Clock Face (Radius 0 to 2.8, Height 0.25)
+                            // 2. Base Top (Radius 2.8 to 3.0, Height 0.15)
+                            // 3. Base Slope (Radius 3.0 to 3.2, Height 0.15 down to -0.15)
+                            if (dist < 2.8) {
+                                surfaceY = 0.25;
+                            } else if (dist < 3.0) {
+                                surfaceY = 0.15;
+                            } else if (dist < 3.2) {
+                                surfaceY = 0.15 - ((dist - 3.0) / 0.2) * 0.3;
+                            }
+
+                            if (surfaceY > -99 && headY < surfaceY) {
+                                if(spawnSplashCallback) spawnSplashCallback(new THREE.Vector3(headX, surfaceY, headZ));
+                                this.resetParticle(i);
+                                continue;
+                            }
                         }
                     }
                 }

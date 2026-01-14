@@ -3,6 +3,16 @@ import * as THREE from 'three';
 let previousIntensity = { sun: 0.8, moon: 0.0, ambient: 0.4 };
 const transitionSpeed = 0.02;
 
+// Calculate weighted severity (0 = clear, 100 = severe weather)
+export const getSeverity = (code) => {
+    if (code === 0) return 0;
+    if (code <= 3) return code * 10;
+    if (code >= 95) return 100; // Thunderstorm
+    if (code >= 80) return 70; // Heavy rain/snow
+    if (code >= 60) return 50; // Rain
+    return 30; // Other conditions
+};
+
 export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, weatherData, astroData) {
     if (!weatherData) return;
 
@@ -39,20 +49,13 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         currentCloud * currentWeight +
         forecastCloud * forecastWeight;
 
-    // Calculate weighted severity (0 = clear, 100 = severe weather)
-    const getSeverity = (code) => {
-        if (code === 0) return 0;
-        if (code <= 3) return code * 10;
-        if (code >= 95) return 100; // Thunderstorm
-        if (code >= 80) return 70; // Heavy rain/snow
-        if (code >= 60) return 50; // Rain
-        return 30; // Other conditions
-    };
+    // Helper to get severity from object (if pre-interpolated) or code
+    const getSev = (data) => data && data.severity !== undefined ? data.severity : getSeverity(data?.weatherCode || 0);
 
     const weightedSeverity = 
-        getSeverity(pastCode) * pastWeight +
-        getSeverity(currentCode) * currentWeight +
-        getSeverity(forecastCode) * forecastWeight;
+        getSev(weatherData.past) * pastWeight +
+        getSev(weatherData.current) * currentWeight +
+        getSev(weatherData.forecast) * forecastWeight;
 
     // --- SUN LIGHTING ---
     // Calculate target sun light intensity based on cloud cover and weather AND day/night
