@@ -110,6 +110,15 @@ let isTimeWarping = false;
 const REAL_TIME_SCALE = 1.0;
 const WARP_SCALE = 1440.0; // 24h in 60s -> 1440x
 
+function updateTimeDisplay() {
+    const timeDisplay = document.getElementById('time-display');
+    if (timeDisplay) {
+        const hours = simulationTime.getHours().toString().padStart(2, '0');
+        const minutes = simulationTime.getMinutes().toString().padStart(2, '0');
+        timeDisplay.textContent = `${hours}:${minutes}`;
+    }
+}
+
 // Debug API for Verification
 window.setDebugWeather = (weatherCode) => {
     console.log("Setting debug weather code:", weatherCode);
@@ -216,15 +225,6 @@ function getWeatherAtTime(time, timeline) {
         showers: (prev.showers || 0) + ((next.showers || 0) - (prev.showers || 0)) * factor,
         snowfall: (prev.snowfall || 0) + ((next.snowfall || 0) - (prev.snowfall || 0)) * factor
     };
-}
-
-function updateTimeDisplay() {
-    const timeDisplay = document.getElementById('time-display');
-    if (timeDisplay) {
-        const hours = simulationTime.getHours().toString().padStart(2, '0');
-        const minutes = simulationTime.getMinutes().toString().padStart(2, '0');
-        timeDisplay.textContent = `${hours}:${minutes}`;
-    }
 }
 
 // Initialize
