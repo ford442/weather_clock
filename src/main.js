@@ -12,15 +12,16 @@ import { AstronomyService } from './astronomy.js';
 
 // Scene setup
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xaaaaaa, 0.002); // Add Fog
+scene.fog = new THREE.FogExp2(0xaaaaaa, 0.0001); // Add Fog (Start clear)
 const clock = new THREE.Clock();
 // Increased far plane to ensure Sky (scaled 450000) is visible
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000000);
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false }); // Opaque for proper Sky rendering
 
 // Tone mapping for HDR effect (Sky shader + Bloom)
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.5; // Reduced from 1.0 to prevent washout
+renderer.toneMappingExposure = 0.8; // Adjusted for balance
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -41,6 +42,7 @@ composer.addPass(bloomPass);
 // Sky Setup
 const sky = new Sky();
 sky.scale.setScalar(10000);
+sky.renderOrder = -1;
 const skyUniforms = sky.material.uniforms;
 skyUniforms['turbidity'].value = 10;
 skyUniforms['rayleigh'].value = 3;
@@ -144,8 +146,8 @@ window.setDebugWeather = (weatherCode) => {
             else code = 71; // Snow
         }
 
-        const isRain = code >= 60 && code < 70;
-        const isSnow = code >= 70;
+        const isRain = (code >= 50 && code < 70) || (code >= 80 && code < 83) || (code >= 95);
+        const isSnow = (code >= 70 && code < 80) || (code >= 85 && code < 87);
         const isCloudy = code > 0;
 
         timeline.push({
@@ -156,7 +158,7 @@ window.setDebugWeather = (weatherCode) => {
             cloudCover: isCloudy ? 90 : 0,
             windSpeed: 10 + Math.sin(i) * 10,
             visibility: 10000,
-            rain: isRain ? 5.0 : 0,
+            rain: isRain ? 10.0 : 0, // Heavy rain for storms
             showers: 0,
             snowfall: isSnow ? 5.0 : 0
         });
@@ -480,7 +482,14 @@ function animate() {
     }
 
     if (weatherEffects.getLightningFlash && weatherEffects.getLightningFlash() > 0) {
-        ambientLight.intensity += weatherEffects.getLightningFlash();
+        const flash = weatherEffects.getLightningFlash();
+        ambientLight.intensity += flash;
+
+        // Override ambient color with lightning color (Blue-White) for dramatic effect
+        // Flash intensity starts around 2.0, so we saturate the lerp
+        const flashColor = new THREE.Color(0xaaddff);
+        const lerpFactor = Math.min(1.0, flash * 0.8);
+        ambientLight.color.lerp(flashColor, lerpFactor);
     }
 
     composer.render();
