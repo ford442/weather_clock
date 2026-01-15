@@ -153,10 +153,10 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
              }
         }
 
-        let targetFogDensity = 0.002 + (weightedCloud / 100) * 0.01 + (weightedSeverity / 100) * 0.02 + visibilityFactor * 0.05;
+        let targetFogDensity = 0.0001 + (weightedCloud / 100) * 0.005 + (weightedSeverity / 100) * 0.02 + visibilityFactor * 0.05;
         // CAP Fog density to avoid "Grey Screen of Death"
         // Reduced max density from 0.02 to 0.015 to ensure Sky Shader remains visible
-        if (targetFogDensity > 0.015) targetFogDensity = 0.015;
+        if (targetFogDensity > 0.02) targetFogDensity = 0.02;
 
         // Interpolate current density to target
         scene.fog.density += (targetFogDensity - scene.fog.density) * 0.05;

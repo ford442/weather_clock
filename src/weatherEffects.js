@@ -570,7 +570,8 @@ export class WeatherEffects {
 
     update(past, current, forecast, delta = 0.016) {
         if (this.flashIntensity > 0) {
-            this.flashIntensity -= delta * 5.0;
+            // Faster decay for a sharper "strike" feel (approx 0.1-0.2s duration)
+            this.flashIntensity -= delta * 15.0;
             if (this.flashIntensity < 0) this.flashIntensity = 0;
         }
 
