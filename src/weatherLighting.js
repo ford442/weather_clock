@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 let previousIntensity = { sun: 0.8, moon: 0.0, ambient: 0.4 };
-const transitionSpeed = 0.02;
+const transitionSpeed = 0.01; // Slower transition (approx 5s)
 
 // Calculate weighted severity (0 = clear, 100 = severe weather)
 export const getSeverity = (code) => {
@@ -88,15 +88,19 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
 
         targetMoonIntensity = moonIntensityBase * cloudMoonFactor * moonHorizonFactor;
 
-        // Calculate Moon Color
-        // Low illum: Deep Blue (0x223366) -> High illum: Silver/White (0xddddff)
-        const minColor = new THREE.Color(0x445588);
-        const maxColor = new THREE.Color(0xddddff);
+        // Calculate Moon Color (Photorealistic Upgrade)
+        // Deep Navy (0x0f1c30) for new moon -> Bright Silver (0xe0e0ff) for full moon
+        // This gives a much richer night atmosphere than the previous simple blue.
+        const minColor = new THREE.Color(0x0f1c30);
+        const maxColor = new THREE.Color(0xe0e0ff);
         targetMoonColor.copy(minColor).lerp(maxColor, moonIllum);
 
-        // Tint with weather? If storming, maybe darker/greener?
+        // Boost intensity slightly for full moon to cast clearer shadows
+        if (moonIllum > 0.8) targetMoonIntensity *= 1.2;
+
+        // Tint with weather? If storming, shift towards a moody slate grey
         if (weightedSeverity > 50) {
-             targetMoonColor.lerp(new THREE.Color(0x333344), 0.5);
+             targetMoonColor.lerp(new THREE.Color(0x2a2a35), 0.6);
         }
     }
 
@@ -118,14 +122,18 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         uniforms['sunPosition'].value.copy(scatteringSource).normalize();
 
         // Adjust Turbidity (haze) based on clouds and severity
-        // Clear day: 2-5, Cloudy: 10-20
-        // Reduced max turbidity to keep sky blue-ish even when cloudy
-        const targetTurbidity = 2 + (weightedCloud / 100) * 8 + (weightedSeverity / 100) * 5;
+        // Photorealistic Tuning:
+        // Clear day: ~2. Storm: ~15 (More haze/density).
+        // We increase range to make storms look oppressive.
+        const targetTurbidity = 2 + (weightedCloud / 100) * 8 + (weightedSeverity / 100) * 10;
         uniforms['turbidity'].value = targetTurbidity;
 
-        // Rayleigh (scattering) - lowered for "heavy" atmosphere/rain
-        // Standard: 3. Rain: 1.5
-        const targetRayleigh = 3 - (weightedSeverity / 100) * 1.5;
+        // Rayleigh (scattering) - Determines sky color.
+        // 3.0 = Nice Blue. Lower = Darker/Greyer. Higher = Redder sunset.
+        // During heavy weather, we want a darker sky, so we drop Rayleigh slightly less aggressively
+        // but ensure Turbidity does the work of "greying" it out.
+        // Start: 3.0. Storm: 1.2.
+        const targetRayleigh = 3.0 - (weightedSeverity / 100) * 1.8;
         uniforms['rayleigh'].value = targetRayleigh;
 
         // Mie Coefficient (fog/scattering)
@@ -176,19 +184,25 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
     const targetAmbientIntensity = nightAmbient + (dayAmbient - nightAmbient) * dayFactor;
 
     // Calculate sun color based on weather
+    // Enhanced palette for realism:
+    // Thunderstorm: Cold, bluish-white (electric).
+    // Snow: Clean white (no yellow tint).
+    // Rain: Muted, desaturated warm grey.
+    // Overcast: Flat white.
+    // Clear: Warm, golden-white.
     let targetSunColor;
     if (currentCode >= 95) {
-        targetSunColor = new THREE.Color(0x8899cc);
-    } else if (currentCode >= 70 && currentCode <= 77) {
-        targetSunColor = new THREE.Color(0xccddff);
-    } else if (currentCode >= 60) {
-        targetSunColor = new THREE.Color(0xaabbcc);
+        targetSunColor = new THREE.Color(0xccccff); // Electric Blue-White
+    } else if (currentCode >= 70 && currentCode <= 77) { // Snow
+        targetSunColor = new THREE.Color(0xf0f8ff); // Alice Blue / Ice White
+    } else if (currentCode >= 60) { // Rain
+        targetSunColor = new THREE.Color(0xddeeff); // Cool White
     } else if (weightedCloud > 70) {
-        targetSunColor = new THREE.Color(0xcccccc);
+        targetSunColor = new THREE.Color(0xeeeeee); // Flat White
     } else if (weightedCloud > 40) {
-        targetSunColor = new THREE.Color(0xffffee);
+        targetSunColor = new THREE.Color(0xfffae0); // Soft Yellow-White
     } else {
-        targetSunColor = new THREE.Color(0xffffcc);
+        targetSunColor = new THREE.Color(0xfff0c0); // Golden White
     }
 
     // Calculate ambient color

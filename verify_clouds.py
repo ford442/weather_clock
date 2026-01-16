@@ -1,29 +1,44 @@
-from playwright.sync_api import sync_playwright, expect
-import time
+from playwright.sync_api import sync_playwright
 
-def run():
+def verify_clouds():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        # Navigate to the local server
-        page.goto("http://localhost:5173")
+        try:
+            # Navigate to the app
+            page.goto("http://localhost:5173", timeout=10000)
 
-        # Wait for canvas to be present
-        page.wait_for_selector("canvas", timeout=10000)
+            # Wait for canvas
+            page.wait_for_selector("canvas", timeout=10000)
+            print("Canvas found.")
 
-        # Wait a bit for weather to load and rendering to start
-        time.sleep(5)
+            # Wait for initial load
+            page.wait_for_timeout(3000)
 
-        # Take a screenshot
-        page.screenshot(path="verification_clouds.png")
+            # Set Debug Weather: Code 3 (Overcast) to maximize cloud visibility
+            # Cloud Cover = 90%
+            print("Setting Debug Weather: Overcast (Code 3)")
+            page.evaluate("window.setDebugWeather(3)")
 
-        print("Screenshot taken: verification_clouds.png")
+            # Wait for transition (5s transition speed)
+            page.wait_for_timeout(6000)
 
-        # Check console logs for errors
-        page.on("console", lambda msg: print(f"Console: {msg.text}"))
+            # Take screenshot specifically looking for clouds
+            page.screenshot(path="verification_clouds.png")
+            print("Cloud screenshot taken.")
 
-        browser.close()
+            # Set Debug Weather: Thunderstorm (Code 95) to check lighting
+            print("Setting Debug Weather: Thunderstorm (Code 95)")
+            page.evaluate("window.setDebugWeather(95)")
+            page.wait_for_timeout(6000)
+            page.screenshot(path="verification_storm.png")
+            print("Storm screenshot taken.")
+
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            browser.close()
 
 if __name__ == "__main__":
-    run()
+    verify_clouds()
