@@ -61,7 +61,7 @@ void main() {
 `;
 
 function createCloudTexture() {
-    const size = 256;
+    const size = 512; // Increased resolution for better noise detail
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -69,25 +69,31 @@ function createCloudTexture() {
     context.fillStyle = 'rgba(0,0,0,0)';
     context.fillRect(0,0,size,size);
 
-    // Simple noise-like puffs
+    // Advanced "Fractal-like" Noise generation for fluffiness
+    // We layer multiple radial puffs with varied opacity/size/position
     const cx = size/2;
     const cy = size/2;
-    const puffs = 30; // More puffs for fluffier look
+    const puffs = 60;
 
+    // Base large puffs for volume
     for (let i = 0; i < puffs; i++) {
-        // Distribute puffs centrally but with some spread
         const angle = Math.random() * Math.PI * 2;
-        const dist = Math.random() * (size * 0.3); // Wider spread
+        // Distribute using a power function to cluster near center but allow edges
+        const dist = Math.pow(Math.random(), 0.8) * (size * 0.35);
         const px = cx + Math.cos(angle) * dist;
         const py = cy + Math.sin(angle) * dist;
-        const r = size * (0.1 + Math.random() * 0.2); // Varied sizes
+
+        // Randomize radius: mix of large base blobs and smaller detail blobs
+        const r = size * (0.05 + Math.random() * 0.15);
 
         const grad = context.createRadialGradient(px, py, 0, px, py, r);
-        // Soft white with varying opacity for depth
-        const opacity = 0.5 + Math.random() * 0.5;
-        grad.addColorStop(0, `rgba(255, 255, 255, ${opacity})`);
-        grad.addColorStop(0.4, `rgba(240, 240, 255, ${opacity * 0.4})`);
-        grad.addColorStop(0.8, 'rgba(255, 255, 255, 0.01)');
+        const opacity = 0.1 + Math.random() * 0.2; // Lower opacity per puff for stacking
+
+        // Slightly warm/cool white variance
+        const val = 240 + Math.random() * 15;
+
+        grad.addColorStop(0, `rgba(${val}, ${val}, ${val}, ${opacity})`);
+        grad.addColorStop(0.5, `rgba(${val}, ${val}, ${val}, ${opacity * 0.5})`);
         grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
 
         context.fillStyle = grad;
@@ -96,22 +102,39 @@ function createCloudTexture() {
         context.fill();
     }
 
-    // Add some noise grain on top
+    // Perlin-ish noise overlay on the alpha channel for texture
     const imgData = context.getImageData(0,0,size,size);
     const data = imgData.data;
+
     for(let i=0; i<data.length; i+=4) {
-        if(data[i+3] > 0) { // If visible
-             const noise = (Math.random() - 0.5) * 20;
+        if(data[i+3] > 0) {
+             // Simple high-frequency noise
+             const noise = (Math.random() - 0.5) * 30;
+             // Apply noise to RGB
              data[i] = Math.max(0, Math.min(255, data[i] + noise));
              data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise));
              data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise));
-             // Also modulate alpha slightly for texture
-             data[i+3] = Math.max(0, Math.min(255, data[i+3] + (Math.random()-0.5)*10));
+
+             // Soften alpha edges based on distance from center for a global "Cloud" shape falloff
+             const x = (i/4) % size;
+             const y = Math.floor((i/4) / size);
+             const dx = x - cx;
+             const dy = y - cy;
+             const d = Math.sqrt(dx*dx + dy*dy);
+             const falloff = 1.0 - smoothstep(size*0.3, size*0.5, d);
+
+             data[i+3] = data[i+3] * falloff;
         }
     }
     context.putImageData(imgData, 0, 0);
 
     return new THREE.CanvasTexture(canvas);
+}
+
+// Helper for JS-side smoothstep
+function smoothstep(min, max, value) {
+  var x = Math.max(0, Math.min(1, (value-min)/(max-min)));
+  return x*x*(3 - 2*x);
 }
 
 function curlNoise(x, y, z, time) {
@@ -207,7 +230,7 @@ class RainSystem extends ParticleSystemBase {
         this.states[i] = 0;
     }
 
-    update(delta, windSpeed, intensity, raycaster, sundialGroup, spawnSplashCallback) {
+    update(delta, windSpeed, windDir, intensity, raycaster, sundialGroup, spawnSplashCallback) {
         // Intensity is 0.0 to 1.0 (approx mm/h scaled)
         // Map intensity to opacity and count
         // Light rain (<0.5mm): Low count, low opacity
@@ -237,16 +260,21 @@ class RainSystem extends ParticleSystemBase {
         this.mesh.geometry.setDrawRange(0, activeCount * 2);
 
         const positions = this.mesh.geometry.attributes.position.array;
-        const windX = windSpeed * 0.005;
-        const windZ = windSpeed * 0.002;
+
+        // Calculate wind vector from Speed (km/h) and Direction (Degrees 0-360)
+        const rad = (90 - windDir) * Math.PI / 180;
+        const speedScale = 0.005; // Tuned for visual scale
+        const targetWindX = Math.cos(rad) * windSpeed * speedScale;
+        const targetWindZ = -Math.sin(rad) * windSpeed * speedScale; // Z is inverted in 3D space relative to screen y
 
         for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
             const i6 = i * 6;
 
             if (this.states[i] === 0) {
-                this.velocities[i3] += (windX - this.velocities[i3]) * 0.1;
-                this.velocities[i3+2] += (windZ - this.velocities[i3+2]) * 0.1;
+                // Smoothly interpolate velocity towards target wind
+                this.velocities[i3] += (targetWindX - this.velocities[i3]) * 0.1;
+                this.velocities[i3+2] += (targetWindZ - this.velocities[i3+2]) * 0.1;
 
                 const vx = this.velocities[i3];
                 const vy = this.velocities[i3+1];
@@ -256,6 +284,7 @@ class RainSystem extends ParticleSystemBase {
                 positions[i6+4] += vy;
                 positions[i6+5] += vz;
 
+                // Stretch streak based on velocity
                 const streak = 3.0;
                 positions[i6] = positions[i6+3] - vx * streak;
                 positions[i6+1] = positions[i6+4] - vy * streak;
@@ -285,15 +314,19 @@ class RainSystem extends ParticleSystemBase {
                             const dist = Math.sqrt(distSq);
                             let surfaceY = -100;
 
-                            // Tiers:
-                            // 1. Clock Face (Radius 0 to 2.8, Height 0.25)
-                            // 2. Base Top (Radius 2.8 to 3.0, Height 0.15)
-                            // 3. Base Slope (Radius 3.0 to 3.2, Height 0.15 down to -0.15)
+                            // Tiers matching src/sundial.js geometry:
+                            // 1. Clock Face (Cylinder Radius 2.8, Top Y = 0.25)
+                            // 2. Base Top Ring (Cylinder Top Radius 3.0, Top Y = 0.15)
+                            // 3. Base Slope (Cylinder 3.0 to 3.2, Y 0.15 to -0.15)
+
                             if (dist < 2.8) {
                                 surfaceY = 0.25;
                             } else if (dist < 3.0) {
                                 surfaceY = 0.15;
                             } else if (dist < 3.2) {
+                                // Linear interpolation for the slope
+                                // dist 3.0 -> y 0.15
+                                // dist 3.2 -> y -0.15
                                 surfaceY = 0.15 - ((dist - 3.0) / 0.2) * 0.3;
                             }
 
@@ -357,7 +390,7 @@ class SnowSystem extends ParticleSystemBase {
         this.mesh.visible = true;
     }
 
-    update(delta, windSpeed, intensity) {
+    update(delta, windSpeed, windDir, intensity) {
         // Intensity 0-1 (cm of snow)
         let targetOp = 0;
         let activeCount = 0;
@@ -381,7 +414,12 @@ class SnowSystem extends ParticleSystemBase {
 
         const positions = this.mesh.geometry.attributes.position.array;
         const time = Date.now() * 0.001;
-        const windX = windSpeed * 0.005;
+
+        // Wind Vector
+        const rad = (90 - windDir) * Math.PI / 180;
+        const speedScale = 0.002; // Snow is lighter, affected more by air but moves slower
+        const wX = Math.cos(rad) * windSpeed * speedScale;
+        const wZ = -Math.sin(rad) * windSpeed * speedScale;
 
         for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
@@ -391,9 +429,9 @@ class SnowSystem extends ParticleSystemBase {
 
             const curl = curlNoise(px * 0.1, py * 0.1, pz * 0.1, time + this.offsets[i] * 0.01);
 
-            positions[i3] += this.velocities[i3] + windX + curl.x * 0.05;
+            positions[i3] += this.velocities[i3] + wX + curl.x * 0.05;
             positions[i3+1] += this.velocities[i3+1] + curl.y * 0.05;
-            positions[i3+2] += this.velocities[i3+2] + curl.z * 0.05;
+            positions[i3+2] += this.velocities[i3+2] + wZ + curl.z * 0.05;
 
             // Wrap
             if (positions[i3] > this.zone.maxX) positions[i3] -= (this.zone.maxX - this.zone.minX);
@@ -580,6 +618,7 @@ export class WeatherEffects {
             snow: (data.snowfall || 0),
             cloud: data.cloudCover || 0,
             wind: data.windSpeed || 0,
+            dir: data.windDirection || 0,
             code: data.weatherCode || 0
         });
 
@@ -588,18 +627,18 @@ export class WeatherEffects {
         const f = extractData(forecast);
 
         // Update Past
-        this.pastRain.update(delta, p.wind, p.rain, this.raycaster, null, null);
-        this.pastSnow.update(delta, p.wind, p.snow);
+        this.pastRain.update(delta, p.wind, p.dir, p.rain, this.raycaster, null, null);
+        this.pastSnow.update(delta, p.wind, p.dir, p.snow);
         this.pastCloud.update(delta, p.wind, p.cloud);
 
         // Update Current (Center) - Passes sundial for collision
-        this.currRain.update(delta, c.wind, c.rain, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos));
-        this.currSnow.update(delta, c.wind, c.snow);
+        this.currRain.update(delta, c.wind, c.dir, c.rain, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos));
+        this.currSnow.update(delta, c.wind, c.dir, c.snow);
         this.currCloud.update(delta, c.wind, c.cloud);
 
         // Update Future
-        this.futureRain.update(delta, f.wind, f.rain, this.raycaster, null, null);
-        this.futureSnow.update(delta, f.wind, f.snow);
+        this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null);
+        this.futureSnow.update(delta, f.wind, f.dir, f.snow);
         this.futureCloud.update(delta, f.wind, f.cloud);
 
         // Lightning check - if any zone has storms

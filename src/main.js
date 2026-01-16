@@ -35,7 +35,7 @@ composer.addPass(renderPass);
 
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
 bloomPass.threshold = 0.85; // Slightly lower threshold to catch more sun glow
-bloomPass.strength = 0.6;   // Increased intensity for "intense glow"
+bloomPass.strength = 0.65;  // Increased intensity for "intense glow"
 bloomPass.radius = 0.5;     // Slightly softer
 composer.addPass(bloomPass);
 
@@ -110,7 +110,7 @@ let weatherData = null;
 let simulationTime = new Date();
 let isTimeWarping = false;
 const REAL_TIME_SCALE = 1.0;
-const WARP_SCALE = 1440.0; // 24h in 60s -> 1440x
+const WARP_SCALE = 1440.0; // Time Lapse: 24h in 60s (1440x speed)
 
 function updateTimeDisplay() {
     const timeDisplay = document.getElementById('time-display');
@@ -221,12 +221,23 @@ function getWeatherAtTime(time, timeline) {
     const nextSev = getSeverity(next.weatherCode);
     const severity = prevSev + (nextSev - prevSev) * factor;
 
+    // Interpolate wind direction (handle 360 wrap)
+    let d1 = prev.windDirection || 0;
+    let d2 = next.windDirection || 0;
+    let diff = d2 - d1;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    let windDir = d1 + diff * factor;
+    if (windDir < 0) windDir += 360;
+    if (windDir >= 360) windDir -= 360;
+
     return {
         temp: prev.temp + (next.temp - prev.temp) * factor,
         weatherCode: weatherCode,
         description: description,
         cloudCover: prev.cloudCover + (next.cloudCover - prev.cloudCover) * factor,
         windSpeed: prev.windSpeed + (next.windSpeed - prev.windSpeed) * factor,
+        windDirection: windDir,
         visibility: (prev.visibility || 10000) + ((next.visibility || 10000) - (prev.visibility || 10000)) * factor,
         rain: (prev.rain || 0) + ((next.rain || 0) - (prev.rain || 0)) * factor,
         showers: (prev.showers || 0) + ((next.showers || 0) - (prev.showers || 0)) * factor,
@@ -451,14 +462,14 @@ function animate() {
             forecast: simForecast
         };
 
-        // Update Lighting
+        // Update Lighting (includes Sky Shader and Fog interpolation)
         updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, activeWeatherData, astroData);
 
         // Update Effects
         weatherEffects.update(
-            simPast || { weatherCode: 0, windSpeed: 0 },
-            simWeather || { weatherCode: 0, windSpeed: 0 },
-            simForecast || { weatherCode: 0, windSpeed: 0 },
+            simPast || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
+            simWeather || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
+            simForecast || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
             delta // We pass real delta for animation smoothness, not warped time
         );
 
@@ -474,9 +485,9 @@ function animate() {
 
     } else {
          weatherEffects.update(
-            { weatherCode: 0, windSpeed: 0 },
-            { weatherCode: 0, windSpeed: 0 },
-            { weatherCode: 0, windSpeed: 0 },
+            { weatherCode: 0, windSpeed: 0, windDirection: 0 },
+            { weatherCode: 0, windSpeed: 0, windDirection: 0 },
+            { weatherCode: 0, windSpeed: 0, windDirection: 0 },
             delta
         );
     }
