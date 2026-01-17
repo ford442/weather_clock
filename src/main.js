@@ -470,7 +470,8 @@ function animate() {
             simPast || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
             simWeather || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
             simForecast || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
-            delta // We pass real delta for animation smoothness, not warped time
+            delta, // We pass real delta for animation smoothness, not warped time
+            ambientLight.color // Pass ambient color for particle tinting
         );
 
         if (isTimeWarping && Math.random() < 0.1) { // Simple throttle
@@ -488,7 +489,8 @@ function animate() {
             { weatherCode: 0, windSpeed: 0, windDirection: 0 },
             { weatherCode: 0, windSpeed: 0, windDirection: 0 },
             { weatherCode: 0, windSpeed: 0, windDirection: 0 },
-            delta
+            delta,
+            ambientLight.color
         );
     }
 
