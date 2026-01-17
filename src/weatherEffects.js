@@ -230,7 +230,11 @@ class RainSystem extends ParticleSystemBase {
         this.states[i] = 0;
     }
 
-    update(delta, windSpeed, windDir, intensity, raycaster, sundialGroup, spawnSplashCallback) {
+    update(delta, windSpeed, windDir, intensity, raycaster, sundialGroup, spawnSplashCallback, lightColor) {
+        if (lightColor) {
+            this.mesh.material.uniforms.uColor.value.copy(lightColor);
+        }
+
         // Intensity is 0.0 to 1.0 (approx mm/h scaled)
         // Map intensity to opacity and count
         // Light rain (<0.5mm): Low count, low opacity
@@ -390,7 +394,11 @@ class SnowSystem extends ParticleSystemBase {
         this.mesh.visible = true;
     }
 
-    update(delta, windSpeed, windDir, intensity) {
+    update(delta, windSpeed, windDir, intensity, lightColor) {
+        if (lightColor) {
+            this.mesh.material.color.copy(lightColor);
+        }
+
         // Intensity 0-1 (cm of snow)
         let targetOp = 0;
         let activeCount = 0;
@@ -513,7 +521,11 @@ class CloudSystem extends ParticleSystemBase {
         this.clouds.push(cloud);
     }
 
-    update(delta, windSpeed, cloudCover) {
+    update(delta, windSpeed, cloudCover, lightColor) {
+        if (lightColor) {
+            this.material.color.copy(lightColor);
+        }
+
         // CloudCover 0-100
         let targetOp = 0;
         let activeClouds = 0;
@@ -606,7 +618,7 @@ export class WeatherEffects {
         this.createSplashes();
     }
 
-    update(past, current, forecast, delta = 0.016) {
+    update(past, current, forecast, delta = 0.016, lightColor) {
         if (this.flashIntensity > 0) {
             // Faster decay for a sharper "strike" feel (approx 0.1-0.2s duration)
             this.flashIntensity -= delta * 15.0;
@@ -627,19 +639,19 @@ export class WeatherEffects {
         const f = extractData(forecast);
 
         // Update Past
-        this.pastRain.update(delta, p.wind, p.dir, p.rain, this.raycaster, null, null);
-        this.pastSnow.update(delta, p.wind, p.dir, p.snow);
-        this.pastCloud.update(delta, p.wind, p.cloud);
+        this.pastRain.update(delta, p.wind, p.dir, p.rain, this.raycaster, null, null, lightColor);
+        this.pastSnow.update(delta, p.wind, p.dir, p.snow, lightColor);
+        this.pastCloud.update(delta, p.wind, p.cloud, lightColor);
 
         // Update Current (Center) - Passes sundial for collision
-        this.currRain.update(delta, c.wind, c.dir, c.rain, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos));
-        this.currSnow.update(delta, c.wind, c.dir, c.snow);
-        this.currCloud.update(delta, c.wind, c.cloud);
+        this.currRain.update(delta, c.wind, c.dir, c.rain, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos), lightColor);
+        this.currSnow.update(delta, c.wind, c.dir, c.snow, lightColor);
+        this.currCloud.update(delta, c.wind, c.cloud, lightColor);
 
         // Update Future
-        this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null);
-        this.futureSnow.update(delta, f.wind, f.dir, f.snow);
-        this.futureCloud.update(delta, f.wind, f.cloud);
+        this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null, lightColor);
+        this.futureSnow.update(delta, f.wind, f.dir, f.snow, lightColor);
+        this.futureCloud.update(delta, f.wind, f.cloud, lightColor);
 
         // Lightning check - if any zone has storms
         if (p.code >= 95 || c.code >= 95 || f.code >= 95) {
@@ -649,7 +661,7 @@ export class WeatherEffects {
              }
         }
 
-        this.updateSplashes();
+        this.updateSplashes(lightColor);
     }
 
     getLightningFlash() {
@@ -717,7 +729,11 @@ export class WeatherEffects {
         }
     }
 
-    updateSplashes() {
+    updateSplashes(lightColor) {
+        if (lightColor) {
+            this.splashSystem.material.uniforms.uColor.value.copy(lightColor);
+        }
+
         const positions = this.splashSystem.geometry.attributes.position.array;
         const life = this.splashSystem.geometry.attributes.life.array;
         let needsUpdate = false;
