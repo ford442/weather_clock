@@ -1,99 +1,47 @@
 import * as THREE from 'three';
-
-// Rain Shader: Fades out and expands
-const rainVertexShader = `
-uniform float uOpacity;
-varying float vOpacity;
-
-void main() {
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_Position = projectionMatrix * mvPosition;
-    float dist = length(mvPosition.xyz);
-    float alpha = smoothstep(2.0, 5.0, dist) * (1.0 - smoothstep(30.0, 50.0, dist));
-    vOpacity = alpha * uOpacity;
-}
-`;
-
-const rainFragmentShader = `
-uniform vec3 uColor;
-varying float vOpacity;
-
-void main() {
-    gl_FragColor = vec4(uColor, vOpacity);
-}
-`;
-
-// Splash Shader: Fades out and expands
-const splashVertexShader = `
-attribute float life;
-varying float vLife;
-
-void main() {
-    vLife = life;
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_Position = projectionMatrix * mvPosition;
-
-    // Attenuate size based on distance
-    float dist = length(mvPosition.xyz);
-    float size = 6.0 * (1.0 + (1.0 - life) * 1.0);
-    gl_PointSize = size * (20.0 / max(dist, 1.0));
-}
-`;
-
-const splashFragmentShader = `
-uniform vec3 uColor;
-varying float vLife;
-
-void main() {
-    float alpha = vLife;
-    if (alpha <= 0.0) discard;
-
-    // Circular particle
-    vec2 coord = gl_PointCoord - vec2(0.5);
-    float len = length(coord);
-    if(len > 0.5) discard;
-
-    // Soft edge
-    float softness = 1.0 - smoothstep(0.3, 0.5, len);
-
-    gl_FragColor = vec4(uColor, alpha * 0.8 * softness);
-}
-`;
+import {
+    rainVertexShader, rainFragmentShader,
+    splashVertexShader, splashFragmentShader,
+    cloudShaderInjection
+} from './shaders.js';
 
 function createCloudTexture() {
-    const size = 512; // Increased resolution for better noise detail
+    const size = 512;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const context = canvas.getContext('2d');
-    context.fillStyle = 'rgba(0,0,0,0)';
-    context.fillRect(0,0,size,size);
+    context.clearRect(0, 0, size, size);
 
-    // Advanced "Fractal-like" Noise generation for fluffiness
-    // We layer multiple radial puffs with varied opacity/size/position
+    // Advanced "Fluffy" Noise generation
     const cx = size/2;
     const cy = size/2;
-    const puffs = 60;
+    const puffs = 80; // Increased for more density
 
-    // Base large puffs for volume
+    // Create a radial gradient for the base shape to ensure edges fade to zero
+    const baseGrad = context.createRadialGradient(cx, cy, size * 0.1, cx, cy, size * 0.45);
+    baseGrad.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+    baseGrad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+    context.fillStyle = baseGrad;
+    context.fillRect(0,0,size,size);
+
     for (let i = 0; i < puffs; i++) {
         const angle = Math.random() * Math.PI * 2;
-        // Distribute using a power function to cluster near center but allow edges
-        const dist = Math.pow(Math.random(), 0.8) * (size * 0.35);
+        // Cluster more near center
+        const dist = Math.pow(Math.random(), 0.6) * (size * 0.35);
         const px = cx + Math.cos(angle) * dist;
         const py = cy + Math.sin(angle) * dist;
 
-        // Randomize radius: mix of large base blobs and smaller detail blobs
         const r = size * (0.05 + Math.random() * 0.15);
 
         const grad = context.createRadialGradient(px, py, 0, px, py, r);
-        const opacity = 0.1 + Math.random() * 0.2; // Lower opacity per puff for stacking
+        const opacity = 0.05 + Math.random() * 0.15;
 
-        // Slightly warm/cool white variance
-        const val = 240 + Math.random() * 15;
+        // Use slight off-white for depth in texture
+        const val = 245 + Math.random() * 10;
 
         grad.addColorStop(0, `rgba(${val}, ${val}, ${val}, ${opacity})`);
-        grad.addColorStop(0.5, `rgba(${val}, ${val}, ${val}, ${opacity * 0.5})`);
+        grad.addColorStop(0.4, `rgba(${val}, ${val}, ${val}, ${opacity * 0.6})`);
         grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
 
         context.fillStyle = grad;
@@ -102,28 +50,16 @@ function createCloudTexture() {
         context.fill();
     }
 
-    // Perlin-ish noise overlay on the alpha channel for texture
+    // Add noise
     const imgData = context.getImageData(0,0,size,size);
     const data = imgData.data;
 
     for(let i=0; i<data.length; i+=4) {
         if(data[i+3] > 0) {
-             // Simple high-frequency noise
-             const noise = (Math.random() - 0.5) * 30;
-             // Apply noise to RGB
+             const noise = (Math.random() - 0.5) * 20;
              data[i] = Math.max(0, Math.min(255, data[i] + noise));
              data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise));
              data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise));
-
-             // Soften alpha edges based on distance from center for a global "Cloud" shape falloff
-             const x = (i/4) % size;
-             const y = Math.floor((i/4) / size);
-             const dx = x - cx;
-             const dy = y - cy;
-             const d = Math.sqrt(dx*dx + dy*dy);
-             const falloff = 1.0 - smoothstep(size*0.3, size*0.5, d);
-
-             data[i+3] = data[i+3] * falloff;
         }
     }
     context.putImageData(imgData, 0, 0);
@@ -149,10 +85,10 @@ function curlNoise(x, y, z, time) {
 class ParticleSystemBase {
     constructor(scene) {
         this.scene = scene;
-        this.isActive = true; // Always "active" but maybe invisible
-        this.targetOpacity = 0.0; // Controlled by intensity
+        this.isActive = true;
+        this.targetOpacity = 0.0;
         this.currentOpacity = 0.0;
-        this.fadeSpeed = 0.2; // Speed of opacity change per second (5 seconds transition)
+        this.fadeSpeed = 0.2;
     }
 
     updateOpacity(delta, target) {
@@ -177,7 +113,7 @@ class RainSystem extends ParticleSystemBase {
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(maxParticles * 6);
         const velocities = new Float32Array(maxParticles * 3);
-        const states = new Int8Array(maxParticles); // 0=falling
+        const states = new Int8Array(maxParticles);
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
@@ -199,7 +135,6 @@ class RainSystem extends ParticleSystemBase {
         this.velocities = velocities;
         this.states = states;
 
-        // Initialize all particles
         for (let i = 0; i < maxParticles; i++) {
             this.resetParticle(i, true);
         }
@@ -211,7 +146,6 @@ class RainSystem extends ParticleSystemBase {
         const i6 = i * 6;
         const positions = this.mesh.geometry.attributes.position.array;
 
-        // Spawn anywhere in the zone width
         const x = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
         const y = randomY ? (Math.random() * 20 - 5) : (15 + Math.random() * 5);
         const z = Math.random() * 10 - 5;
@@ -235,19 +169,13 @@ class RainSystem extends ParticleSystemBase {
             this.mesh.material.uniforms.uColor.value.copy(lightColor);
         }
 
-        // Intensity is 0.0 to 1.0 (approx mm/h scaled)
-        // Map intensity to opacity and count
-        // Light rain (<0.5mm): Low count, low opacity
-        // Heavy rain (>2.0mm): High count, high opacity
-
         let targetOp = 0;
         let activeCount = 0;
 
         if (intensity > 0.01) {
             targetOp = Math.min(0.9, 0.3 + intensity * 0.2);
             activeCount = Math.min(this.maxParticles, Math.floor(intensity * 1000));
-            // Clamp min count for visibility if it's raining at all
-            if (activeCount < 50) activeCount = 50; // Reduced min for smaller zones
+            if (activeCount < 50) activeCount = 50;
             if (activeCount > this.maxParticles) activeCount = this.maxParticles;
         }
 
@@ -260,23 +188,19 @@ class RainSystem extends ParticleSystemBase {
         }
         this.mesh.visible = true;
 
-        // Set draw range to control density
         this.mesh.geometry.setDrawRange(0, activeCount * 2);
 
         const positions = this.mesh.geometry.attributes.position.array;
-
-        // Calculate wind vector from Speed (km/h) and Direction (Degrees 0-360)
         const rad = (90 - windDir) * Math.PI / 180;
-        const speedScale = 0.005; // Tuned for visual scale
+        const speedScale = 0.005;
         const targetWindX = Math.cos(rad) * windSpeed * speedScale;
-        const targetWindZ = -Math.sin(rad) * windSpeed * speedScale; // Z is inverted in 3D space relative to screen y
+        const targetWindZ = -Math.sin(rad) * windSpeed * speedScale;
 
         for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
             const i6 = i * 6;
 
             if (this.states[i] === 0) {
-                // Smoothly interpolate velocity towards target wind
                 this.velocities[i3] += (targetWindX - this.velocities[i3]) * 0.1;
                 this.velocities[i3+2] += (targetWindZ - this.velocities[i3+2]) * 0.1;
 
@@ -288,13 +212,11 @@ class RainSystem extends ParticleSystemBase {
                 positions[i6+4] += vy;
                 positions[i6+5] += vz;
 
-                // Stretch streak based on velocity
                 const streak = 3.0;
                 positions[i6] = positions[i6+3] - vx * streak;
                 positions[i6+1] = positions[i6+4] - vy * streak;
                 positions[i6+2] = positions[i6+5] - vz * streak;
 
-                // Wrap
                 if (positions[i6+3] > this.zone.maxX) {
                     const w = this.zone.maxX - this.zone.minX;
                     positions[i6+3] -= w; positions[i6] -= w;
@@ -303,34 +225,22 @@ class RainSystem extends ParticleSystemBase {
                     positions[i6+3] += w; positions[i6] += w;
                 }
 
-                // Collision
                 const headY = positions[i6+4];
                 if (headY > -1 && headY < 4) {
-                    // Only check collision if sundialGroup is provided (Present zone)
                     if (sundialGroup) {
                         const headX = positions[i6+3];
                         const headZ = positions[i6+5];
                         const distSq = headX*headX + headZ*headZ;
 
-                        // Precise geometric check for Sundial
-                        // Bounding circle: Radius 3.25 (squared ~10.56)
                         if (distSq < 10.6) {
                             const dist = Math.sqrt(distSq);
                             let surfaceY = -100;
-
-                            // Tiers matching src/sundial.js geometry:
-                            // 1. Clock Face (Cylinder Radius 2.8, Top Y = 0.25)
-                            // 2. Base Top Ring (Cylinder Top Radius 3.0, Top Y = 0.15)
-                            // 3. Base Slope (Cylinder 3.0 to 3.2, Y 0.15 to -0.15)
 
                             if (dist < 2.8) {
                                 surfaceY = 0.25;
                             } else if (dist < 3.0) {
                                 surfaceY = 0.15;
                             } else if (dist < 3.2) {
-                                // Linear interpolation for the slope
-                                // dist 3.0 -> y 0.15
-                                // dist 3.2 -> y -0.15
                                 surfaceY = 0.15 - ((dist - 3.0) / 0.2) * 0.3;
                             }
 
@@ -378,7 +288,6 @@ class SnowSystem extends ParticleSystemBase {
         this.velocities = velocities;
         this.offsets = offsets;
 
-        // Init
         const posAttr = this.mesh.geometry.attributes.position.array;
         for (let i = 0; i < maxParticles; i++) {
             posAttr[i*3] = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
@@ -399,7 +308,6 @@ class SnowSystem extends ParticleSystemBase {
             this.mesh.material.color.copy(lightColor);
         }
 
-        // Intensity 0-1 (cm of snow)
         let targetOp = 0;
         let activeCount = 0;
 
@@ -423,9 +331,8 @@ class SnowSystem extends ParticleSystemBase {
         const positions = this.mesh.geometry.attributes.position.array;
         const time = Date.now() * 0.001;
 
-        // Wind Vector
         const rad = (90 - windDir) * Math.PI / 180;
-        const speedScale = 0.002; // Snow is lighter, affected more by air but moves slower
+        const speedScale = 0.002;
         const wX = Math.cos(rad) * windSpeed * speedScale;
         const wZ = -Math.sin(rad) * windSpeed * speedScale;
 
@@ -441,7 +348,6 @@ class SnowSystem extends ParticleSystemBase {
             positions[i3+1] += this.velocities[i3+1] + curl.y * 0.05;
             positions[i3+2] += this.velocities[i3+2] + wZ + curl.z * 0.05;
 
-            // Wrap
             if (positions[i3] > this.zone.maxX) positions[i3] -= (this.zone.maxX - this.zone.minX);
             if (positions[i3] < this.zone.minX) positions[i3] += (this.zone.maxX - this.zone.minX);
 
@@ -472,6 +378,9 @@ class CloudSystem extends ParticleSystemBase {
             side: THREE.DoubleSide
         });
 
+        // Inject Volumetric Shader Logic
+        this.material.onBeforeCompile = cloudShaderInjection.onBeforeCompile;
+
         const geometry = new THREE.PlaneGeometry(1, 1);
         this.mesh = new THREE.InstancedMesh(geometry, this.material, this.totalInstances);
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -480,12 +389,10 @@ class CloudSystem extends ParticleSystemBase {
         this.clouds = [];
         this.dummy = new THREE.Object3D();
 
-        // Init clouds
         for(let i=0; i<maxClouds; i++) {
             this.addCloud();
         }
 
-        // Hide initially
         for(let i=0; i<this.totalInstances; i++) {
              this.dummy.position.set(0, -1000, 0);
              this.dummy.updateMatrix();
@@ -521,12 +428,26 @@ class CloudSystem extends ParticleSystemBase {
         this.clouds.push(cloud);
     }
 
-    update(delta, windSpeed, cloudCover, lightColor) {
-        if (lightColor) {
-            this.material.color.copy(lightColor);
+    update(delta, windSpeed, cloudCover, lightColor, sunPos, moonPos, sunColor, moonColor) {
+        // We now update uniforms instead of just color
+        if (this.material.userData.shader) { // Shader might not be compiled yet
+            // Wait, we used shared uniforms object in cloudShaderInjection
+            // So we can just update those values directly!
+            // BUT we must be careful if we have multiple cloud systems sharing the same uniform object reference.
+            // If they share `cloudShaderInjection.uniforms`, updating it updates ALL of them.
+            // That's actually desired since sun/moon are global.
+            // However, `uCloudColor` might need to be instance specific or per-system.
+            // In the injection, I used `uCloudColor`.
+
+            // Actually, lightColor passed here is the Ambient tint.
+            // We should use that for `uCloudColor` or `uAmbientColor`.
+            if (lightColor) cloudShaderInjection.uniforms.uAmbientColor.value.copy(lightColor);
+            if (sunPos) cloudShaderInjection.uniforms.uSunPosition.value.copy(sunPos);
+            if (moonPos) cloudShaderInjection.uniforms.uMoonPosition.value.copy(moonPos);
+            if (sunColor) cloudShaderInjection.uniforms.uSunColor.value.copy(sunColor);
+            if (moonColor) cloudShaderInjection.uniforms.uMoonColor.value.copy(moonColor);
         }
 
-        // CloudCover 0-100
         let targetOp = 0;
         let activeClouds = 0;
 
@@ -535,7 +456,6 @@ class CloudSystem extends ParticleSystemBase {
             activeClouds = Math.floor((cloudCover / 100.0) * this.maxClouds);
         }
 
-        // Increase base visibility for verification if high cloud cover
         if (cloudCover > 80) targetOp = Math.max(targetOp, 0.6);
 
         const opacity = this.updateOpacity(delta, targetOp);
@@ -549,18 +469,14 @@ class CloudSystem extends ParticleSystemBase {
 
         const camQuat = this.camera.quaternion;
 
-        // Only update active clouds
         for (let i = 0; i < this.clouds.length; i++) {
             const cloud = this.clouds[i];
 
-            // Move cloud
             const moveSpeed = (0.05 + windSpeed * 0.01) * delta;
             cloud.x += moveSpeed;
             if (cloud.x > this.zone.maxX) cloud.x = this.zone.minX;
             if (cloud.x < this.zone.minX) cloud.x = this.zone.maxX;
 
-            // If this cloud is "active" (based on density), draw it. Else hide it.
-            // We can just hide it by moving to -1000
             const isVisible = i < activeClouds;
 
             cloud.indices.forEach((idx, j) => {
@@ -596,18 +512,14 @@ export class WeatherEffects {
         const currZone = { minX: -4, maxX: 4 };
         const futureZone = { minX: 4, maxX: 12 };
 
-        // Persistent systems for 3 Zones
-        // Past (Left)
         this.pastRain = new RainSystem(scene, pastZone, 2000);
         this.pastSnow = new SnowSystem(scene, pastZone, 1500);
         this.pastCloud = new CloudSystem(scene, camera, pastZone, 20);
 
-        // Current (Center)
         this.currRain = new RainSystem(scene, currZone, 2000);
         this.currSnow = new SnowSystem(scene, currZone, 1500);
         this.currCloud = new CloudSystem(scene, camera, currZone, 20);
 
-        // Future (Right)
         this.futureRain = new RainSystem(scene, futureZone, 2000);
         this.futureSnow = new SnowSystem(scene, futureZone, 1500);
         this.futureCloud = new CloudSystem(scene, camera, futureZone, 20);
@@ -618,9 +530,8 @@ export class WeatherEffects {
         this.createSplashes();
     }
 
-    update(past, current, forecast, delta = 0.016, lightColor) {
+    update(past, current, forecast, delta = 0.016, lightColor, sunPos, moonPos, sunColor, moonColor) {
         if (this.flashIntensity > 0) {
-            // Faster decay for a sharper "strike" feel (approx 0.1-0.2s duration)
             this.flashIntensity -= delta * 15.0;
             if (this.flashIntensity < 0) this.flashIntensity = 0;
         }
@@ -638,24 +549,19 @@ export class WeatherEffects {
         const c = extractData(current);
         const f = extractData(forecast);
 
-        // Update Past
         this.pastRain.update(delta, p.wind, p.dir, p.rain, this.raycaster, null, null, lightColor);
         this.pastSnow.update(delta, p.wind, p.dir, p.snow, lightColor);
-        this.pastCloud.update(delta, p.wind, p.cloud, lightColor);
+        this.pastCloud.update(delta, p.wind, p.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
 
-        // Update Current (Center) - Passes sundial for collision
         this.currRain.update(delta, c.wind, c.dir, c.rain, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos), lightColor);
         this.currSnow.update(delta, c.wind, c.dir, c.snow, lightColor);
-        this.currCloud.update(delta, c.wind, c.cloud, lightColor);
+        this.currCloud.update(delta, c.wind, c.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
 
-        // Update Future
         this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null, lightColor);
         this.futureSnow.update(delta, f.wind, f.dir, f.snow, lightColor);
-        this.futureCloud.update(delta, f.wind, f.cloud, lightColor);
+        this.futureCloud.update(delta, f.wind, f.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
 
-        // Lightning check - if any zone has storms
         if (p.code >= 95 || c.code >= 95 || f.code >= 95) {
-             // Random lightning trigger
              if (Math.random() < 0.01) {
                  this.createLightning();
              }
@@ -685,7 +591,6 @@ export class WeatherEffects {
         const positions = new Float32Array(particleCount * 3);
         const life = new Float32Array(particleCount);
 
-        // Init offscreen
         for(let i=0; i<particleCount*3; i++) positions[i] = -100;
         for(let i=0; i<particleCount; i++) life[i] = 0;
 
@@ -694,7 +599,7 @@ export class WeatherEffects {
 
         const material = new THREE.ShaderMaterial({
             uniforms: {
-                uColor: { value: new THREE.Color(0xffffff) } // Pure White
+                uColor: { value: new THREE.Color(0xffffff) }
             },
             vertexShader: splashVertexShader,
             fragmentShader: splashFragmentShader,
@@ -703,7 +608,6 @@ export class WeatherEffects {
         });
 
         this.splashSystem = new THREE.Points(geometry, material);
-        // Ensure not frustrated by frustum culling if bounds are weird
         this.splashSystem.frustumCulled = false;
         this.scene.add(this.splashSystem);
     }
@@ -712,16 +616,13 @@ export class WeatherEffects {
         const positions = this.splashSystem.geometry.attributes.position.array;
         const life = this.splashSystem.geometry.attributes.life.array;
 
-        // Find a dead particle
         for(let i=0; i<life.length; i++) {
             if (life[i] <= 0) {
                 life[i] = 1.0;
                 positions[i*3] = pos.x;
-                // Lift slightly above surface to avoid z-fighting if colliding with flat surface
                 positions[i*3+1] = pos.y + 0.02;
                 positions[i*3+2] = pos.z;
 
-                // Mark for update
                 this.splashSystem.geometry.attributes.life.needsUpdate = true;
                 this.splashSystem.geometry.attributes.position.needsUpdate = true;
                 break;
@@ -740,10 +641,10 @@ export class WeatherEffects {
 
         for(let i=0; i<life.length; i++) {
             if (life[i] > 0) {
-                life[i] -= 0.05; // Fade out speed
+                life[i] -= 0.05;
                 if (life[i] <= 0) {
                     life[i] = 0;
-                    positions[i*3] = -100; // Hide
+                    positions[i*3] = -100;
                 }
                 needsUpdate = true;
             }
