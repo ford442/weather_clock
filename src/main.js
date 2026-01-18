@@ -52,7 +52,7 @@ skyUniforms['mieDirectionalG'].value = 0.7;
 // Since Sky is a large box, and FogExp2 is distance based, we just need to ensure Sky renders correctly.
 // Disabling depth write for Sky is common.
 sky.material.depthWrite = false;
-sky.material.fog = false;
+sky.material.fog = false; // Disable fog on sky material
 sky.frustumCulled = false; // Ensure it's not culled
 scene.add(sky);
 
@@ -463,7 +463,10 @@ function animate() {
         };
 
         // Update Lighting (includes Sky Shader and Fog interpolation)
+    // Ensure sun position is valid before updating sky
+    if (astroData && astroData.sunPosition && astroData.sunPosition.lengthSq() > 0) {
         updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, activeWeatherData, astroData);
+    }
 
         // Update Effects
         weatherEffects.update(
@@ -471,7 +474,11 @@ function animate() {
             simWeather || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
             simForecast || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
             delta, // We pass real delta for animation smoothness, not warped time
-            ambientLight.color // Pass ambient color for particle tinting
+            ambientLight.color, // Pass ambient color for particle tinting
+            sunLight.position,
+            moonLight.position,
+            sunLight.color,
+            moonLight.color
         );
 
         if (isTimeWarping && Math.random() < 0.1) { // Simple throttle
