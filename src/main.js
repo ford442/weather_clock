@@ -118,6 +118,15 @@ function updateTimeDisplay() {
         const hours = simulationTime.getHours().toString().padStart(2, '0');
         const minutes = simulationTime.getMinutes().toString().padStart(2, '0');
         timeDisplay.textContent = `${hours}:${minutes}`;
+
+        // Add Sim Speed indicator
+        if (isTimeWarping) {
+             timeDisplay.style.color = '#ffaa44';
+             timeDisplay.style.textShadow = '0 0 10px #ffaa44';
+        } else {
+             timeDisplay.style.color = '#ffffff';
+             timeDisplay.style.textShadow = '0 0 5px #000000';
+        }
     }
 }
 
