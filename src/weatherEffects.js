@@ -236,11 +236,19 @@ class RainSystem extends ParticleSystemBase {
                             const dist = Math.sqrt(distSq);
                             let surfaceY = -100;
 
+                            // Sundial Geometry Check (see src/sundial.js)
+                            // Face: r=2.8, y=0.2 (cylinder top is at y=0.2 due to position.y=0.2 and height=0.1?? No)
+                            // Base: r=3.2, height=0.3. Top at y=0.15.
+                            // Face: height=0.1. Pos y=0.2. So Top is at 0.2 + 0.05 = 0.25. Bottom at 0.15.
+                            // Base: height=0.3. Pos y=0 (default). Top at 0.15.
+
+                            // Accurate collision layers:
                             if (dist < 2.8) {
-                                surfaceY = 0.25;
+                                surfaceY = 0.25; // Hit Clock Face
                             } else if (dist < 3.0) {
-                                surfaceY = 0.15;
+                                surfaceY = 0.15; // Hit Base Top
                             } else if (dist < 3.2) {
+                                // Hit Base Slope (approximate)
                                 surfaceY = 0.15 - ((dist - 3.0) / 0.2) * 0.3;
                             }
 
