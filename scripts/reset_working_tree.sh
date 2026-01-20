@@ -20,4 +20,4 @@ esac
 git reset --hard
 git clean -fd
 
-echo "HEAD is now at 3c8b97f Merge pull request #34 from ford442/enhance-atmosphere-timelapse-13787162779779197825"
+git log -1 --format="HEAD is now at %h %s"
