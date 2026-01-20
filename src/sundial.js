@@ -1,29 +1,54 @@
 import * as THREE from 'three';
 
+export const SUNDIAL_DIMENSIONS = {
+    base: {
+        radiusTop: 3.0,
+        radiusBottom: 3.2,
+        height: 0.3,
+        y: 0
+    },
+    face: {
+        radius: 2.8,
+        height: 0.1,
+        y: 0.2
+    }
+};
+
 export function createSundial() {
     const group = new THREE.Group();
 
     // Create base/platform
-    const baseGeometry = new THREE.CylinderGeometry(3, 3.2, 0.3, 32);
+    const baseGeometry = new THREE.CylinderGeometry(
+        SUNDIAL_DIMENSIONS.base.radiusTop,
+        SUNDIAL_DIMENSIONS.base.radiusBottom,
+        SUNDIAL_DIMENSIONS.base.height,
+        32
+    );
     const baseMaterial = new THREE.MeshStandardMaterial({
         color: 0x8b7355,
         metalness: 0.3,
         roughness: 0.7
     });
     const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    base.position.y = SUNDIAL_DIMENSIONS.base.y; // Explicitly set
     base.receiveShadow = true;
     base.castShadow = true;
     group.add(base);
 
     // Create clock face
-    const faceGeometry = new THREE.CylinderGeometry(2.8, 2.8, 0.1, 64);
+    const faceGeometry = new THREE.CylinderGeometry(
+        SUNDIAL_DIMENSIONS.face.radius,
+        SUNDIAL_DIMENSIONS.face.radius,
+        SUNDIAL_DIMENSIONS.face.height,
+        64
+    );
     const faceMaterial = new THREE.MeshStandardMaterial({
         color: 0xf5f5dc,
         metalness: 0.1,
         roughness: 0.5
     });
     const face = new THREE.Mesh(faceGeometry, faceMaterial);
-    face.position.y = 0.2;
+    face.position.y = SUNDIAL_DIMENSIONS.face.y;
     face.receiveShadow = true;
     face.castShadow = true;
     group.add(face);
