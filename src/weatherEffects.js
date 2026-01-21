@@ -4,6 +4,7 @@ import {
     splashVertexShader, splashFragmentShader,
     cloudShaderInjection
 } from './shaders.js';
+import { SUNDIAL_DIMENSIONS } from './sundial.js';
 
 function createCloudTexture() {
     const size = 512;
@@ -232,24 +233,27 @@ class RainSystem extends ParticleSystemBase {
                         const headZ = positions[i6+5];
                         const distSq = headX*headX + headZ*headZ;
 
-                        if (distSq < 10.6) {
+                        // Max radius check (squared)
+                        // Base radius bottom is 3.2. Let's add slight margin.
+                        const maxR = SUNDIAL_DIMENSIONS.base.radiusBottom + 0.1;
+                        if (distSq < maxR * maxR) {
                             const dist = Math.sqrt(distSq);
                             let surfaceY = -100;
 
-                            // Sundial Geometry Check (see src/sundial.js)
-                            // Face: r=2.8, y=0.2 (cylinder top is at y=0.2 due to position.y=0.2 and height=0.1?? No)
-                            // Base: r=3.2, height=0.3. Top at y=0.15.
-                            // Face: height=0.1. Pos y=0.2. So Top is at 0.2 + 0.05 = 0.25. Bottom at 0.15.
-                            // Base: height=0.3. Pos y=0 (default). Top at 0.15.
+                            const faceTop = SUNDIAL_DIMENSIONS.face.y + SUNDIAL_DIMENSIONS.face.height / 2;
+                            const baseTop = SUNDIAL_DIMENSIONS.base.y + SUNDIAL_DIMENSIONS.base.height / 2;
+                            const baseBottom = SUNDIAL_DIMENSIONS.base.y - SUNDIAL_DIMENSIONS.base.height / 2;
 
-                            // Accurate collision layers:
-                            if (dist < 2.8) {
-                                surfaceY = 0.25; // Hit Clock Face
-                            } else if (dist < 3.0) {
-                                surfaceY = 0.15; // Hit Base Top
-                            } else if (dist < 3.2) {
-                                // Hit Base Slope (approximate)
-                                surfaceY = 0.15 - ((dist - 3.0) / 0.2) * 0.3;
+                            if (dist < SUNDIAL_DIMENSIONS.face.radius) {
+                                surfaceY = faceTop; // Hit Clock Face
+                            } else if (dist < SUNDIAL_DIMENSIONS.base.radiusTop) {
+                                surfaceY = baseTop; // Hit Base Top
+                            } else if (dist < SUNDIAL_DIMENSIONS.base.radiusBottom) {
+                                // Hit Base Slope
+                                const r1 = SUNDIAL_DIMENSIONS.base.radiusTop;
+                                const r2 = SUNDIAL_DIMENSIONS.base.radiusBottom;
+                                const factor = (dist - r1) / (r2 - r1);
+                                surfaceY = baseTop - factor * (baseTop - baseBottom);
                             }
 
                             if (surfaceY > -99 && headY < surfaceY) {

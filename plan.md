@@ -5,8 +5,8 @@ Transform `weather_clock` from a data dashboard into a **photorealistic window t
 
 ## Core Directives
 - **Atmosphere**: GLSL Sky Shader, Volumetric Fog, Bloom (Implemented).
-- **Time**: Decoupled simulation time, Time-Lapse/Fast Forward (Implemented, refining).
-- **Weather**: Particle systems for rain/snow/clouds, wind influence (Implemented, refining).
+- **Time**: Decoupled simulation time, Time-Lapse/Fast Forward (Implemented).
+- **Weather**: Particle systems for rain/snow/clouds, wind influence (Implemented).
 
 ## Implementation Status
 
@@ -16,25 +16,21 @@ Transform `weather_clock` from a data dashboard into a **photorealistic window t
 - [x] **Post-Processing**: `EffectComposer` with `UnrealBloomPass` for intense sun/moon glow.
 - [x] **Lighting**: Dynamic sun/moon intensity and color based on cloud cover and elevation.
 
-### 2. Particle Evolution (Completed & Polishing)
-- [x] **Clouds**: `InstancedMesh` with noise textures.
+### 2. Particle Evolution (Completed)
+- [x] **Clouds**: `InstancedMesh` with noise textures and volumetric shader injection.
 - [x] **Precipitation**: `RainSystem` and `SnowSystem` using object pooling.
-- [x] **Interaction**: Rain splashes on sundial (Collision detection implemented).
+- [x] **Interaction**: Rain splashes on sundial (Collision detection implemented and verified).
 - [x] **Wind**: Particles respond to wind speed.
-- [ ] **Polish**: Fix Raycaster range for splashes.
+- [x] **Visual Polish**: Rain fades close to camera, correct geometry collision.
 
-### 3. Time Logic (Refining)
+### 3. Time Logic (Completed)
 - [x] **Decouple Time**: `simulationTime` variable drives sun/moon position.
 - [x] **Time-Lapse**: `WARP_SCALE` (1440x) implemented.
-- [ ] **True Weather Simulation**: Ensure weather *conditions* (rain, clouds) change according to `simulationTime` during fast-forward, not just static "current" weather.
+- [x] **True Weather Simulation**: Weather conditions interpolated from 24h timeline during fast-forward.
 
-## Next Steps (The Aether Polish)
-1.  **True Time-Lapse Weather**:
-    - Modify `WeatherService` to expose a full 24h timeline of hourly weather.
-    - Update `main.js` to sample this timeline based on `simulationTime`.
-2.  **Visual Polish**:
-    - Fix collision detection range for rain splashes.
-    - Ensure smooth interpolation between hourly weather data points.
+## Next Steps
+- [ ] **Performance Tuning**: Monitor FPS on lower-end devices.
+- [ ] **Advanced Features**: Seasonal sun altitude adjustments (currently relies on SunCalc which handles this naturally).
 
 ## Developer Notes
 - `src/weatherLighting.js` handles all lighting transitions.
