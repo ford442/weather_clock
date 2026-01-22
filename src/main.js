@@ -188,6 +188,15 @@ window.setDebugWeather = (weatherCode) => {
     updateWeatherDisplay(mock);
 };
 
+window.setDebugTime = (hour) => {
+    simulationTime.setHours(hour, 0, 0, 0);
+    // Force update
+    if (weatherData) {
+         updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, weatherData, astronomyService.update(simulationTime, weatherService.latitude, weatherService.longitude, 20));
+         updateTimeDisplay();
+    }
+};
+
 // Helper to find interpolated weather from timeline
 function getWeatherAtTime(time, timeline) {
     if (!timeline || timeline.length === 0) return null;
