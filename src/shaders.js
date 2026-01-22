@@ -89,8 +89,9 @@ export const cloudShaderInjection = {
             // Calculate world position
             // For InstancedMesh, 'transformed' is already applied with instanceMatrix
             // So we just need to apply modelMatrix
-            vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
-            vWorldPosition = worldPosition.xyz;
+            // Rename to avoid conflict with built-in worldPosition in some chunks
+            vec4 myWorldPosition = modelMatrix * vec4(transformed, 1.0);
+            vWorldPosition = myWorldPosition.xyz;
             #include <project_vertex>
             `
         );
