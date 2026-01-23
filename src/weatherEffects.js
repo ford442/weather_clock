@@ -539,6 +539,12 @@ export class WeatherEffects {
         this.raycaster = new THREE.Raycaster();
         this.downVector = new THREE.Vector3(0, -1, 0);
         this.flashIntensity = 0;
+
+        // Pooled lightning light
+        this.lightningLight = new THREE.PointLight(0xaaddff, 5, 50);
+        this.lightningLight.visible = false;
+        this.scene.add(this.lightningLight);
+
         this.createSplashes();
     }
 
@@ -590,10 +596,15 @@ export class WeatherEffects {
         if (this.flashIntensity > 0.5) return;
 
         const zone = { minX: -8, maxX: 8 };
-        const flash = new THREE.PointLight(0xaaddff, 5, 50);
-        flash.position.set(zone.minX + Math.random() * (zone.maxX - zone.minX), 10, Math.random() * 10 - 5);
-        this.scene.add(flash);
-        setTimeout(() => this.scene.remove(flash), 100 + Math.random()*100);
+        // Reuse pooled light
+        this.lightningLight.position.set(zone.minX + Math.random() * (zone.maxX - zone.minX), 10, Math.random() * 10 - 5);
+        this.lightningLight.visible = true;
+
+        // Hide after random duration
+        setTimeout(() => {
+            this.lightningLight.visible = false;
+        }, 100 + Math.random() * 100);
+
         this.flashIntensity = 2.0;
     }
 
