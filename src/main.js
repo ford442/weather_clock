@@ -200,6 +200,8 @@ window.aetherDebug = {
     ambientLight,
     getSimulationTime: () => simulationTime,
     getWeatherData: () => weatherData
+};
+
 window.setDebugTime = (hour) => {
     simulationTime.setHours(hour, 0, 0, 0);
     // Force update
