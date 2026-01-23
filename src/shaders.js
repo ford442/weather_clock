@@ -8,9 +8,10 @@ void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     float dist = length(mvPosition.xyz);
-    // Fade out if too close (< 2.0) or too far (> 30.0)
+    // Fade out if too close (< 1.0) or too far (> 30.0)
     // "Fade out close particles" - prompt requirement
-    float alpha = smoothstep(2.0, 5.0, dist) * (1.0 - smoothstep(30.0, 50.0, dist));
+    // Tuned for immersion: allow rain closer (1.0-4.0 fade)
+    float alpha = smoothstep(1.0, 4.0, dist) * (1.0 - smoothstep(30.0, 50.0, dist));
     vOpacity = alpha * uOpacity;
 }
 `;
@@ -86,12 +87,13 @@ export const cloudShaderInjection = {
         shader.vertexShader = shader.vertexShader.replace(
             '#include <project_vertex>',
             `
-            // Calculate world position
-            // For InstancedMesh, 'transformed' is already applied with instanceMatrix
-            // So we just need to apply modelMatrix
-            // Rename to avoid conflict with built-in worldPosition in some chunks
-            vec4 myWorldPosition = modelMatrix * vec4(transformed, 1.0);
+            vec4 myWorldPosition = vec4(transformed, 1.0);
+            #ifdef USE_INSTANCING
+                myWorldPosition = instanceMatrix * myWorldPosition;
+            #endif
+            myWorldPosition = modelMatrix * myWorldPosition;
             vWorldPosition = myWorldPosition.xyz;
+
             #include <project_vertex>
             `
         );
