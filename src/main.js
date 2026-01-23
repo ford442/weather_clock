@@ -109,6 +109,7 @@ const astronomyService = new AstronomyService();
 let weatherData = null;
 let simulationTime = new Date();
 let isTimeWarping = false;
+let isDebugMode = false;
 const REAL_TIME_SCALE = 1.0;
 const WARP_SCALE = 1440.0; // Time Lapse: 24h in 60s (1440x speed)
 
@@ -133,6 +134,7 @@ function updateTimeDisplay() {
 // Debug API for Verification
 window.setDebugWeather = (weatherCode) => {
     console.log("Setting debug weather code:", weatherCode);
+    isDebugMode = true;
 
     // Generate Timeline
     const timeline = [];
@@ -188,6 +190,16 @@ window.setDebugWeather = (weatherCode) => {
     updateWeatherDisplay(mock);
 };
 
+// Expose internal objects for Verification
+window.aetherDebug = {
+    scene,
+    sky,
+    weatherEffects,
+    sunLight,
+    moonLight,
+    ambientLight,
+    getSimulationTime: () => simulationTime,
+    getWeatherData: () => weatherData
 window.setDebugTime = (hour) => {
     simulationTime.setHours(hour, 0, 0, 0);
     // Force update
@@ -280,8 +292,10 @@ function init() {
 }
 
 function fetchAndDisplayWeather() {
+    if (isDebugMode) return;
     document.getElementById('location').textContent = 'Loading...';
     weatherService.initialize().then(data => {
+        if (isDebugMode) return;
         weatherData = data;
         updateWeatherDisplay(weatherData);
     }).catch(error => {
@@ -546,8 +560,11 @@ init();
 
 // Refresh weather data every 10 minutes
 setInterval(async () => {
+    if (isDebugMode) return;
     try {
-        weatherData = await weatherService.fetchWeather();
+        const data = await weatherService.fetchWeather();
+        if (isDebugMode) return;
+        weatherData = data;
         updateWeatherDisplay(weatherData);
     } catch (error) {
         console.error('Weather update failed:', error);
