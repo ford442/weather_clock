@@ -110,13 +110,13 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
 
         // Use Sun position for scattering
         let scatteringSource = sunLight.position.clone();
+        let isMoonSource = false;
 
         // If Sun is down, use Moon for scattering to keep sky interesting (Moonlight)
         // Check elevation
         if (scatteringSource.y < -0.1 && moonLight && moonLight.position.y > 0) {
             scatteringSource.copy(moonLight.position);
-            // Lower intensity/Rayleigh for moon?
-            // For now just position.
+            isMoonSource = true;
         }
 
         uniforms['sunPosition'].value.copy(scatteringSource).normalize();
