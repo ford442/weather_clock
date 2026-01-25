@@ -75,6 +75,7 @@ sunLight.shadow.camera.left = -10;
 sunLight.shadow.camera.right = 10;
 sunLight.shadow.camera.top = 10;
 sunLight.shadow.camera.bottom = -10;
+sunLight.shadow.bias = -0.0005; // Prevent shadow acne
 scene.add(sunLight);
 
 // Create sundial
@@ -119,6 +120,12 @@ function updateTimeDisplay() {
         const hours = simulationTime.getHours().toString().padStart(2, '0');
         const minutes = simulationTime.getMinutes().toString().padStart(2, '0');
         timeDisplay.textContent = `${hours}:${minutes}`;
+
+        const dateDisplay = document.getElementById('date-display');
+        if (dateDisplay) {
+            const options = { weekday: 'short', month: 'short', day: 'numeric' };
+            dateDisplay.textContent = simulationTime.toLocaleDateString('en-US', options);
+        }
 
         // Add Sim Speed indicator
         if (isTimeWarping) {

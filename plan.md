@@ -30,7 +30,11 @@ Transform `weather_clock` from a data dashboard into a **photorealistic window t
 
 ## Next Steps
 - [ ] **Performance Tuning**: Monitor FPS on lower-end devices.
-- [ ] **Advanced Features**: Seasonal sun altitude adjustments (currently relies on SunCalc which handles this naturally).
+
+## Recently Completed
+- [x] **Date Display**: Added UI element to show Month/Day, enhancing "Feel the Time".
+- [x] **Visual Polish**: Refined shadow map bias for better sundial rendering.
+- [x] **Advanced Features**: Seasonal sun altitude adjustments (Verified: handled naturally by SunCalc).
 
 ## Developer Notes
 - `src/weatherLighting.js` handles all lighting transitions.
