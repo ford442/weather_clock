@@ -108,6 +108,7 @@ class ParticleSystemBase {
 class RainSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 1500) {
         super(scene);
+        this.currentIntensity = 0;
         this.maxParticles = maxParticles;
         this.zone = zone || { minX: -8, maxX: 8 };
 
@@ -170,12 +171,16 @@ class RainSystem extends ParticleSystemBase {
             this.mesh.material.uniforms.uColor.value.copy(lightColor);
         }
 
+        // Smooth intensity transition (approx 5s)
+        const smoothFactor = Math.min(1.0, delta * 1.0);
+        this.currentIntensity += (intensity - this.currentIntensity) * smoothFactor;
+
         let targetOp = 0;
         let activeCount = 0;
 
-        if (intensity > 0.01) {
-            targetOp = Math.min(0.9, 0.3 + intensity * 0.2);
-            activeCount = Math.min(this.maxParticles, Math.floor(intensity * 1000));
+        if (this.currentIntensity > 0.01) {
+            targetOp = Math.min(0.9, 0.3 + this.currentIntensity * 0.2);
+            activeCount = Math.min(this.maxParticles, Math.floor(this.currentIntensity * 1000));
             if (activeCount < 50) activeCount = 50;
             if (activeCount > this.maxParticles) activeCount = this.maxParticles;
         }
@@ -275,6 +280,7 @@ class RainSystem extends ParticleSystemBase {
 class SnowSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 1000) {
         super(scene);
+        this.currentIntensity = 0;
         this.maxParticles = maxParticles;
         this.zone = zone || { minX: -8, maxX: 8 };
 
@@ -320,12 +326,16 @@ class SnowSystem extends ParticleSystemBase {
             this.mesh.material.color.copy(lightColor);
         }
 
+        // Smooth intensity transition (approx 5s)
+        const smoothFactor = Math.min(1.0, delta * 1.0);
+        this.currentIntensity += (intensity - this.currentIntensity) * smoothFactor;
+
         let targetOp = 0;
         let activeCount = 0;
 
-        if (intensity > 0.01) {
-            targetOp = Math.min(0.9, 0.3 + intensity * 0.3);
-            activeCount = Math.min(this.maxParticles, Math.floor(intensity * 1000));
+        if (this.currentIntensity > 0.01) {
+            targetOp = Math.min(0.9, 0.3 + this.currentIntensity * 0.3);
+            activeCount = Math.min(this.maxParticles, Math.floor(this.currentIntensity * 1000));
             if (activeCount < 50) activeCount = 50;
             if (activeCount > this.maxParticles) activeCount = this.maxParticles;
         }
@@ -375,6 +385,7 @@ class SnowSystem extends ParticleSystemBase {
 class CloudSystem extends ParticleSystemBase {
     constructor(scene, camera, zone, maxClouds = 20) {
         super(scene);
+        this.currentCloudCover = 0;
         this.camera = camera;
         this.maxClouds = maxClouds;
         this.puffsPerCloud = 8;
@@ -460,15 +471,19 @@ class CloudSystem extends ParticleSystemBase {
             if (moonColor) cloudShaderInjection.uniforms.uMoonColor.value.copy(moonColor);
         }
 
+        // Smooth cloud cover transition
+        const smoothFactor = Math.min(1.0, delta * 1.0);
+        this.currentCloudCover += (cloudCover - this.currentCloudCover) * smoothFactor;
+
         let targetOp = 0;
         let activeClouds = 0;
 
-        if (cloudCover > 10) {
-            targetOp = Math.min(0.9, cloudCover / 100.0);
-            activeClouds = Math.floor((cloudCover / 100.0) * this.maxClouds);
+        if (this.currentCloudCover > 10) {
+            targetOp = Math.min(0.9, this.currentCloudCover / 100.0);
+            activeClouds = Math.floor((this.currentCloudCover / 100.0) * this.maxClouds);
         }
 
-        if (cloudCover > 80) targetOp = Math.max(targetOp, 0.6);
+        if (this.currentCloudCover > 80) targetOp = Math.max(targetOp, 0.6);
 
         const opacity = this.updateOpacity(delta, targetOp);
         this.material.opacity = opacity;
