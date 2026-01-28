@@ -17,11 +17,11 @@ function createCloudTexture() {
     // Advanced "Fluffy" Noise generation
     const cx = size/2;
     const cy = size/2;
-    const puffs = 80; // Increased for more density
+    const puffs = 120; // Increased for more density and softness
 
     // Create a radial gradient for the base shape to ensure edges fade to zero
-    const baseGrad = context.createRadialGradient(cx, cy, size * 0.1, cx, cy, size * 0.45);
-    baseGrad.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+    const baseGrad = context.createRadialGradient(cx, cy, size * 0.1, cx, cy, size * 0.5);
+    baseGrad.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
     baseGrad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
     context.fillStyle = baseGrad;
     context.fillRect(0,0,size,size);
@@ -33,10 +33,10 @@ function createCloudTexture() {
         const px = cx + Math.cos(angle) * dist;
         const py = cy + Math.sin(angle) * dist;
 
-        const r = size * (0.05 + Math.random() * 0.15);
+        const r = size * (0.05 + Math.random() * 0.2);
 
         const grad = context.createRadialGradient(px, py, 0, px, py, r);
-        const opacity = 0.05 + Math.random() * 0.15;
+        const opacity = 0.02 + Math.random() * 0.1; // Softer, more stacking
 
         // Use slight off-white for depth in texture
         const val = 245 + Math.random() * 10;
@@ -382,6 +382,122 @@ class SnowSystem extends ParticleSystemBase {
     }
 }
 
+class WindDustSystem extends ParticleSystemBase {
+    constructor(scene, zone, maxParticles = 300) {
+        super(scene);
+        this.currentIntensity = 0;
+        this.maxParticles = maxParticles;
+        this.zone = zone || { minX: -8, maxX: 8 };
+
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(maxParticles * 3);
+        const velocities = new Float32Array(maxParticles * 3);
+        const offsets = new Float32Array(maxParticles);
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        // Use a small, subtle particle (similar to Snow but smaller/fainter)
+        const material = new THREE.PointsMaterial({
+            color: 0xcccccc, // Dust color
+            size: 0.1,       // Tiny
+            transparent: true,
+            opacity: 0.0,
+            map: createCloudTexture(), // Reuse noise texture for softness
+            depthWrite: false,
+            blending: THREE.AdditiveBlending // Glowy/Airy feel
+        });
+
+        this.mesh = new THREE.Points(geometry, material);
+        this.scene.add(this.mesh);
+
+        this.velocities = velocities;
+        this.offsets = offsets;
+
+        const posAttr = this.mesh.geometry.attributes.position.array;
+        for (let i = 0; i < maxParticles; i++) {
+            this.resetParticle(i, posAttr);
+            this.offsets[i] = Math.random() * 100;
+        }
+        this.mesh.visible = true;
+    }
+
+    resetParticle(i, posAttr) {
+        posAttr[i*3] = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
+        posAttr[i*3+1] = Math.random() * 8; // Low to ground mostly
+        posAttr[i*3+2] = Math.random() * 20 - 10;
+
+        // Initial random velocity
+        this.velocities[i*3] = 0;
+        this.velocities[i*3+1] = 0;
+        this.velocities[i*3+2] = 0;
+    }
+
+    update(delta, windSpeed, windDir, rainIntensity, lightColor) {
+        if (lightColor) {
+            // Tint with light but keep it subtle
+            this.mesh.material.color.copy(lightColor).multiplyScalar(0.8);
+        }
+
+        // Logic: Show dust if wind is decent (>5) AND NOT heavy rain (rain washes dust out)
+        let targetIntensity = 0;
+        if (windSpeed > 5 && rainIntensity < 2.0) {
+             targetIntensity = Math.min(1.0, (windSpeed - 5) / 20.0);
+        }
+
+        // Smooth transition
+        this.currentIntensity += (targetIntensity - this.currentIntensity) * delta * 1.0;
+
+        let targetOp = 0;
+        let activeCount = 0;
+
+        if (this.currentIntensity > 0.01) {
+            targetOp = Math.min(0.3, this.currentIntensity * 0.3); // Max opacity 0.3
+            activeCount = Math.floor(this.currentIntensity * this.maxParticles);
+        }
+
+        const opacity = this.updateOpacity(delta, targetOp);
+        this.mesh.material.opacity = opacity;
+
+        if (opacity <= 0.01) {
+            this.mesh.visible = false;
+            return;
+        }
+        this.mesh.visible = true;
+        this.mesh.geometry.setDrawRange(0, activeCount);
+
+        const positions = this.mesh.geometry.attributes.position.array;
+        const time = Date.now() * 0.001;
+
+        const rad = (90 - windDir) * Math.PI / 180;
+        const speedScale = 0.003; // Dust is light, moves easily
+        const wX = Math.cos(rad) * windSpeed * speedScale;
+        const wZ = -Math.sin(rad) * windSpeed * speedScale;
+
+        for (let i = 0; i < activeCount; i++) {
+            const i3 = i * 3;
+            const px = positions[i3];
+            const py = positions[i3+1];
+            const pz = positions[i3+2];
+
+            const curl = curlNoise(px * 0.2, py * 0.2, pz * 0.2, time + this.offsets[i] * 0.01);
+
+            // Move with wind + turbulence
+            positions[i3] += wX + curl.x * 0.02;
+            positions[i3+1] += curl.y * 0.02 + (Math.random()-0.5)*0.01; // Slight vertical drift
+            positions[i3+2] += wZ + curl.z * 0.02;
+
+            // Wrap around
+            if (positions[i3] > this.zone.maxX) positions[i3] -= (this.zone.maxX - this.zone.minX);
+            if (positions[i3] < this.zone.minX) positions[i3] += (this.zone.maxX - this.zone.minX);
+
+            // Height clamp/wrap
+            if (positions[i3+1] > 8) positions[i3+1] = 0;
+            if (positions[i3+1] < 0) positions[i3+1] = 8;
+        }
+        this.mesh.geometry.attributes.position.needsUpdate = true;
+    }
+}
+
 class CloudSystem extends ParticleSystemBase {
     constructor(scene, camera, zone, maxClouds = 20) {
         super(scene);
@@ -542,14 +658,17 @@ export class WeatherEffects {
         this.pastRain = new RainSystem(scene, pastZone, 2000);
         this.pastSnow = new SnowSystem(scene, pastZone, 1500);
         this.pastCloud = new CloudSystem(scene, camera, pastZone, 20);
+        this.pastDust = new WindDustSystem(scene, pastZone, 300);
 
         this.currRain = new RainSystem(scene, currZone, 2000);
         this.currSnow = new SnowSystem(scene, currZone, 1500);
         this.currCloud = new CloudSystem(scene, camera, currZone, 20);
+        this.currDust = new WindDustSystem(scene, currZone, 300);
 
         this.futureRain = new RainSystem(scene, futureZone, 2000);
         this.futureSnow = new SnowSystem(scene, futureZone, 1500);
         this.futureCloud = new CloudSystem(scene, camera, futureZone, 20);
+        this.futureDust = new WindDustSystem(scene, futureZone, 300);
 
         this.raycaster = new THREE.Raycaster();
         this.downVector = new THREE.Vector3(0, -1, 0);
@@ -585,14 +704,17 @@ export class WeatherEffects {
         this.pastRain.update(delta, p.wind, p.dir, p.rain, this.raycaster, null, null, lightColor);
         this.pastSnow.update(delta, p.wind, p.dir, p.snow, lightColor);
         this.pastCloud.update(delta, p.wind, p.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
+        this.pastDust.update(delta, p.wind, p.dir, p.rain, lightColor);
 
         this.currRain.update(delta, c.wind, c.dir, c.rain, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos), lightColor);
         this.currSnow.update(delta, c.wind, c.dir, c.snow, lightColor);
         this.currCloud.update(delta, c.wind, c.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
+        this.currDust.update(delta, c.wind, c.dir, c.rain, lightColor);
 
         this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null, lightColor);
         this.futureSnow.update(delta, f.wind, f.dir, f.snow, lightColor);
         this.futureCloud.update(delta, f.wind, f.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
+        this.futureDust.update(delta, f.wind, f.dir, f.rain, lightColor);
 
         if (p.code >= 95 || c.code >= 95 || f.code >= 95) {
              if (Math.random() < 0.01) {

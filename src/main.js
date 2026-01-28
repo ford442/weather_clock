@@ -17,11 +17,12 @@ const clock = new THREE.Clock();
 // Increased far plane to ensure Sky (scaled 450000) is visible
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000000);
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false }); // Opaque for proper Sky rendering
+renderer.setClearColor(0x000000); // Ensure black background
 
 // Tone mapping for HDR effect (Sky shader + Bloom)
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.8; // Adjusted for balance
+renderer.toneMappingExposure = 0.5; // Reduced exposure to prevent washout
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -34,9 +35,9 @@ const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
 
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-bloomPass.threshold = 0.85; // Slightly lower threshold to catch more sun glow
-bloomPass.strength = 0.65;  // Increased intensity for "intense glow"
-bloomPass.radius = 0.5;     // Slightly softer
+bloomPass.threshold = 0.9;  // Higher threshold to only bloom the sun/highlights
+bloomPass.strength = 0.4;   // Reduced intensity
+bloomPass.radius = 0.5;
 composer.addPass(bloomPass);
 
 // Sky Setup

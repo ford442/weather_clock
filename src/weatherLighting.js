@@ -22,11 +22,12 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
     const sunY = sunLight.position.y;
     let dayFactor = 1.0;
 
-    // Smooth transition around horizon (y=-2 to y=2)
-    // If sun is below horizon, dim lights
-    if (sunY < -2) dayFactor = 0;
-    else if (sunY > 2) dayFactor = 1;
-    else dayFactor = (sunY + 2) / 4;
+    // Smooth transition around horizon (y=-6 to y=6)
+    // Extended for Civil Twilight realism (sun below horizon still gives light)
+    const twilightRange = 6.0;
+    if (sunY < -twilightRange) dayFactor = 0;
+    else if (sunY > twilightRange) dayFactor = 1;
+    else dayFactor = (sunY + twilightRange) / (twilightRange * 2);
 
     // Calculate target lighting based on past, current, and forecast
     const pastWeight = 0.2;
@@ -203,6 +204,15 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         targetSunColor = new THREE.Color(0xfffae0); // Soft Yellow-White
     } else {
         targetSunColor = new THREE.Color(0xfff0c0); // Golden White
+    }
+
+    // Dynamic Horizon Color Shift (Sunset/Sunrise)
+    // If clear enough, tint sun orange near horizon
+    if (weightedCloud < 70 && currentCode < 60 && sunY > 0 && sunY < 10) {
+        const sunsetColor = new THREE.Color(0xffaa55); // Rich Orange
+        const sunsetFactor = 1.0 - (sunY / 10.0); // 1.0 at horizon, 0.0 at 30 deg elevation
+        // Blend towards orange
+        targetSunColor.lerp(sunsetColor, sunsetFactor * 0.7);
     }
 
     // Calculate ambient color
