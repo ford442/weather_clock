@@ -9,6 +9,7 @@ import { updateWeatherLighting, getSeverity } from './weatherLighting.js';
 import { calculateMoonPhase, createMoon } from './moonPhase.js';
 import { WeatherEffects } from './weatherEffects.js';
 import { AstronomyService } from './astronomy.js';
+import Stats from 'three/addons/libs/stats.module.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -82,6 +83,10 @@ scene.add(sunLight);
 // Create sundial
 const sundial = createSundial();
 scene.add(sundial.group);
+
+// Performance Monitoring
+const stats = new Stats();
+document.body.appendChild(stats.dom);
 
 // Create moon
 const moonPhaseData = calculateMoonPhase();
@@ -462,6 +467,7 @@ function updateWeatherDisplay(data) {
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
+    stats.update();
 
     const delta = clock.getDelta();
 
