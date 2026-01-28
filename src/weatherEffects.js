@@ -6,6 +6,17 @@ import {
 } from './shaders.js';
 import { SUNDIAL_DIMENSIONS } from './sundial.js';
 
+// --- Shared Resources Manager ---
+const ResourceManager = {
+    cloudTexture: null,
+    getCloudTexture: function() {
+        if (!this.cloudTexture) {
+            this.cloudTexture = createCloudTexture();
+        }
+        return this.cloudTexture;
+    }
+};
+
 function createCloudTexture() {
     const size = 512;
     const canvas = document.createElement('canvas');
@@ -296,7 +307,7 @@ class SnowSystem extends ParticleSystemBase {
             size: 0.15,
             transparent: true,
             opacity: 0.0,
-            map: createCloudTexture(),
+            map: ResourceManager.getCloudTexture(),
             depthWrite: false
         });
 
@@ -402,7 +413,7 @@ class WindDustSystem extends ParticleSystemBase {
             size: 0.1,       // Tiny
             transparent: true,
             opacity: 0.0,
-            map: createCloudTexture(), // Reuse noise texture for softness
+            map: ResourceManager.getCloudTexture(), // Reuse noise texture for softness
             depthWrite: false,
             blending: THREE.AdditiveBlending // Glowy/Airy feel
         });
@@ -508,7 +519,7 @@ class CloudSystem extends ParticleSystemBase {
         this.totalInstances = maxClouds * this.puffsPerCloud;
         this.zone = zone || { minX: -12, maxX: 12 };
 
-        const map = createCloudTexture();
+        const map = ResourceManager.getCloudTexture();
         this.material = new THREE.MeshBasicMaterial({
             map: map,
             transparent: true,
@@ -540,7 +551,7 @@ class CloudSystem extends ParticleSystemBase {
         this.mesh.instanceMatrix.needsUpdate = true;
         this.mesh.visible = true;
     }
-
+    // ... rest of class
     addCloud() {
         const startIndex = this.clouds.length * this.puffsPerCloud;
         const indices = [];
@@ -644,7 +655,7 @@ class CloudSystem extends ParticleSystemBase {
         this.mesh.instanceMatrix.needsUpdate = true;
     }
 }
-
+// ... WeatherEffects class (rest of file)
 export class WeatherEffects {
     constructor(scene, sundialGroup, camera) {
         this.scene = scene;

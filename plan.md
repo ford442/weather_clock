@@ -22,6 +22,7 @@ Transform `weather_clock` from a data dashboard into a **photorealistic window t
 - [x] **Interaction**: Rain splashes on sundial (Collision detection implemented and verified).
 - [x] **Wind**: Particles respond to wind speed.
 - [x] **Visual Polish**: Rain fades close to camera, correct geometry collision.
+- [x] **Performance Optimization**: Shared texture resources for clouds/snow/dust.
 
 ### 3. Time Logic (Completed)
 - [x] **Decouple Time**: `simulationTime` variable drives sun/moon position.
@@ -29,12 +30,14 @@ Transform `weather_clock` from a data dashboard into a **photorealistic window t
 - [x] **True Weather Simulation**: Weather conditions interpolated from 24h timeline during fast-forward.
 
 ## Next Steps
-- [ ] **Performance Tuning**: Monitor FPS on lower-end devices.
+- [x] **Performance Tuning**: Monitor FPS on lower-end devices (Stats panel added, Texture resources optimized).
 
 ## Recently Completed
 - [x] **Date Display**: Added UI element to show Month/Day, enhancing "Feel the Time".
 - [x] **Visual Polish**: Refined shadow map bias for better sundial rendering.
 - [x] **Advanced Features**: Seasonal sun altitude adjustments (Verified: handled naturally by SunCalc).
+- [x] **Optimization**: Implemented `ResourceManager` to share generated cloud textures.
+- [x] **Monitoring**: Added FPS Stats panel.
 
 ## Developer Notes
 - `src/weatherLighting.js` handles all lighting transitions.
