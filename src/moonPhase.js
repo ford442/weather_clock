@@ -23,16 +23,6 @@ export function calculateMoonPhase(date = new Date()) {
 
     if (b >= 8) b = 0;
 
-    // Phase values:
-    // 0 = New Moon
-    // 1 = Waxing Crescent
-    // 2 = First Quarter
-    // 3 = Waxing Gibbous
-    // 4 = Full Moon
-    // 5 = Waning Gibbous
-    // 6 = Last Quarter
-    // 7 = Waning Crescent
-
     const phaseNames = [
         'New Moon 🌑',
         'Waxing Crescent 🌒',
@@ -51,51 +41,83 @@ export function calculateMoonPhase(date = new Date()) {
     };
 }
 
+const moonVertexShader = `
+varying vec3 vNormal;
+varying vec3 vWorldPosition;
+
+void main() {
+    // Transform normal to world space
+    // Note: This assumes uniform scaling. For non-uniform, use normalMatrix (view space) or inverse transpose of model matrix.
+    // Here we use modelMatrix rotation part.
+    vNormal = normalize(mat3(modelMatrix) * normal);
+
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPos.xyz;
+
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+}
+`;
+
+const moonFragmentShader = `
+uniform vec3 uSunPosition;
+varying vec3 vNormal;
+varying vec3 vWorldPosition;
+
+// Simple pseudo-random noise
+float rand(vec2 co){
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
+void main() {
+    vec3 sunDir = normalize(uSunPosition - vWorldPosition);
+    float nDotL = dot(vNormal, sunDir);
+
+    // Sharpness of the terminator (shadow edge)
+    // Moon has no atmosphere, so it's relatively sharp but surface roughness softens it slightly
+    float lightIntensity = smoothstep(-0.05, 0.05, nDotL);
+
+    // Base colors
+    vec3 litColor = vec3(0.8, 0.8, 0.75); // Pale yellow-white
+    vec3 darkColor = vec3(0.02, 0.02, 0.03); // Very dark blue-grey (Earthshine)
+
+    // Simple crater noise
+    float noise = rand(vWorldPosition.xy * 2.0) * 0.1;
+    litColor -= noise;
+
+    vec3 finalColor = mix(darkColor, litColor, lightIntensity);
+
+    gl_FragColor = vec4(finalColor, 1.0);
+}
+`;
+
 export function createMoon(phase = 0) {
     const moonGroup = new THREE.Group();
 
     // Create moon sphere
-    const moonGeometry = new THREE.SphereGeometry(0.4, 32, 32);
-    const moonMaterial = new THREE.MeshStandardMaterial({
-        color: 0xccccaa,
-        emissive: 0x444433,
-        emissiveIntensity: 0.3,
-        roughness: 0.8,
-        metalness: 0.1
+    const moonGeometry = new THREE.SphereGeometry(0.4, 64, 64); // Increased segment count for smooth shader
+
+    const moonMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+            uSunPosition: { value: new THREE.Vector3(0, 0, 100) } // Default sun pos
+        },
+        vertexShader: moonVertexShader,
+        fragmentShader: moonFragmentShader
     });
+
     const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+    moon.name = 'MoonMesh';
     moon.castShadow = true;
     moon.receiveShadow = true;
     moonGroup.add(moon);
 
-    // Add shadow overlay for phases
-    const shadowGeometry = new THREE.SphereGeometry(0.41, 32, 32);
-    const shadowMaterial = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        transparent: true,
-        opacity: 0.7,
-        side: THREE.FrontSide
-    });
-    const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
-    
-    // Adjust shadow position based on phase
-    // 0 = new (fully dark), 4 = full (no shadow), etc.
-    const phaseAngle = (phase / 8) * Math.PI * 2;
-    shadow.scale.x = Math.abs(Math.cos(phaseAngle));
-    
-    if (phase > 4) {
-        // Waning phases - shadow on right
-        shadow.position.x = -0.2 * (1 - shadow.scale.x);
-    } else if (phase > 0) {
-        // Waxing phases - shadow on left
-        shadow.position.x = 0.2 * (1 - shadow.scale.x);
-    }
-
-    if (phase !== 4) { // Not full moon
-        moonGroup.add(shadow);
-    }
-
     return moonGroup;
+}
+
+export function updateMoonVisuals(moonGroup, sunPosition) {
+    const moon = moonGroup.getObjectByName('MoonMesh');
+    if (moon && moon.material.uniforms) {
+        moon.material.uniforms.uSunPosition.value.copy(sunPosition);
+    }
 }
 
 export function positionMoon(moonGroup, sundialPosition, time = new Date()) {

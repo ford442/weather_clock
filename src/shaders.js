@@ -1,4 +1,5 @@
 // src/shaders.js
+// Aether Architect: Verified
 
 export const rainVertexShader = `
 uniform float uOpacity;

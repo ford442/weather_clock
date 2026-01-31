@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { createSundial } from './sundial.js';
 import { WeatherService } from './weather.js';
 import { updateWeatherLighting, getSeverity } from './weatherLighting.js';
-import { calculateMoonPhase, createMoon } from './moonPhase.js';
+import { calculateMoonPhase, createMoon, updateMoonVisuals } from './moonPhase.js';
 import { WeatherEffects } from './weatherEffects.js';
 import { AstronomyService } from './astronomy.js';
 import Stats from 'three/addons/libs/stats.module.js';
@@ -36,14 +36,14 @@ const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
 
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-bloomPass.threshold = 0.9;  // Higher threshold to only bloom the sun/highlights
-bloomPass.strength = 0.4;   // Reduced intensity
+bloomPass.threshold = 0.85;  // Slightly lower threshold to catch moon glow
+bloomPass.strength = 0.5;   // Increased intensity for "Photorealistic" glow
 bloomPass.radius = 0.5;
 composer.addPass(bloomPass);
 
-// Sky Setup
+// Sky Setup (Rayleigh/Mie Scattering)
 const sky = new Sky();
-sky.scale.setScalar(10000);
+sky.scale.setScalar(450000); // Massive scale for realistic horizon
 sky.renderOrder = -1;
 const skyUniforms = sky.material.uniforms;
 skyUniforms['turbidity'].value = 10;
@@ -487,6 +487,10 @@ function animate() {
     moonGroup.position.copy(astroData.moonPosition);
     moonGroup.lookAt(0, 0, 0);
     moonLight.position.copy(astroData.moonPosition);
+
+    if (astroData.sunPosition) {
+        updateMoonVisuals(moonGroup, astroData.sunPosition);
+    }
 
     updateTimeDisplay();
 

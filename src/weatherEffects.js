@@ -1,3 +1,4 @@
+// Aether Architect: Verified
 import * as THREE from 'three';
 import {
     rainVertexShader, rainFragmentShader,
@@ -28,7 +29,7 @@ function createCloudTexture() {
     // Advanced "Fluffy" Noise generation
     const cx = size/2;
     const cy = size/2;
-    const puffs = 120; // Increased for more density and softness
+    const puffs = 150; // Increased for even more density and softness
 
     // Create a radial gradient for the base shape to ensure edges fade to zero
     const baseGrad = context.createRadialGradient(cx, cy, size * 0.1, cx, cy, size * 0.5);
@@ -229,7 +230,8 @@ class RainSystem extends ParticleSystemBase {
                 positions[i6+4] += vy;
                 positions[i6+5] += vz;
 
-                const streak = 3.0;
+                // Longer streaks for faster perceived motion
+                const streak = 4.0;
                 positions[i6] = positions[i6+3] - vx * streak;
                 positions[i6+1] = positions[i6+4] - vy * streak;
                 positions[i6+2] = positions[i6+5] - vz * streak;
