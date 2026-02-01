@@ -59,6 +59,13 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         getSev(weatherData.current) * currentWeight +
         getSev(weatherData.forecast) * forecastWeight;
 
+    // Calculate weighted wind speed for flickering effects
+    const getWind = (data) => data?.windSpeed || 0;
+    const weightedWind =
+        getWind(weatherData.past) * pastWeight +
+        getWind(weatherData.current) * currentWeight +
+        getWind(weatherData.forecast) * forecastWeight;
+
     // --- SUN LIGHTING ---
     // Calculate target sun light intensity based on cloud cover and weather AND day/night
     const baseSunIntensity = 2.0;
@@ -239,10 +246,22 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
     previousIntensity.ambient += (targetAmbientIntensity - previousIntensity.ambient) * transitionSpeed;
     previousIntensity.moon += (targetMoonIntensity - previousIntensity.moon) * transitionSpeed;
 
-    sunLight.intensity = previousIntensity.sun;
-    ambientLight.intensity = previousIntensity.ambient;
+    // Apply Wind Flicker (Aether's "Feel the Time")
+    // If wind is high, light flickers slightly (clouds passing fast, rustling)
+    let flicker = 1.0;
+    if (weightedWind > 20) {
+        const time = performance.now() * 0.001;
+        // Combine sines for organic flicker
+        const noise = Math.sin(time * 10) * 0.5 + Math.sin(time * 23) * 0.3 + Math.sin(time * 41) * 0.2;
+        // Scale flicker magnitude by wind speed (max 10% variation at 100km/h)
+        const magnitude = Math.min(0.1, (weightedWind - 20) * 0.002);
+        flicker = 1.0 + noise * magnitude;
+    }
+
+    sunLight.intensity = previousIntensity.sun * flicker;
+    ambientLight.intensity = previousIntensity.ambient * flicker;
     if (moonLight) {
-        moonLight.intensity = previousIntensity.moon;
+        moonLight.intensity = previousIntensity.moon * flicker; // Moon flickers too
         moonLight.color.lerp(targetMoonColor, transitionSpeed);
     }
 
