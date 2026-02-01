@@ -1,3 +1,4 @@
+// Aether Architect: Verified
 import * as THREE from 'three';
 
 let previousIntensity = { sun: 0.8, moon: 0.0, ambient: 0.4 };
@@ -124,17 +125,17 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
 
         // Adjust Turbidity (haze) based on clouds and severity
         // Photorealistic Tuning:
-        // Clear day: ~2. Storm: ~15 (More haze/density).
+        // Clear day: ~2. Storm: ~20 (More haze/density).
         // We increase range to make storms look oppressive.
-        const targetTurbidity = 2 + (weightedCloud / 100) * 8 + (weightedSeverity / 100) * 10;
+        const targetTurbidity = 2.0 + (weightedCloud / 100) * 10.0 + (weightedSeverity / 100) * 18.0;
         uniforms['turbidity'].value = targetTurbidity;
 
         // Rayleigh (scattering) - Determines sky color.
         // 3.0 = Nice Blue. Lower = Darker/Greyer. Higher = Redder sunset.
         // During heavy weather, we want a darker sky, so we drop Rayleigh slightly less aggressively
         // but ensure Turbidity does the work of "greying" it out.
-        // Start: 3.0. Storm: 1.2.
-        const targetRayleigh = 3.0 - (weightedSeverity / 100) * 1.8;
+        // Start: 3.0. Storm: 0.8.
+        const targetRayleigh = 3.0 - (weightedSeverity / 100) * 2.2;
         uniforms['rayleigh'].value = targetRayleigh;
 
         // Mie Coefficient (fog/scattering)
@@ -162,10 +163,10 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
              }
         }
 
-        let targetFogDensity = 0.0001 + (weightedCloud / 100) * 0.005 + (weightedSeverity / 100) * 0.02 + visibilityFactor * 0.05;
+        let targetFogDensity = 0.0001 + (weightedCloud / 100) * 0.005 + (weightedSeverity / 100) * 0.03 + visibilityFactor * 0.05;
         // CAP Fog density to avoid "Grey Screen of Death"
-        // Reduced max density from 0.02 to 0.015 to ensure Sky Shader remains visible
-        if (targetFogDensity > 0.02) targetFogDensity = 0.02;
+        // Reduced max density from 0.02 to 0.025 to ensure Sky Shader remains visible
+        if (targetFogDensity > 0.025) targetFogDensity = 0.025;
 
         // Interpolate current density to target
         scene.fog.density += (targetFogDensity - scene.fog.density) * 0.05;
@@ -218,7 +219,7 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
     // Calculate ambient color
     let targetAmbientColor;
     if (weightedSeverity > 70) {
-        targetAmbientColor = new THREE.Color(0x444466);
+        targetAmbientColor = new THREE.Color(0x333355); // Deeper Blue-Grey
     } else if (weightedSeverity > 40) { // Rain/Moderate weather (Code 63 is here)
         // Darker, bluer grey for rain
         targetAmbientColor = new THREE.Color(0x555577);

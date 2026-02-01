@@ -1,3 +1,4 @@
+// Aether Architect: Verified
 import SunCalc from 'suncalc';
 import * as THREE from 'three';
 
