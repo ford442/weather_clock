@@ -562,6 +562,12 @@ function animate() {
         const flashColor = new THREE.Color(0xaaddff);
         const lerpFactor = Math.min(1.0, flash * 0.8);
         ambientLight.color.lerp(flashColor, lerpFactor);
+
+        // Aether Architect: Lightning Fog Flash
+        // Sync fog color to match the lightning flash immediately
+        if (scene.fog) {
+            scene.fog.color.copy(ambientLight.color).multiplyScalar(0.8);
+        }
     }
 
     composer.render();
