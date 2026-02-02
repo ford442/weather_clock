@@ -214,13 +214,29 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         targetSunColor = new THREE.Color(0xfff0c0); // Golden White
     }
 
-    // Dynamic Horizon Color Shift (Sunset/Sunrise)
-    // If clear enough, tint sun orange near horizon
-    if (weightedCloud < 70 && currentCode < 60 && sunY > 0 && sunY < 10) {
-        const sunsetColor = new THREE.Color(0xffaa55); // Rich Orange
-        const sunsetFactor = 1.0 - (sunY / 10.0); // 1.0 at horizon, 0.0 at 30 deg elevation
-        // Blend towards orange
-        targetSunColor.lerp(sunsetColor, sunsetFactor * 0.7);
+    // Dynamic Horizon Color Shift (Sunset/Sunrise/Dusk)
+    // If clear enough, tint sun orange near horizon, then purple below
+    if (weightedCloud < 70 && currentCode < 60) {
+        if (sunY >= 0 && sunY < 10) {
+            // Sunset Orange
+            const sunsetColor = new THREE.Color(0xffaa55); // Rich Orange
+            const sunsetFactor = 1.0 - (sunY / 10.0); // 1.0 at horizon, 0.0 at 30 deg elevation
+            // Blend towards orange
+            targetSunColor.lerp(sunsetColor, sunsetFactor * 0.7);
+        } else if (sunY < 0 && sunY > -6) {
+             // Dusk Purple (Aether Architect: "Dusk Purple")
+             const sunsetColor = new THREE.Color(0xffaa55);
+             const duskColor = new THREE.Color(0x8855aa); // Deep Purple
+
+             // Factor: 0 at horizon (Orange), 1 at -6 (Purple)
+             const t = Math.abs(sunY) / 6.0;
+
+             // Start with Orange base (matching the sunset end state)
+             const base = new THREE.Color().copy(targetSunColor).lerp(sunsetColor, 0.7);
+
+             // Blend towards Purple
+             targetSunColor.copy(base).lerp(duskColor, t);
+        }
     }
 
     // Calculate ambient color
@@ -236,9 +252,28 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         targetAmbientColor = new THREE.Color(0xffffff);
     }
 
-    // Tint ambient blue-ish at night
+    // Tint ambient blue-ish at night, with a Purple Dusk transition
+    // Aether Architect: "Dusk Purple" - Smooth gradient from Sunset Orange -> Purple -> Night Blue
     if (dayFactor < 0.5) {
-        targetAmbientColor.lerp(new THREE.Color(0x111122), 1.0 - dayFactor * 2);
+        const nightColor = new THREE.Color(0x111122);
+        const duskColor = new THREE.Color(0x6a4a7c); // Rich Purple
+
+        // dayFactor: 0.5 (Horizon) -> 0.0 (Night)
+        // We want Purple peak around 0.25 (Mid-Twilight)
+
+        if (dayFactor > 0.2) {
+            // Horizon (0.5) -> Dusk (0.2)
+            // Interpolate from Current (White/Grey) to Dusk Purple
+            // factor goes 0.0 -> 1.0
+            const t = (0.5 - dayFactor) / 0.3;
+            targetAmbientColor.lerp(duskColor, t);
+        } else {
+            // Dusk (0.2) -> Night (0.0)
+            // Interpolate from Dusk Purple to Night Blue
+            const t = (0.2 - dayFactor) / 0.2;
+            // Start at Dusk
+            targetAmbientColor.copy(duskColor).lerp(nightColor, t);
+        }
     }
 
     // Smoothly transition intensities
