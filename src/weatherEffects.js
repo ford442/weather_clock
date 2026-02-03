@@ -657,11 +657,125 @@ class CloudSystem extends ParticleSystemBase {
         this.mesh.instanceMatrix.needsUpdate = true;
     }
 }
-// ... WeatherEffects class (rest of file)
+
+class StarField {
+    constructor(scene) {
+        this.scene = scene;
+        const count = 3000;
+        const radius = 2000;
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(count * 3);
+        const sizes = new Float32Array(count);
+
+        for(let i=0; i<count; i++) {
+            const u = Math.random();
+            const v = Math.random();
+            const theta = 2 * Math.PI * u;
+            const phi = Math.acos(2 * v - 1);
+
+            const x = radius * Math.sin(phi) * Math.cos(theta);
+            const y = radius * Math.sin(phi) * Math.sin(theta);
+            const z = radius * Math.cos(phi);
+
+            positions[i*3] = x;
+            positions[i*3+1] = y;
+            positions[i*3+2] = z;
+
+            sizes[i] = 0.5 + Math.random() * 1.5;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+        const vertexShader = `
+            uniform float uTime;
+            uniform float uOpacity;
+            attribute float size;
+            varying float vOpacity;
+
+            void main() {
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+
+                // Twinkle logic: Random offset based on position
+                float random = sin(position.x * 12.9898 + position.y * 78.233 + position.z * 45.164);
+
+                // Twinkle speed and intensity
+                float twinkle = 0.7 + 0.3 * sin(uTime * 2.0 + random * 100.0);
+
+                vOpacity = uOpacity * twinkle;
+                gl_PointSize = size;
+            }
+        `;
+
+        const fragmentShader = `
+            varying float vOpacity;
+            void main() {
+                if (vOpacity <= 0.01) discard;
+
+                // Circular soft point
+                vec2 coord = gl_PointCoord - vec2(0.5);
+                float dist = length(coord);
+                if (dist > 0.5) discard;
+
+                // Soft core
+                float strength = 1.0 - (dist * 2.0);
+                strength = pow(strength, 1.5);
+
+                gl_FragColor = vec4(1.0, 1.0, 1.0, vOpacity * strength);
+            }
+        `;
+
+        const material = new THREE.ShaderMaterial({
+            uniforms: {
+                uTime: { value: 0 },
+                uOpacity: { value: 0.0 }
+            },
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            transparent: true,
+            depthWrite: false,
+            fog: false
+        });
+
+        this.mesh = new THREE.Points(geometry, material);
+        this.mesh.renderOrder = -1; // Render with background
+        this.scene.add(this.mesh);
+    }
+
+    update(sunPos) {
+        if (!sunPos) return;
+
+        // Sun elevation check (sunPos is approx 20 units away)
+        // Twilight ends around -6 degrees
+        const sunY = sunPos.y;
+
+        let targetOpacity = 0;
+        if (sunY < -5) {
+            targetOpacity = 1.0;
+        } else if (sunY < 1) { // Start fading just before horizon
+            // Interpolate from 1 (at -5) to 0 (at 1)
+            targetOpacity = (1 - sunY) / 6.0;
+            if (targetOpacity > 1) targetOpacity = 1;
+            if (targetOpacity < 0) targetOpacity = 0;
+        }
+
+        if (targetOpacity > 0.01) {
+             const time = Date.now() * 0.001;
+             this.mesh.material.uniforms.uTime.value = time;
+             this.mesh.material.uniforms.uOpacity.value = targetOpacity;
+             this.mesh.visible = true;
+        } else {
+             this.mesh.visible = false;
+        }
+    }
+}
+
 export class WeatherEffects {
     constructor(scene, sundialGroup, camera) {
         this.scene = scene;
         this.sundialGroup = sundialGroup;
+        this.starField = new StarField(scene);
         this.camera = camera;
 
         const pastZone = { minX: -12, maxX: -4 };
@@ -728,6 +842,10 @@ export class WeatherEffects {
         this.futureSnow.update(delta, f.wind, f.dir, f.snow, lightColor);
         this.futureCloud.update(delta, f.wind, f.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
         this.futureDust.update(delta, f.wind, f.dir, f.rain, lightColor);
+
+        if (sunPos) {
+            this.starField.update(sunPos);
+        }
 
         if (p.code >= 95 || c.code >= 95 || f.code >= 95) {
              if (Math.random() < 0.01) {
