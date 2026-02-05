@@ -436,7 +436,8 @@ class WindDustSystem extends ParticleSystemBase {
 
     resetParticle(i, posAttr) {
         posAttr[i*3] = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
-        posAttr[i*3+1] = Math.random() * 8; // Low to ground mostly
+        // Aether Architect: Cluster dust near ground to simulate "invisible grass" rustling
+        posAttr[i*3+1] = Math.pow(Math.random(), 2.5) * 8;
         posAttr[i*3+2] = Math.random() * 20 - 10;
 
         // Initial random velocity
@@ -751,13 +752,20 @@ class StarField {
         const sunY = sunPos.y;
 
         let targetOpacity = 0;
-        if (sunY < -5) {
+        // Aether Architect: Improved Star Visibility (Civil Twilight)
+        // Stars should be gone by Civil Twilight start (-6 degrees).
+        // Radius = 20.
+        // -12 degrees (Nautical Start) = 20 * sin(-12) = -4.16
+        // -6 degrees (Civil Start) = 20 * sin(-6) = -2.09
+
+        const fadeStart = -4.2;
+        const fadeEnd = -2.1;
+
+        if (sunY < fadeStart) {
             targetOpacity = 1.0;
-        } else if (sunY < 1) { // Start fading just before horizon
-            // Interpolate from 1 (at -5) to 0 (at 1)
-            targetOpacity = (1 - sunY) / 6.0;
-            if (targetOpacity > 1) targetOpacity = 1;
-            if (targetOpacity < 0) targetOpacity = 0;
+        } else if (sunY < fadeEnd) {
+            // Interpolate from 1 (at fadeStart) to 0 (at fadeEnd)
+            targetOpacity = 1.0 - (sunY - fadeStart) / (fadeEnd - fadeStart);
         }
 
         if (targetOpacity > 0.01) {

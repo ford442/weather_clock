@@ -1,7 +1,10 @@
 from playwright.sync_api import sync_playwright
-import time
+import os
 
 def run():
+    if not os.path.exists("verification"):
+        os.makedirs("verification")
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -9,23 +12,26 @@ def run():
             print("Navigating...")
             page.goto("http://localhost:5173")
 
-            print("Waiting for canvas...")
+            # Wait for simulation to load
             page.wait_for_selector("#canvas-container canvas", timeout=10000)
+            page.wait_for_timeout(2000)
 
-            # Wait for app to initialize
-            time.sleep(2)
+            # Force Night Time (23:00)
+            print("Setting time to night (23:00)...")
+            page.evaluate("window.setDebugTime(23)")
+            page.wait_for_timeout(2000)
 
-            print("Setting Debug Mode (Midnight, Clear)...")
-            # Force night time (00:00) and clear weather (0)
-            page.evaluate("window.setDebugTime(0)")
-            page.evaluate("window.setDebugWeather(0)")
+            print("Taking night screenshot...")
+            page.screenshot(path="verification/night_stars.png")
 
-            # Wait for transition
-            print("Waiting for transition...")
-            time.sleep(3)
+            # Force Day Time (12:00)
+            print("Setting time to day (12:00)...")
+            page.evaluate("window.setDebugTime(12)")
+            page.wait_for_timeout(2000)
 
-            print("Taking screenshot...")
-            page.screenshot(path="verification/verification_stars.png")
+            print("Taking day screenshot...")
+            page.screenshot(path="verification/day_sun.png")
+
             print("Done.")
         except Exception as e:
             print(f"Error: {e}")
