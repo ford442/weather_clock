@@ -55,10 +55,16 @@ void main() {
     float len = length(coord);
     if(len > 0.5) discard;
 
-    // Soft edge
-    float softness = 1.0 - smoothstep(0.3, 0.5, len);
+    // Aether Architect: Ripple Effect (Hollow Ring)
+    // Ring fades in at 0.25, fades out at 0.5
+    float ripple = smoothstep(0.25, 0.35, len) - smoothstep(0.4, 0.5, len);
+    // Center impact dot
+    float center = 1.0 - smoothstep(0.0, 0.2, len);
 
-    gl_FragColor = vec4(uColor, alpha * 0.8 * softness);
+    // Combine center and ripple
+    float strength = max(ripple, center * 0.5);
+
+    gl_FragColor = vec4(uColor, alpha * strength);
 }
 `;
 
