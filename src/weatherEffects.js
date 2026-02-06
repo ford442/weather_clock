@@ -266,11 +266,13 @@ class RainSystem extends ParticleSystemBase {
                                 surfaceY = faceTop; // Hit Clock Face
                             } else if (dist < SUNDIAL_DIMENSIONS.base.radiusTop) {
                                 surfaceY = baseTop; // Hit Base Top
-                            } else if (dist < SUNDIAL_DIMENSIONS.base.radiusBottom) {
+                            } else if (dist < maxR) {
                                 // Hit Base Slope
                                 const r1 = SUNDIAL_DIMENSIONS.base.radiusTop;
                                 const r2 = SUNDIAL_DIMENSIONS.base.radiusBottom;
-                                const factor = (dist - r1) / (r2 - r1);
+                                // Aether Architect: Allow margin hits by clamping
+                                const effectiveDist = Math.min(dist, r2);
+                                const factor = (effectiveDist - r1) / (r2 - r1);
                                 surfaceY = baseTop - factor * (baseTop - baseBottom);
                             }
 
