@@ -120,12 +120,20 @@ let isDebugMode = false;
 const REAL_TIME_SCALE = 1.0;
 const WARP_SCALE = 1440.0; // Time Lapse: 24h in 60s (1440x speed)
 
+
+function formatTime12(date) {
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    return `${hours}:${minutes} ${ampm}`;
+}
+
 function updateTimeDisplay() {
     const timeDisplay = document.getElementById('time-display');
     if (timeDisplay) {
-        const hours = simulationTime.getHours().toString().padStart(2, '0');
-        const minutes = simulationTime.getMinutes().toString().padStart(2, '0');
-        timeDisplay.textContent = `${hours}:${minutes}`;
+        timeDisplay.textContent = formatTime12(simulationTime);
 
         const dateDisplay = document.getElementById('date-display');
         if (dateDisplay) {
@@ -141,9 +149,22 @@ function updateTimeDisplay() {
              timeDisplay.style.color = '#ffffff';
              timeDisplay.style.textShadow = '0 0 5px #000000';
         }
+
+        // Update Past and Forecast Headers
+        const pastTime = new Date(simulationTime.getTime() - 3 * 3600 * 1000);
+        const forecastTime = new Date(simulationTime.getTime() + 3 * 3600 * 1000);
+
+        const pastDisplay = document.getElementById('past-time-display');
+        if (pastDisplay) {
+            pastDisplay.textContent = formatTime12(pastTime);
+        }
+
+        const forecastDisplay = document.getElementById('forecast-time-display');
+        if (forecastDisplay) {
+            forecastDisplay.textContent = formatTime12(forecastTime);
+        }
     }
 }
-
 // Debug API for Verification
 window.setDebugWeather = (weatherCode) => {
     console.log("Setting debug weather code:", weatherCode);
