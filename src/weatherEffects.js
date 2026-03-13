@@ -9,74 +9,227 @@ import { SUNDIAL_DIMENSIONS } from './sundial.js';
 
 // --- Shared Resources Manager ---
 const ResourceManager = {
-    cloudTexture: null,
-    getCloudTexture: function() {
-        if (!this.cloudTexture) {
-            this.cloudTexture = createCloudTexture();
+    cloudTextures: {},
+    getCloudTexture: function(type = 'cumulus') {
+        if (!this.cloudTextures[type]) {
+            if (type === 'stratus') this.cloudTextures[type] = createStratusTexture();
+            else if (type === 'cirrus') this.cloudTextures[type] = createCirrusTexture();
+            else this.cloudTextures[type] = createCumulusTexture();
         }
-        return this.cloudTexture;
+        return this.cloudTextures[type];
     }
 };
 
-function createCloudTexture() {
+// Fluffy cumulus puff texture: bright top, soft shadow at base
+function createCumulusTexture() {
     const size = 512;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
-    const context = canvas.getContext('2d');
-    context.clearRect(0, 0, size, size);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
 
-    // Advanced "Fluffy" Noise generation
-    const cx = size/2;
-    const cy = size/2;
-    const puffs = 150; // Increased for even more density and softness
+    const cx = size / 2, cy = size / 2;
 
-    // Create a radial gradient for the base shape to ensure edges fade to zero
-    const baseGrad = context.createRadialGradient(cx, cy, size * 0.1, cx, cy, size * 0.5);
-    baseGrad.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+    // Base elliptical shape: bottom-flat, top-rounded
+    const baseGrad = ctx.createRadialGradient(cx, cy * 0.88, size * 0.06, cx, cy * 0.88, size * 0.48);
+    baseGrad.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+    baseGrad.addColorStop(0.5, 'rgba(248, 250, 255, 0.10)');
     baseGrad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
-    context.fillStyle = baseGrad;
-    context.fillRect(0,0,size,size);
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, size, size);
 
-    for (let i = 0; i < puffs; i++) {
+    // Layered puff blobs: biased toward top half for dome shape
+    const numPuffs = 200;
+    for (let i = 0; i < numPuffs; i++) {
         const angle = Math.random() * Math.PI * 2;
-        // Cluster more near center
-        const dist = Math.pow(Math.random(), 0.6) * (size * 0.35);
+        const dist = Math.pow(Math.random(), 0.55) * (size * 0.38);
+        // Bias puffs toward the top half
         const px = cx + Math.cos(angle) * dist;
-        const py = cy + Math.sin(angle) * dist;
+        const py = (cy * 0.85) + Math.sin(angle) * dist * (Math.sin(angle) < 0 ? 0.6 : 1.05);
 
-        const r = size * (0.05 + Math.random() * 0.2);
+        const r = size * (0.04 + Math.random() * 0.14);
+        // Brighter on top, cooler on bottom
+        const brightness = py < cy ? 250 + Math.random() * 5 : 232 + Math.random() * 12;
+        const blueShift = py > cy ? 5 + Math.random() * 8 : 0;
+        const opacity = 0.03 + Math.random() * 0.11;
 
-        const grad = context.createRadialGradient(px, py, 0, px, py, r);
-        const opacity = 0.02 + Math.random() * 0.1; // Softer, more stacking
-
-        // Use slight off-white for depth in texture
-        const val = 245 + Math.random() * 10;
-
-        grad.addColorStop(0, `rgba(${val}, ${val}, ${val}, ${opacity})`);
-        grad.addColorStop(0.4, `rgba(${val}, ${val}, ${val}, ${opacity * 0.6})`);
-        grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
-
-        context.fillStyle = grad;
-        context.beginPath();
-        context.arc(px, py, r, 0, Math.PI * 2);
-        context.fill();
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, r);
+        grad.addColorStop(0, `rgba(${brightness}, ${brightness}, ${brightness + blueShift}, ${opacity})`);
+        grad.addColorStop(0.5, `rgba(${brightness}, ${brightness}, ${brightness + blueShift}, ${opacity * 0.5})`);
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
     }
 
-    // Add noise
-    const imgData = context.getImageData(0,0,size,size);
-    const data = imgData.data;
+    // Bright specular highlights at the top peaks
+    for (let i = 0; i < 6; i++) {
+        const px = cx + (Math.random() - 0.5) * size * 0.28;
+        const py = cy * (0.4 + Math.random() * 0.45);
+        const r = size * (0.04 + Math.random() * 0.07);
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, r);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.40)');
+        grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.18)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
 
-    for(let i=0; i<data.length; i+=4) {
-        if(data[i+3] > 0) {
-             const noise = (Math.random() - 0.5) * 20;
-             data[i] = Math.max(0, Math.min(255, data[i] + noise));
-             data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise));
-             data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise));
+    // Bottom shadow gradient (blue-grey underside)
+    const shadowGrad = ctx.createLinearGradient(0, cy * 0.9, 0, size);
+    shadowGrad.addColorStop(0, 'rgba(190, 200, 220, 0.0)');
+    shadowGrad.addColorStop(0.5, 'rgba(175, 185, 210, 0.07)');
+    shadowGrad.addColorStop(1, 'rgba(150, 162, 195, 0.16)');
+    ctx.fillStyle = shadowGrad;
+    ctx.fillRect(0, cy * 0.9, size, size);
+
+    // Subtle pixel-level noise for organic feel
+    const imgData = ctx.getImageData(0, 0, size, size);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+            const noise = (Math.random() - 0.5) * 14;
+            data[i] = Math.max(0, Math.min(255, data[i] + noise));
+            data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+            data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
         }
     }
-    context.putImageData(imgData, 0, 0);
+    ctx.putImageData(imgData, 0, 0);
+    return new THREE.CanvasTexture(canvas);
+}
 
+// Flat stratus/nimbostratus texture: wide, grey, layered sheets
+function createStratusTexture() {
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+
+    // Wide soft base
+    const baseGrad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size * 0.5);
+    baseGrad.addColorStop(0, 'rgba(195, 200, 215, 0.28)');
+    baseGrad.addColorStop(0.45, 'rgba(205, 210, 225, 0.14)');
+    baseGrad.addColorStop(0.85, 'rgba(215, 220, 235, 0.05)');
+    baseGrad.addColorStop(1, 'rgba(215, 220, 235, 0.0)');
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Horizontal layered bands
+    for (let i = 0; i < 10; i++) {
+        const bandY = size * (0.25 + Math.random() * 0.5);
+        const bandH = size * (0.06 + Math.random() * 0.14);
+        const grey = 175 + Math.random() * 35;
+        const opacity = 0.04 + Math.random() * 0.09;
+        const grad = ctx.createLinearGradient(0, bandY - bandH, 0, bandY + bandH);
+        grad.addColorStop(0, `rgba(${grey}, ${grey + 4}, ${grey + 14}, 0.0)`);
+        grad.addColorStop(0.5, `rgba(${grey}, ${grey + 4}, ${grey + 14}, ${opacity})`);
+        grad.addColorStop(1, `rgba(${grey}, ${grey + 4}, ${grey + 14}, 0.0)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(size * 0.04, bandY - bandH, size * 0.92, bandH * 2);
+    }
+
+    // Wide flat elliptical blobs
+    for (let i = 0; i < 55; i++) {
+        const px = Math.random() * size;
+        const py = size * (0.28 + Math.random() * 0.44);
+        const rx = size * (0.12 + Math.random() * 0.22);
+        const ry = size * (0.025 + Math.random() * 0.055);
+        const grey = 180 + Math.random() * 28;
+        const opacity = 0.025 + Math.random() * 0.065;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.scale(1, ry / rx);
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+        grad.addColorStop(0, `rgba(${grey}, ${grey + 4}, ${grey + 12}, ${opacity})`);
+        grad.addColorStop(1, 'rgba(215, 220, 235, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, rx, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Darker bottom (rain-laden underside)
+    const shadowGrad = ctx.createLinearGradient(0, size * 0.45, 0, size);
+    shadowGrad.addColorStop(0, 'rgba(135, 140, 160, 0.0)');
+    shadowGrad.addColorStop(0.6, 'rgba(120, 125, 148, 0.12)');
+    shadowGrad.addColorStop(1, 'rgba(100, 108, 135, 0.22)');
+    ctx.fillStyle = shadowGrad;
+    ctx.fillRect(0, size * 0.45, size, size * 0.55);
+    return new THREE.CanvasTexture(canvas);
+}
+
+// Thin cirrus texture: wispy elongated ice-crystal streaks
+function createCirrusTexture() {
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+
+    // Very thin wispy streaks
+    for (let i = 0; i < 22; i++) {
+        const startX = Math.random() * size * 0.25;
+        const endX = startX + size * (0.45 + Math.random() * 0.45);
+        const y = size * (0.3 + Math.random() * 0.4);
+        const thickness = 2.5 + Math.random() * 7;
+        const angle = (Math.random() - 0.5) * 0.14;
+
+        ctx.save();
+        ctx.translate(size / 2, size / 2);
+        ctx.rotate(angle);
+        ctx.translate(-size / 2, -size / 2);
+
+        const opacity = 0.06 + Math.random() * 0.16;
+        const grad = ctx.createLinearGradient(startX, y, endX, y);
+        grad.addColorStop(0, 'rgba(238, 244, 255, 0.0)');
+        grad.addColorStop(0.1, `rgba(238, 244, 255, ${opacity})`);
+        grad.addColorStop(0.5, `rgba(244, 250, 255, ${opacity * 1.5})`);
+        grad.addColorStop(0.9, `rgba(238, 244, 255, ${opacity})`);
+        grad.addColorStop(1, 'rgba(238, 244, 255, 0.0)');
+
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = thickness;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        const cpY = y + (Math.random() - 0.5) * size * 0.055;
+        ctx.quadraticCurveTo((startX + endX) / 2, cpY, endX, y + (Math.random() - 0.5) * size * 0.03);
+        ctx.stroke();
+
+        // Thin filament tails
+        for (let j = 0; j < 4; j++) {
+            const fStartX = startX + Math.random() * (endX - startX) * 0.6;
+            const fLen = (endX - startX) * (0.08 + Math.random() * 0.25);
+            const fY = y + (Math.random() - 0.5) * 18;
+            const fOp = opacity * (0.3 + Math.random() * 0.3);
+            const fGrad = ctx.createLinearGradient(fStartX, fY, fStartX + fLen, fY + (Math.random() - 0.5) * 14);
+            fGrad.addColorStop(0, 'rgba(238, 244, 255, 0.0)');
+            fGrad.addColorStop(0.5, `rgba(238, 244, 255, ${fOp})`);
+            fGrad.addColorStop(1, 'rgba(238, 244, 255, 0.0)');
+            ctx.strokeStyle = fGrad;
+            ctx.lineWidth = 1 + Math.random() * 2.5;
+            ctx.beginPath();
+            ctx.moveTo(fStartX, fY);
+            ctx.lineTo(fStartX + fLen, fY + (Math.random() - 0.5) * 14);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    // Very subtle central glow
+    const glow = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size * 0.5);
+    glow.addColorStop(0, 'rgba(248, 252, 255, 0.06)');
+    glow.addColorStop(1, 'rgba(248, 252, 255, 0.0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, size, size);
     return new THREE.CanvasTexture(canvas);
 }
 
@@ -417,7 +570,7 @@ class WindDustSystem extends ParticleSystemBase {
             size: 0.1,       // Tiny
             transparent: true,
             opacity: 0.0,
-            map: ResourceManager.getCloudTexture(), // Reuse noise texture for softness
+            map: ResourceManager.getCloudTexture('cumulus'), // Reuse noise texture for softness
             depthWrite: false,
             blending: THREE.AdditiveBlending // Glowy/Airy feel
         });
@@ -515,16 +668,32 @@ class WindDustSystem extends ParticleSystemBase {
 }
 
 class CloudSystem extends ParticleSystemBase {
-    constructor(scene, camera, zone, maxClouds = 20) {
+    /**
+     * @param {string} cloudType  'cumulus' | 'stratus' | 'cirrus'
+     */
+    constructor(scene, camera, zone, maxClouds = 12, cloudType = 'cumulus') {
         super(scene);
         this.currentCloudCover = 0;
         this.camera = camera;
         this.maxClouds = maxClouds;
-        this.puffsPerCloud = 8;
-        this.totalInstances = maxClouds * this.puffsPerCloud;
+        this.cloudType = cloudType;
         this.zone = zone || { minX: -12, maxX: 12 };
 
-        const map = ResourceManager.getCloudTexture();
+        // Puff counts and scale ranges per cloud type
+        const typeConfig = {
+            cumulus: { puffsPerCloud: 10, scaleMin: 2.0, scaleMax: 4.0,
+                       yMin: 6,  yRange: 4,  windMult: 1.0, bobAmp: 0.07 },
+            stratus: { puffsPerCloud: 5,  scaleMin: 4.5, scaleMax: 7.5,
+                       yMin: 4,  yRange: 2,  windMult: 0.6, bobAmp: 0.04 },
+            cirrus:  { puffsPerCloud: 4,  scaleMin: 3.5, scaleMax: 5.5,
+                       yMin: 12, yRange: 4,  windMult: 1.8, bobAmp: 0.015 }
+        };
+        const cfg = typeConfig[cloudType] || typeConfig.cumulus;
+        this.cfg = cfg;
+        this.puffsPerCloud = cfg.puffsPerCloud;
+        this.totalInstances = maxClouds * this.puffsPerCloud;
+
+        const map = ResourceManager.getCloudTexture(cloudType);
         this.material = new THREE.MeshBasicMaterial({
             map: map,
             transparent: true,
@@ -539,69 +708,130 @@ class CloudSystem extends ParticleSystemBase {
         const geometry = new THREE.PlaneGeometry(1, 1);
         this.mesh = new THREE.InstancedMesh(geometry, this.material, this.totalInstances);
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+        // Enable per-instance colors for depth shading (bright top, shadowed bottom)
+        const whiteColor = new THREE.Color(1, 1, 1);
+        for (let i = 0; i < this.totalInstances; i++) {
+            this.mesh.setColorAt(i, whiteColor);
+        }
+        if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+
         this.scene.add(this.mesh);
 
         this.clouds = [];
         this.dummy = new THREE.Object3D();
+        // Reusable quaternion for puff spin
+        this._spinQuat = new THREE.Quaternion();
+        this._spinAxis = new THREE.Vector3(0, 0, 1);
+        // Reusable color for instance color writes
+        this._puffColor = new THREE.Color();
 
-        for(let i=0; i<maxClouds; i++) {
+        for (let i = 0; i < maxClouds; i++) {
             this.addCloud();
         }
 
-        for(let i=0; i<this.totalInstances; i++) {
-             this.dummy.position.set(0, -1000, 0);
-             this.dummy.updateMatrix();
-             this.mesh.setMatrixAt(i, this.dummy.matrix);
+        // Hide all instances initially
+        for (let i = 0; i < this.totalInstances; i++) {
+            this.dummy.position.set(0, -1000, 0);
+            this.dummy.updateMatrix();
+            this.mesh.setMatrixAt(i, this.dummy.matrix);
         }
         this.mesh.instanceMatrix.needsUpdate = true;
         this.mesh.visible = true;
     }
-    // ... rest of class
+
     addCloud() {
         const startIndex = this.clouds.length * this.puffsPerCloud;
-        const indices = [];
-        for(let i=0; i<this.puffsPerCloud; i++) indices.push(startIndex + i);
+        const indices = Array.from({ length: this.puffsPerCloud }, (_, i) => startIndex + i);
+        const { scaleMin, scaleMax, yMin, yRange } = this.cfg;
 
         const cloud = {
             x: this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX),
-            y: 6 + Math.random() * 4,
+            y: yMin + Math.random() * yRange,
             z: Math.random() * 10 - 5,
-            scale: 2.0 + Math.random() * 2.0,
-            indices: indices,
-            puffs: []
+            scale: scaleMin + Math.random() * (scaleMax - scaleMin),
+            indices,
+            puffs: this._createPuffs(),
+            floatOffset: Math.random() * Math.PI * 2   // for gentle vertical bob
         };
-
-        for(let i=0; i<this.puffsPerCloud; i++) {
-            cloud.puffs.push({
-                x: (Math.random() - 0.5) * 2,
-                y: (Math.random() - 0.5) * 1,
-                z: (Math.random() - 0.5) * 2,
-                scale: 0.5 + Math.random() * 0.5,
-                rotation: Math.random() * Math.PI
-            });
-        }
         this.clouds.push(cloud);
     }
 
-    update(delta, windSpeed, cloudCover, lightColor, sunPos, moonPos, sunColor, moonColor) {
-        // We now update uniforms instead of just color
-        if (this.material.userData.shader) { // Shader might not be compiled yet
-            // Wait, we used shared uniforms object in cloudShaderInjection
-            // So we can just update those values directly!
-            // BUT we must be careful if we have multiple cloud systems sharing the same uniform object reference.
-            // If they share `cloudShaderInjection.uniforms`, updating it updates ALL of them.
-            // That's actually desired since sun/moon are global.
-            // However, `uCloudColor` might need to be instance specific or per-system.
-            // In the injection, I used `uCloudColor`.
+    _createPuffs() {
+        const count = this.puffsPerCloud;
+        const puffs = [];
 
-            // Actually, lightColor passed here is the Ambient tint.
-            // We should use that for `uCloudColor` or `uAmbientColor`.
-            if (lightColor) cloudShaderInjection.uniforms.uAmbientColor.value.copy(lightColor);
-            if (sunPos) cloudShaderInjection.uniforms.uSunPosition.value.copy(sunPos);
-            if (moonPos) cloudShaderInjection.uniforms.uMoonPosition.value.copy(moonPos);
-            if (sunColor) cloudShaderInjection.uniforms.uSunColor.value.copy(sunColor);
-            if (moonColor) cloudShaderInjection.uniforms.uMoonColor.value.copy(moonColor);
+        if (this.cloudType === 'cumulus') {
+            // Dome arrangement: 3 tiers — base ring, middle ring, top cap
+            // Tier 0: 3 puffs at base, wide spread
+            const tier0 = [[0, 120, 240], 0.90, 0.00, [0.65, 0.85]];
+            // Tier 1: 4 puffs in middle, medium spread
+            const tier1 = [[30, 120, 210, 300], 0.62, 0.35, [0.72, 0.95]];
+            // Tier 2: 2 puffs upper, tighter
+            const tier2 = [[60, 220], 0.35, 0.60, [0.55, 0.72]];
+            // Tier 3: 1 apex puff
+            const tier3 = [[0], 0.00, 0.80, [0.45, 0.62]];
+
+            for (const [angles, radius, yOff, [sMin, sMax]] of [tier0, tier1, tier2, tier3]) {
+                for (const deg of angles) {
+                    const a = (deg + (Math.random() - 0.5) * 25) * Math.PI / 180;
+                    puffs.push({
+                        x: Math.cos(a) * radius + (Math.random() - 0.5) * 0.15,
+                        y: yOff + (Math.random() - 0.5) * 0.18,
+                        z: Math.sin(a) * radius * 0.55 + (Math.random() - 0.5) * 0.15,
+                        scale: sMin + Math.random() * (sMax - sMin),
+                        rotation: Math.random() * Math.PI,
+                        rotSpeed: (Math.random() - 0.5) * 0.04,
+                        // colorT: 0=bottom-shadow, 1=top-bright
+                        colorT: 0.2 + yOff * 0.7
+                    });
+                }
+            }
+        } else if (this.cloudType === 'stratus') {
+            // Wide, flat arrangement: 5 puffs in a horizontal strip
+            for (let i = 0; i < count; i++) {
+                const t = (i / (count - 1)) - 0.5; // -0.5 to +0.5
+                puffs.push({
+                    x: t * 2.8 + (Math.random() - 0.5) * 0.4,
+                    y: (Math.random() - 0.5) * 0.15,
+                    z: (Math.random() - 0.5) * 0.55,
+                    scale: 1.0 + Math.random() * 0.65,
+                    rotation: Math.random() * Math.PI,
+                    rotSpeed: (Math.random() - 0.5) * 0.015,
+                    colorT: 0.45 + Math.random() * 0.25  // stratus is mid-grey, darker at bottom
+                });
+            }
+        } else if (this.cloudType === 'cirrus') {
+            // Elongated streak: 4 puffs in a diagonal line
+            for (let i = 0; i < count; i++) {
+                const t = (i / (count - 1)) - 0.5; // -0.5 to +0.5
+                puffs.push({
+                    x: t * 3.8 + (Math.random() - 0.5) * 0.25,
+                    y: t * 0.12 + (Math.random() - 0.5) * 0.08,  // slight diagonal
+                    z: (Math.random() - 0.5) * 0.22,
+                    scale: 0.28 + Math.random() * 0.38,
+                    rotation: Math.random() * Math.PI,
+                    rotSpeed: (Math.random() - 0.5) * 0.025,
+                    colorT: 0.80 + Math.random() * 0.20  // cirrus is near-white, very bright
+                });
+            }
         }
+
+        return puffs;
+    }
+
+    update(delta, windSpeed, cloudCover, lightColor, sunPos, moonPos, sunColor, moonColor, weatherCode = 0) {
+        // Update global lighting uniforms (shared across all cloud systems)
+        if (lightColor) cloudShaderInjection.uniforms.uAmbientColor.value.copy(lightColor);
+        if (sunPos)     cloudShaderInjection.uniforms.uSunPosition.value.copy(sunPos);
+        if (moonPos)    cloudShaderInjection.uniforms.uMoonPosition.value.copy(moonPos);
+        if (sunColor)   cloudShaderInjection.uniforms.uSunColor.value.copy(sunColor);
+        if (moonColor)  cloudShaderInjection.uniforms.uMoonColor.value.copy(moonColor);
+
+        // Derive a storm darkness factor (0=clear, 1=heavy storm)
+        const isStorm = weatherCode >= 95;
+        const isRain  = weatherCode >= 51 && weatherCode < 95;
+        const stormFactor = isStorm ? 1.0 : isRain ? 0.5 : 0.0;
 
         // Smooth cloud cover transition
         const smoothFactor = Math.min(1.0, delta * 1.0);
@@ -614,8 +844,12 @@ class CloudSystem extends ParticleSystemBase {
             targetOp = Math.min(0.9, this.currentCloudCover / 100.0);
             activeClouds = Math.floor((this.currentCloudCover / 100.0) * this.maxClouds);
         }
-
         if (this.currentCloudCover > 80) targetOp = Math.max(targetOp, 0.6);
+
+        // Stratus/storm clouds are more opaque
+        if (this.cloudType === 'stratus' && stormFactor > 0) {
+            targetOp = Math.min(0.92, targetOp * (1.0 + stormFactor * 0.35));
+        }
 
         const opacity = this.updateOpacity(delta, targetOp);
         this.material.opacity = opacity;
@@ -627,29 +861,62 @@ class CloudSystem extends ParticleSystemBase {
         this.mesh.visible = true;
 
         const camQuat = this.camera.quaternion;
+        const time = Date.now() * 0.001;
+        const { windMult } = this.cfg;
+
+        // Instance color: top = white, bottom = shadow tinted by stormFactor
+        // Storm tops are darker overall
+        const topR = 1.0 - stormFactor * 0.35;
+        const topG = 1.0 - stormFactor * 0.30;
+        const topB = 1.0 - stormFactor * 0.20;
+        const botR = (this.cloudType === 'stratus' ? 0.62 : 0.70) - stormFactor * 0.22;
+        const botG = (this.cloudType === 'stratus' ? 0.65 : 0.73) - stormFactor * 0.20;
+        const botB = (this.cloudType === 'stratus' ? 0.78 : 0.85) - stormFactor * 0.18;
+
+        let instanceColorDirty = false;
 
         for (let i = 0; i < this.clouds.length; i++) {
             const cloud = this.clouds[i];
 
-            const moveSpeed = (0.05 + windSpeed * 0.01) * delta;
+            // Move cloud horizontally (cirrus faster, stratus slower)
+            const moveSpeed = (0.05 + windSpeed * 0.01) * delta * windMult;
             cloud.x += moveSpeed;
             if (cloud.x > this.zone.maxX) cloud.x = this.zone.minX;
             if (cloud.x < this.zone.minX) cloud.x = this.zone.maxX;
+
+            // Gentle vertical bob (amplitude comes from per-type config)
+            const bob = Math.sin(time * 0.28 + cloud.floatOffset) * this.cfg.bobAmp;
 
             const isVisible = i < activeClouds;
 
             cloud.indices.forEach((idx, j) => {
                 if (isVisible) {
                     const puff = cloud.puffs[j];
+                    // Animate puff rotation slowly
+                    puff.rotation += puff.rotSpeed * delta;
+
                     this.dummy.position.set(
                         cloud.x + puff.x * cloud.scale * 0.5,
-                        cloud.y + puff.y * cloud.scale * 0.5,
+                        cloud.y + bob + puff.y * cloud.scale * 0.5,
                         cloud.z + puff.z * cloud.scale * 0.5
                     );
+                    // Billboard to camera, then apply puff spin in screen space
                     this.dummy.quaternion.copy(camQuat);
+                    this._spinQuat.setFromAxisAngle(this._spinAxis, puff.rotation);
+                    this.dummy.quaternion.multiply(this._spinQuat);
                     this.dummy.scale.setScalar(puff.scale * cloud.scale);
                     this.dummy.updateMatrix();
                     this.mesh.setMatrixAt(idx, this.dummy.matrix);
+
+                    // Per-puff depth color: lerp between bottom shadow and top highlight
+                    const t = puff.colorT;
+                    this._puffColor.setRGB(
+                        botR + (topR - botR) * t,
+                        botG + (topG - botG) * t,
+                        botB + (topB - botB) * t
+                    );
+                    this.mesh.setColorAt(idx, this._puffColor);
+                    instanceColorDirty = true;
                 } else {
                     this.dummy.position.set(0, -1000, 0);
                     this.dummy.updateMatrix();
@@ -658,6 +925,9 @@ class CloudSystem extends ParticleSystemBase {
             });
         }
         this.mesh.instanceMatrix.needsUpdate = true;
+        if (instanceColorDirty && this.mesh.instanceColor) {
+            this.mesh.instanceColor.needsUpdate = true;
+        }
     }
 }
 
@@ -794,17 +1064,23 @@ export class WeatherEffects {
 
         this.pastRain = new RainSystem(scene, pastZone, 2000);
         this.pastSnow = new SnowSystem(scene, pastZone, 1500);
-        this.pastCloud = new CloudSystem(scene, camera, pastZone, 20);
+        this.pastCumulus = new CloudSystem(scene, camera, pastZone, 10, 'cumulus');
+        this.pastStratus = new CloudSystem(scene, camera, pastZone, 8,  'stratus');
+        this.pastCirrus  = new CloudSystem(scene, camera, pastZone, 6,  'cirrus');
         this.pastDust = new WindDustSystem(scene, pastZone, 300);
 
         this.currRain = new RainSystem(scene, currZone, 2000);
         this.currSnow = new SnowSystem(scene, currZone, 1500);
-        this.currCloud = new CloudSystem(scene, camera, currZone, 20);
+        this.currCumulus = new CloudSystem(scene, camera, currZone, 10, 'cumulus');
+        this.currStratus = new CloudSystem(scene, camera, currZone, 8,  'stratus');
+        this.currCirrus  = new CloudSystem(scene, camera, currZone, 6,  'cirrus');
         this.currDust = new WindDustSystem(scene, currZone, 300);
 
         this.futureRain = new RainSystem(scene, futureZone, 2000);
         this.futureSnow = new SnowSystem(scene, futureZone, 1500);
-        this.futureCloud = new CloudSystem(scene, camera, futureZone, 20);
+        this.futureCumulus = new CloudSystem(scene, camera, futureZone, 10, 'cumulus');
+        this.futureStratus = new CloudSystem(scene, camera, futureZone, 8,  'stratus');
+        this.futureCirrus  = new CloudSystem(scene, camera, futureZone, 6,  'cirrus');
         this.futureDust = new WindDustSystem(scene, futureZone, 300);
 
         this.raycaster = new THREE.Raycaster();
@@ -817,6 +1093,44 @@ export class WeatherEffects {
         this.scene.add(this.lightningLight);
 
         this.createSplashes();
+    }
+
+    /**
+     * Split total cloudCover into per-type cover values based on weather code.
+     * Returns { cumulus, stratus, cirrus } each in 0–100 range.
+     *
+     * Fractions are meteorologically motivated:
+     *  - Cirrus: high-altitude ice crystals, prominent only in fair weather (codes 1–2).
+     *    0.55 for code 1 = mostly cirrus at "few clouds"; 0.30 for code 2 = some cirrus mixed in.
+     *  - Stratus: layer clouds dominant in overcast/precipitation. 0.35/0.65 split for showers/storms
+     *    reflects the stratus anvil base beneath active convection.
+     *  - Cumulus: convective clouds. 0.85 for storms = tall cumulonimbus; 0.40 general fallback
+     *    for mixed conditions (e.g. drizzle has mostly stratus, only some cumulus).
+     */
+    _cloudTypeCovers(code, cover) {
+        // Cirrus: high-altitude ice-crystal wisps appear only in fair/mostly-clear skies
+        let cirrus = 0;
+        if (code === 1) cirrus = cover * 0.55;       // few clouds = mostly high cirrus
+        else if (code === 2) cirrus = cover * 0.30;  // partly cloudy = some cirrus above cumulus
+
+        // Stratus: low/mid flat layer clouds dominate overcast and precipitation codes
+        let stratus = 0;
+        if (code === 3)                            stratus = cover;          // overcast = full stratus sheet
+        else if (code >= 45 && code <= 48)         stratus = 100;            // fog = dense, surface-level stratus
+        else if (code >= 51 && code <= 77)         stratus = cover;          // drizzle/rain/snow — nimbostratus
+        else if (code >= 80 && code <= 82)         stratus = cover * 0.35;   // showers — stratus anvil base (35%)
+        else if (code >= 95)                       stratus = cover * 0.65;   // storm — heavy stratus base (65%)
+
+        // Cumulus: convective puffy/towering clouds in fair and active-weather codes
+        let cumulus = 0;
+        if (code === 0)                            cumulus = 0;               // clear sky — no clouds
+        else if (code <= 2)                        cumulus = cover;           // few/partly — scattered cumulus
+        else if (code === 3)                       cumulus = cover * 0.25;    // overcast — minimal cumulus remnants
+        else if (code >= 80 && code <= 82)         cumulus = cover;           // showers — active cumulus/congestus
+        else if (code >= 95)                       cumulus = cover * 0.85;    // storm — towering cumulonimbus (85%)
+        else                                       cumulus = cover * 0.40;    // other rain — mixed, mostly stratus
+
+        return { cumulus, stratus, cirrus };
     }
 
     update(past, current, forecast, delta = 0.016, lightColor, sunPos, moonPos, sunColor, moonColor) {
@@ -838,19 +1152,31 @@ export class WeatherEffects {
         const c = extractData(current);
         const f = extractData(forecast);
 
+        const pCovers = this._cloudTypeCovers(p.code, p.cloud);
+        const cCovers = this._cloudTypeCovers(c.code, c.cloud);
+        const fCovers = this._cloudTypeCovers(f.code, f.cloud);
+
+        const args = [lightColor, sunPos, moonPos, sunColor, moonColor];
+
         this.pastRain.update(delta, p.wind, p.dir, p.rain, this.raycaster, null, null, lightColor);
         this.pastSnow.update(delta, p.wind, p.dir, p.snow, lightColor);
-        this.pastCloud.update(delta, p.wind, p.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
+        this.pastCumulus.update(delta, p.wind, pCovers.cumulus, ...args, p.code);
+        this.pastStratus.update(delta, p.wind, pCovers.stratus, ...args, p.code);
+        this.pastCirrus.update(delta,  p.wind, pCovers.cirrus,  ...args, p.code);
         this.pastDust.update(delta, p.wind, p.dir, p.rain, lightColor);
 
         this.currRain.update(delta, c.wind, c.dir, c.rain, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos), lightColor);
         this.currSnow.update(delta, c.wind, c.dir, c.snow, lightColor);
-        this.currCloud.update(delta, c.wind, c.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
+        this.currCumulus.update(delta, c.wind, cCovers.cumulus, ...args, c.code);
+        this.currStratus.update(delta, c.wind, cCovers.stratus, ...args, c.code);
+        this.currCirrus.update(delta,  c.wind, cCovers.cirrus,  ...args, c.code);
         this.currDust.update(delta, c.wind, c.dir, c.rain, lightColor);
 
         this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null, lightColor);
         this.futureSnow.update(delta, f.wind, f.dir, f.snow, lightColor);
-        this.futureCloud.update(delta, f.wind, f.cloud, lightColor, sunPos, moonPos, sunColor, moonColor);
+        this.futureCumulus.update(delta, f.wind, fCovers.cumulus, ...args, f.code);
+        this.futureStratus.update(delta, f.wind, fCovers.stratus, ...args, f.code);
+        this.futureCirrus.update(delta,  f.wind, fCovers.cirrus,  ...args, f.code);
         this.futureDust.update(delta, f.wind, f.dir, f.rain, lightColor);
 
         if (sunPos) {

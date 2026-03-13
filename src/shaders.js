@@ -155,8 +155,16 @@ export const cloudShaderInjection = {
             // Final Light
             vec3 totalLight = ambient + sunLight + moonLight;
 
-            // Apply to cloud
-            diffuseColor.rgb *= uCloudColor * totalLight;
+            // Vertical gradient: top of cloud = bright highlight, base = blue-grey shadow.
+            // Clouds are placed from y≈4 (stratus base) to y≈18 (cirrus top).
+            // vertGrad = (y - minY) / (maxY - minY) = (y - 4.0) / (18.0 - 4.0)
+            float vertGrad = clamp((vWorldPosition.y - 4.0) / 14.0, 0.0, 1.0);
+            vec3 topHighlight = vec3(1.02, 1.02, 1.05);   // slight warm-white peak
+            vec3 baseShadow   = vec3(0.72, 0.76, 0.88);   // cool blue-grey underside
+            vec3 heightTint   = mix(baseShadow, topHighlight, vertGrad);
+
+            // Apply to cloud (instance color already baked into diffuseColor.rgb by Three.js)
+            diffuseColor.rgb *= uCloudColor * totalLight * heightTint;
             `
         );
     }
