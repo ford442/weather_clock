@@ -4,14 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Weather Clock</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;700&display=swap" rel="stylesheet">
     <style>
+        /* ── CSS Custom Properties (updated per-frame by updatePanelTheme) ── */
+        :root {
+            --panel-bg: rgba(0, 0, 0, 0.6);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --header-color: #88d8f9;
+            --trend-glow: transparent;
+        }
+
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #000; /* Let Three.js handle the background */
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #000;
         }
+
         #canvas-container {
             width: 100vw;
             height: 100vh;
@@ -28,15 +40,16 @@
             width: 100%;
             height: 100%;
             z-index: 2;
-            pointer-events: none; /* Allow clicking through to 3D scene */
+            pointer-events: none;
             display: grid;
             grid-template-columns: 300px 1fr 300px;
             padding: 20px;
             box-sizing: border-box;
         }
 
+        /* ── Panels ── */
         .panel {
-            background: rgba(0, 0, 0, 0.6);
+            background: var(--panel-bg);
             backdrop-filter: blur(10px);
             border-radius: 15px;
             padding: 20px;
@@ -44,14 +57,14 @@
             pointer-events: auto;
             display: flex;
             flex-direction: column;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 0 30px var(--trend-glow);
             height: fit-content;
             margin-top: 15vh;
-            transition: all 0.3s ease;
+            transition: background 0.8s ease, border-color 0.8s ease, box-shadow 0.6s ease;
         }
 
         .panel:hover {
-            background: rgba(0, 0, 0, 0.75);
             border-color: rgba(255, 255, 255, 0.3);
         }
 
@@ -59,15 +72,17 @@
             background: none;
             border: none;
             backdrop-filter: none;
+            box-shadow: none;
             align-items: center;
             margin-top: 50px;
-            pointer-events: none; /* Let clicks pass through, but re-enable for children */
+            pointer-events: none;
         }
 
         #panel-center > * {
             pointer-events: auto;
         }
 
+        /* ── Typography ── */
         .time-display {
             font-size: 72px;
             font-weight: 200;
@@ -86,8 +101,39 @@
             gap: 10px;
         }
 
+        h3 {
+            margin: 0 0 15px 0;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--header-color);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px;
+            transition: color 0.8s ease;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: #eee;
+        }
+
+        .description {
+            font-size: 19px;
+            margin-bottom: 16px;
+            font-weight: 500;
+            min-height: 28px;
+        }
+
+        /* ── Retry button ── */
         .retry-btn {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255,255,255,0.2);
             border: none;
             border-radius: 50%;
             width: 24px;
@@ -100,33 +146,58 @@
             font-size: 14px;
             transition: background 0.2s;
         }
+        .retry-btn:hover { background: rgba(255,255,255,0.4); }
 
-        .retry-btn:hover {
-            background: rgba(255, 255, 255, 0.4);
-        }
-
-        .unit-toggle {
+        /* ── Unit toggle switch ── */
+        .unit-switch {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             cursor: pointer;
-            padding: 5px 10px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 15px;
+            margin-top: 8px;
             font-size: 14px;
-            margin-top: 5px;
-            transition: background 0.2s;
-            border: 1px solid rgba(255,255,255,0.2);
+            user-select: none;
+            color: white;
         }
-
-        .unit-toggle:hover {
-            background: rgba(255,255,255,0.2);
+        .unit-sw-label {
+            opacity: 0.5;
+            font-weight: 500;
+            transition: opacity 0.2s;
+            min-width: 18px;
+            text-align: center;
         }
+        .unit-switch[data-unit='metric']   .unit-sw-label:first-child { opacity: 1; font-weight: 700; }
+        .unit-switch[data-unit='imperial'] .unit-sw-label:last-child  { opacity: 1; font-weight: 700; }
+        .unit-switch-track {
+            width: 40px;
+            height: 22px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 11px;
+            position: relative;
+            border: 1px solid rgba(255,255,255,0.25);
+            transition: background 0.25s;
+        }
+        .unit-switch-thumb {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 14px;
+            height: 14px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.25s;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+        }
+        .unit-switch[data-unit='imperial'] .unit-switch-thumb { transform: translateX(18px); }
+        .unit-switch[data-unit='imperial'] .unit-switch-track { background: rgba(100,200,255,0.4); }
 
+        /* ── Search ── */
         .search-container {
             margin-top: 10px;
             display: flex;
             gap: 5px;
             height: 30px;
         }
-
         .search-input {
             background: rgba(0,0,0,0.5);
             border: 1px solid rgba(255,255,255,0.3);
@@ -135,8 +206,8 @@
             color: white;
             outline: none;
             width: 150px;
+            font-family: inherit;
         }
-
         .search-btn {
             background: rgba(255,255,255,0.2);
             border: none;
@@ -146,66 +217,98 @@
             cursor: pointer;
             font-weight: bold;
         }
+        .search-btn:hover { background: rgba(255,255,255,0.3); }
 
-        .search-btn:hover {
-            background: rgba(255,255,255,0.3);
+        /* ── Center panel large displays ── */
+        .current-temp-large {
+            font-size: 56px;
+            font-weight: 700;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+            margin: 8px 0 2px;
+            line-height: 1;
         }
-
         .current-weather-large {
-            font-size: 24px;
-            margin-top: 5px;
+            font-size: 22px;
+            margin-top: 4px;
             text-align: center;
             text-shadow: 0 2px 5px rgba(0,0,0,0.8);
             opacity: 0.9;
         }
 
-        .current-temp-large {
-            font-size: 56px;
-            font-weight: bold;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
-            margin: 10px 0;
-        }
-
-        h3 {
-            margin: 0 0 15px 0;
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: #88d8f9;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding-bottom: 10px;
-        }
-
-        .stat-row {
+        /* ── Feels-like + UV badge ── */
+        .feels-row {
             display: flex;
-            justify-content: space-between;
-            margin-bottom: 12px;
-            font-size: 15px;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            opacity: 0.8;
+            margin-bottom: 6px;
+        }
+        .uv-badge {
+            background: rgba(255, 200, 50, 0.2);
+            border: 1px solid rgba(255, 200, 50, 0.4);
+            border-radius: 8px;
+            padding: 1px 7px;
+            font-size: 11px;
+            color: #ffd060;
+            font-weight: 600;
         }
 
-        .stat-value {
-            font-weight: bold;
-            color: #eee;
+        /* ── Sparkline canvas ── */
+        #sparkline {
+            display: block;
+            margin: 4px auto 0;
+            width: 100%;
+            max-width: 280px;
+            height: 60px;
+            opacity: 0.85;
         }
 
-        .description {
-            font-size: 20px;
-            margin-bottom: 20px;
-            font-weight: 500;
-            min-height: 30px;
-        }
-
+        /* ── Center stats pill ── */
         .center-stats {
-            margin-top: 20px;
+            margin-top: 18px;
             background: rgba(0,0,0,0.5);
-            padding: 15px 25px;
-            border-radius: 30px;
+            padding: 12px 20px;
+            border-radius: 20px;
             backdrop-filter: blur(5px);
             display: flex;
-            gap: 20px;
+            flex-wrap: wrap;
+            gap: 10px 18px;
             border: 1px solid rgba(255,255,255,0.1);
+            justify-content: center;
+            max-width: 320px;
         }
+        .cs-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        .wind-svg {
+            width: 18px;
+            height: 18px;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+        /* SVG wind arrow transform — JS sets inline transform on the group */
 
+        /* ── Time warp button ── */
+        #time-warp-btn {
+            background: rgba(100, 255, 100, 0.4);
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            color: white;
+            cursor: pointer;
+            font-size: 24px;
+            transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+        #time-warp-btn:hover { transform: scale(1.1); }
+
+        /* ── Advanced panel ── */
         #panel-advanced {
             position: absolute;
             bottom: 40px;
@@ -219,23 +322,9 @@
             margin-top: 0;
             background: rgba(0, 0, 0, 0.75);
         }
-
-        .adv-section {
-            text-align: center;
-        }
-
-        .adv-val-big {
-            font-size: 24px;
-            font-weight: bold;
-            color: #fff;
-            margin: 5px 0;
-        }
-
-        .adv-sub {
-            font-size: 13px;
-            opacity: 0.8;
-        }
-
+        .adv-section { text-align: center; }
+        .adv-val-big { font-size: 24px; font-weight: bold; color: #fff; margin: 5px 0; }
+        .adv-sub { font-size: 13px; opacity: 0.8; }
         .regional-list {
             font-size: 13px;
             text-align: left;
@@ -244,24 +333,17 @@
             gap: 5px 15px;
         }
 
-        #time-warp-btn {
-            background: rgba(100, 255, 100, 0.4);
-            border: 1px solid rgba(255,255,255,0.5);
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            color: white;
-            cursor: pointer;
-            font-size: 24px;
-            transition: all 0.2s;
-            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        /* ── DEV hint ── */
+        #dev-hint {
+            position: fixed;
+            bottom: 8px;
+            right: 8px;
+            font-size: 10px;
+            color: rgba(255,255,255,0.25);
+            pointer-events: none;
+            z-index: 10;
+            font-family: monospace;
         }
-
-        #time-warp-btn:hover {
-            transform: scale(1.1);
-            background: rgba(100, 255, 100, 0.6);
-        }
-
     </style>
 </head>
 <body>
@@ -270,19 +352,31 @@
     <div id="ui-layer">
         <!-- LEFT: Previous Data -->
         <div id="panel-left" class="panel">
-            <h3>⏮️ Previous <span id="past-time-display" style="font-size: 0.8em; opacity: 0.8;"></span></h3>
+            <h3>⏮️ Previous <span id="past-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
             <div id="past-description" class="description">--</div>
             <div class="stat-row">
                 <span>Temp</span>
                 <span id="past-temp" class="stat-value">--°</span>
             </div>
             <div class="stat-row">
+                <span>Feels Like</span>
+                <span id="past-feels-like" class="stat-value">--°</span>
+            </div>
+            <div class="stat-row">
                 <span>Wind</span>
                 <span id="past-wind" class="stat-value">-- km/h</span>
             </div>
-             <div class="stat-row">
+            <div class="stat-row">
+                <span>Humidity</span>
+                <span id="past-humidity" class="stat-value">--%</span>
+            </div>
+            <div class="stat-row">
                 <span>Cloud Cover</span>
                 <span id="past-cloud" class="stat-value">--%</span>
+            </div>
+            <div class="stat-row">
+                <span>Precip. Prob.</span>
+                <span id="past-precip-prob" class="stat-value">--%</span>
             </div>
         </div>
 
@@ -294,41 +388,81 @@
             </div>
 
             <div class="search-container">
-                <input type="text" id="location-search" class="search-input" placeholder="City name..." />
+                <input type="text" id="location-search" class="search-input" placeholder="City name…" />
                 <button id="search-btn" class="search-btn">Go</button>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
                 <div id="time-display" class="time-display">--:--</div>
                 <button id="time-warp-btn" title="Fast Forward (24h in 60s)">⏩</button>
             </div>
-            <div id="date-display" style="font-size: 24px; opacity: 0.8; margin-top: -10px; margin-bottom: 10px; font-weight: 300;">--</div>
+            <div id="date-display" style="font-size:22px;opacity:0.8;margin-top:-8px;margin-bottom:8px;font-weight:300;">--</div>
 
             <div id="current-temp" class="current-temp-large">--°</div>
-            <button id="unit-toggle" class="unit-toggle">Switch to °C</button>
-            <div id="current-description" class="current-weather-large">Loading...</div>
 
+            <!-- Feels-like + UV badge -->
+            <div class="feels-row">
+                <span>Feels like <span id="current-feels-like" class="stat-value">--°</span></span>
+                <span id="current-uv" class="uv-badge">UV --</span>
+            </div>
+
+            <!-- Unit toggle switch -->
+            <div id="unit-toggle" class="unit-switch" data-unit="imperial" role="button" tabindex="0" aria-label="Toggle temperature unit">
+                <span class="unit-sw-label">°C</span>
+                <span class="unit-switch-track"><span class="unit-switch-thumb"></span></span>
+                <span class="unit-sw-label">°F</span>
+            </div>
+
+            <div id="current-description" class="current-weather-large">Loading…</div>
+
+            <!-- 12-hour sparkline -->
+            <canvas id="sparkline" width="280" height="60"></canvas>
+
+            <!-- Stats pill -->
             <div class="center-stats">
-                <span>💨 <span id="current-wind" class="stat-value">-- km/h</span></span>
-                <span>🌙 <span id="moon-phase" class="stat-value">--</span></span>
+                <span class="cs-item">
+                    <!-- Wind direction compass SVG -->
+                    <svg id="wind-compass" class="wind-svg" viewBox="0 0 20 20" aria-hidden="true">
+                        <circle cx="10" cy="10" r="8" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/>
+                        <g id="wind-arrow" style="transform-origin:10px 10px;transform:rotate(0deg);transition:transform 0.5s ease;">
+                            <polygon points="10,2 8,9 10,7 12,9" fill="white"/>
+                        </g>
+                    </svg>
+                    <span id="current-wind" class="stat-value">--</span> km/h
+                </span>
+                <span class="cs-item">🌙 <span id="moon-phase" class="stat-value">--</span></span>
+                <span class="cs-item">🌅 <span id="sunrise-time" class="stat-value">--:--</span></span>
+                <span class="cs-item">🌇 <span id="sunset-time" class="stat-value">--:--</span></span>
             </div>
         </div>
 
         <!-- RIGHT: Forecast Data -->
         <div id="panel-right" class="panel">
-            <h3>⏭️ Forecast <span id="forecast-time-display" style="font-size: 0.8em; opacity: 0.8;"></span></h3>
+            <h3>⏭️ Forecast <span id="forecast-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
             <div id="forecast-description" class="description">--</div>
-             <div class="stat-row">
+            <div class="stat-row">
                 <span>Temp</span>
                 <span id="forecast-temp" class="stat-value">--°</span>
+            </div>
+            <div class="stat-row">
+                <span>Feels Like</span>
+                <span id="forecast-feels-like" class="stat-value">--°</span>
             </div>
             <div class="stat-row">
                 <span>Wind</span>
                 <span id="forecast-wind" class="stat-value">-- km/h</span>
             </div>
-             <div class="stat-row">
+            <div class="stat-row">
+                <span>Humidity</span>
+                <span id="forecast-humidity" class="stat-value">--%</span>
+            </div>
+            <div class="stat-row">
                 <span>Cloud Cover</span>
                 <span id="forecast-cloud" class="stat-value">--%</span>
+            </div>
+            <div class="stat-row">
+                <span>Precip. Prob.</span>
+                <span id="forecast-precip-prob" class="stat-value">--%</span>
             </div>
         </div>
 
@@ -339,21 +473,20 @@
                 <div id="history-temp" class="adv-val-big">--°</div>
                 <div id="history-desc" class="adv-sub">--</div>
             </div>
-
             <div class="adv-section">
                 <h3>🎯 Forecast Accuracy</h3>
                 <div id="accuracy-delta" class="adv-val-big">--</div>
                 <div id="accuracy-score" class="adv-sub">Score: --%</div>
             </div>
-
             <div class="adv-section">
                 <h3>📍 Nearby Regions</h3>
-                <div id="regional-list" class="regional-list">
-                    <!-- Populated by JS -->
-                </div>
+                <div id="regional-list" class="regional-list"></div>
             </div>
         </div>
     </div>
+
+    <!-- DEV hint -->
+    <div id="dev-hint">` — toggle stats</div>
 
     <script type="importmap">
         {

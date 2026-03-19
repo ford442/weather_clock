@@ -2,13 +2,20 @@
 import * as THREE from 'three';
 import { updateMoonVisuals } from './moonPhase.js';
 import { updateWeatherLighting } from './weatherLighting.js';
-import { getWeatherAtTime, getActiveWeatherData } from './weather-simulation.js';
-import { updateTimeDisplay, updateWeatherDisplay } from './ui.js';
+import { getActiveWeatherData } from './weather-simulation.js';
+import {
+    updateTimeDisplay,
+    updateWeatherDisplay,
+    updateWindCompass,
+    updatePanelTheme,
+    drawSparkline
+} from './ui.js';
 
 const ANIMATION_CONFIG = {
     realTimeScale: 1.0,
-    warpTimeScale: 1440.0, // 24h in 60s
-    weatherUpdateThrottle: 0.1, // 10% chance per frame when warping
+    warpTimeScale: 1440.0,        // 24 h in 60 s
+    weatherUpdateThrottle: 0.1,   // 10 % chance per frame during time warp
+    themeUpdateInterval: 500,     // ms between panel-theme updates
 };
 
 export class AnimationController {
@@ -17,13 +24,13 @@ export class AnimationController {
         this.services = services;
         this.scene3d = scene3d;
         this.isRunning = false;
+
+        // Throttle trackers
+        this._lastThemeMs = 0;
+        this._lastSparklineHour = -1;
     }
 
-    /**
-     * Start the animation loop
-     * @param {THREE.Clock} clock - Three.js clock for delta time
-     * @param {Stats} stats - Performance stats object
-     */
+    /** Start the rAF loop */
     start(clock, stats) {
         if (this.isRunning) return;
         this.isRunning = true;
@@ -31,46 +38,40 @@ export class AnimationController {
         const animate = () => {
             requestAnimationFrame(animate);
             stats.update();
-            this.update(clock.getDelta(), stats);
+            this.update(clock.getDelta());
         };
 
         animate();
     }
 
-    /**
-     * Main update loop
-     * @param {number} delta - Delta time in seconds
-     * @param {Stats} stats - Performance stats object
-     */
-    update(delta, stats) {
+    /** Per-frame update */
+    update(delta) {
         const { state, services, scene3d } = this;
         const { weatherService, astronomyService } = services;
         const {
-            scene,
-            camera,
-            composer,
-            sky,
-            sundial,
-            moonGroup,
-            weatherEffects,
-            sunLight,
-            moonLight,
-            ambientLight
+            scene, composer, sky,
+            sundial, moonGroup, weatherEffects,
+            sunLight, moonLight, ambientLight,
+            controls
         } = scene3d;
 
-        // Update simulation time
-        const timeScale = state.isTimeWarping ? ANIMATION_CONFIG.warpTimeScale : ANIMATION_CONFIG.realTimeScale;
+        // ── Advance simulation time ──
+        const timeScale = state.isTimeWarping
+            ? ANIMATION_CONFIG.warpTimeScale
+            : ANIMATION_CONFIG.realTimeScale;
         state.simulationTime = new Date(state.simulationTime.getTime() + delta * 1000 * timeScale);
 
-        // Update sundial
+        // ── Orbit controls damping ──
+        if (controls) controls.update();
+
+        // ── Sundial ──
         sundial.update(state.simulationTime);
 
-        // Update astronomy
+        // ── Astronomy ──
         const lat = weatherService.latitude;
         const lon = weatherService.longitude;
         const astroData = astronomyService.update(state.simulationTime, lat, lon, 20);
 
-        // Update light positions
         sunLight.position.copy(astroData.sunPosition);
         moonGroup.position.copy(astroData.moonPosition);
         moonGroup.lookAt(0, 0, 0);
@@ -80,36 +81,29 @@ export class AnimationController {
             updateMoonVisuals(moonGroup, astroData.sunPosition);
         }
 
-        // Update UI time display
+        // ── Time display ──
         updateTimeDisplay(state.simulationTime, state.isTimeWarping);
 
-        // Get active weather data
+        // ── Weather data for simulation time ──
         const activeWeatherData = getActiveWeatherData(state.simulationTime, state.weatherData);
 
         if (activeWeatherData) {
-            // Update lighting
-            if (astroData && astroData.sunPosition && astroData.sunPosition.lengthSq() > 0) {
-                updateWeatherLighting(
-                    scene,
-                    sunLight,
-                    moonLight,
-                    ambientLight,
-                    sky,
-                    {
-                        current: activeWeatherData.current,
-                        past: activeWeatherData.past,
-                        forecast: activeWeatherData.forecast
-                    },
-                    astroData
-                );
+            // Lighting
+            if (astroData.sunPosition.lengthSq() > 0) {
+                updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, {
+                    current: activeWeatherData.current,
+                    past: activeWeatherData.past,
+                    forecast: activeWeatherData.forecast
+                }, astroData);
             }
 
-            // Update weather effects
+            // Weather effects
+            const empty = { weatherCode: 0, windSpeed: 0, windDirection: 0 };
             weatherEffects.update(
-                activeWeatherData.past || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
-                activeWeatherData.current || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
-                activeWeatherData.forecast || { weatherCode: 0, windSpeed: 0, windDirection: 0 },
-                delta, // Real delta for smooth animation
+                activeWeatherData.past     || empty,
+                activeWeatherData.current  || empty,
+                activeWeatherData.forecast || empty,
+                delta,
                 ambientLight.color,
                 sunLight.position,
                 moonLight.position,
@@ -117,43 +111,67 @@ export class AnimationController {
                 moonLight.color
             );
 
+            // Wind compass (per-frame, lightweight DOM update)
+            if (activeWeatherData.current?.windDirection != null) {
+                updateWindCompass(activeWeatherData.current.windDirection);
+            }
+
             // Throttled weather display update during time warp
             if (state.isTimeWarping && Math.random() < ANIMATION_CONFIG.weatherUpdateThrottle) {
-                const displayData = {
+                updateWeatherDisplay({
                     ...state.weatherData,
                     current: activeWeatherData.current,
                     past: activeWeatherData.past,
                     forecast: activeWeatherData.forecast
-                };
-                updateWeatherDisplay(displayData, weatherService);
+                }, weatherService);
             }
+
+            // ── Panel theme (throttled: ~2 Hz) ──
+            const nowMs = performance.now();
+            if (nowMs - this._lastThemeMs > ANIMATION_CONFIG.themeUpdateInterval) {
+                this._lastThemeMs = nowMs;
+
+                // dayFactor: normalised sin of sun altitude (-1 night … +1 noon)
+                const dayFactor = astroData.sunPosition.y / 20;
+                const weatherSeverity = activeWeatherData.current?.severity ?? 0;
+
+                // tempTrend: how much warmer/cooler today is vs the same date last year
+                // clamped to ±1 over a 10 °C swing
+                const histTemp = state.weatherData?.historicalYearAgo?.temp;
+                const currTemp = activeWeatherData.current?.temp;
+                const tempTrend = (histTemp != null && currTemp != null)
+                    ? Math.max(-1, Math.min(1, (currTemp - histTemp) / 10))
+                    : 0;
+
+                updatePanelTheme(dayFactor, weatherSeverity, tempTrend);
+            }
+
+            // ── Sparkline — redraw when the simulation hour rolls over ──
+            const simHour = Math.floor(state.simulationTime.getTime() / 3_600_000);
+            if (simHour !== this._lastSparklineHour && state.weatherData) {
+                this._lastSparklineHour = simHour;
+                drawSparkline(state.simulationTime, state.weatherData, weatherService);
+            }
+
         } else {
-            // No weather data, render empty effects
-            weatherEffects.update(
-                { weatherCode: 0, windSpeed: 0, windDirection: 0 },
-                { weatherCode: 0, windSpeed: 0, windDirection: 0 },
-                { weatherCode: 0, windSpeed: 0, windDirection: 0 },
-                delta,
-                ambientLight.color
-            );
+            // No data — still run effects at idle
+            const empty = { weatherCode: 0, windSpeed: 0, windDirection: 0 };
+            weatherEffects.update(empty, empty, empty, delta, ambientLight.color);
         }
 
-        // Handle lightning flashes
-        if (weatherEffects.getLightningFlash && weatherEffects.getLightningFlash() > 0) {
+        // ── Lightning flash ──
+        if (weatherEffects.getLightningFlash?.() > 0) {
             const flash = weatherEffects.getLightningFlash();
             ambientLight.intensity += flash;
 
             const flashColor = new THREE.Color(0xaaddff);
-            const lerpFactor = Math.min(1.0, flash * 0.8);
-            ambientLight.color.lerp(flashColor, lerpFactor);
+            ambientLight.color.lerp(flashColor, Math.min(1.0, flash * 0.8));
 
-            // Sync fog color with lightning
             if (scene.fog) {
                 scene.fog.color.copy(ambientLight.color).multiplyScalar(0.8);
             }
         }
 
-        // Render
         composer.render();
     }
 
