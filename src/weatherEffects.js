@@ -1051,6 +1051,96 @@ class StarField {
     }
 }
 
+function createFogTexture() {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, 'rgba(215, 225, 240, 0.55)');
+    grad.addColorStop(0.4, 'rgba(210, 220, 238, 0.28)');
+    grad.addColorStop(0.8, 'rgba(205, 215, 235, 0.08)');
+    grad.addColorStop(1, 'rgba(200, 215, 235, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(canvas);
+}
+
+class FogEffect {
+    constructor(scene, zone) {
+        this.scene = scene;
+        this.zone = zone;
+        this.currentOpacity = 0;
+        this.targetOpacity = 0;
+
+        const count = 18;
+        const texture = createFogTexture();
+        const zoneWidth = zone.maxX - zone.minX;
+
+        this.planes = [];
+        for (let i = 0; i < count; i++) {
+            const w = 3 + Math.random() * 5;
+            const h = 0.8 + Math.random() * 1.8;
+            const geo = new THREE.PlaneGeometry(w, h);
+            const mat = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                opacity: 0,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(
+                zone.minX + Math.random() * zoneWidth,
+                -0.3 + Math.random() * 2.2,
+                (Math.random() - 0.5) * 14
+            );
+            mesh.rotation.x = -Math.PI / 2 + (Math.random() - 0.5) * 0.35;
+            mesh.rotation.z = Math.random() * Math.PI * 2;
+            mesh.visible = false;
+            this.scene.add(mesh);
+            this.planes.push({
+                mesh,
+                driftX: (Math.random() - 0.5) * 0.008,
+                driftZ: (Math.random() - 0.5) * 0.008,
+                baseOpacity: 0.04 + Math.random() * 0.08
+            });
+        }
+    }
+
+    setIntensity(intensity) {
+        this.targetOpacity = Math.max(0, Math.min(1, intensity));
+    }
+
+    update(delta, windSpeed, windDir) {
+        const diff = this.targetOpacity - this.currentOpacity;
+        this.currentOpacity += diff * Math.min(delta * 0.5, 1);
+
+        if (this.currentOpacity < 0.005) {
+            this.planes.forEach(p => { p.mesh.visible = false; });
+            return;
+        }
+
+        const windRad = ((windDir || 0) - 180) * Math.PI / 180;
+        const speed = (windSpeed || 2) * 0.00015 + 0.0008;
+        const wx = Math.sin(windRad) * speed;
+        const wz = Math.cos(windRad) * speed;
+
+        this.planes.forEach(({ mesh, driftX, driftZ, baseOpacity }) => {
+            mesh.visible = true;
+            mesh.material.opacity = this.currentOpacity * baseOpacity;
+            mesh.position.x += wx + driftX * delta;
+            mesh.position.z += wz + driftZ * delta;
+            if (mesh.position.x > this.zone.maxX + 1) mesh.position.x = this.zone.minX - 1;
+            if (mesh.position.x < this.zone.minX - 1) mesh.position.x = this.zone.maxX + 1;
+            if (mesh.position.z > 8) mesh.position.z = -8;
+            if (mesh.position.z < -8) mesh.position.z = 8;
+        });
+    }
+}
+
 export class WeatherEffects {
     constructor(scene, sundialGroup, camera) {
         this.scene = scene;
@@ -1068,6 +1158,7 @@ export class WeatherEffects {
         this.pastStratus = new CloudSystem(scene, camera, pastZone, 8,  'stratus');
         this.pastCirrus  = new CloudSystem(scene, camera, pastZone, 6,  'cirrus');
         this.pastDust = new WindDustSystem(scene, pastZone, 300);
+        this.pastFog = new FogEffect(scene, pastZone);
 
         this.currRain = new RainSystem(scene, currZone, 2000);
         this.currSnow = new SnowSystem(scene, currZone, 1500);
@@ -1075,6 +1166,7 @@ export class WeatherEffects {
         this.currStratus = new CloudSystem(scene, camera, currZone, 8,  'stratus');
         this.currCirrus  = new CloudSystem(scene, camera, currZone, 6,  'cirrus');
         this.currDust = new WindDustSystem(scene, currZone, 300);
+        this.currFog = new FogEffect(scene, currZone);
 
         this.futureRain = new RainSystem(scene, futureZone, 2000);
         this.futureSnow = new SnowSystem(scene, futureZone, 1500);
@@ -1082,6 +1174,7 @@ export class WeatherEffects {
         this.futureStratus = new CloudSystem(scene, camera, futureZone, 8,  'stratus');
         this.futureCirrus  = new CloudSystem(scene, camera, futureZone, 6,  'cirrus');
         this.futureDust = new WindDustSystem(scene, futureZone, 300);
+        this.futureFog = new FogEffect(scene, futureZone);
 
         this.raycaster = new THREE.Raycaster();
         this.downVector = new THREE.Vector3(0, -1, 0);
@@ -1158,12 +1251,16 @@ export class WeatherEffects {
 
         const args = [lightColor, sunPos, moonPos, sunColor, moonColor];
 
+        const fogIntensity = (code) => (code === 45 || code === 48) ? 1.0 : 0.0;
+
         this.pastRain.update(delta, p.wind, p.dir, p.rain, this.raycaster, null, null, lightColor);
         this.pastSnow.update(delta, p.wind, p.dir, p.snow, lightColor);
         this.pastCumulus.update(delta, p.wind, pCovers.cumulus, ...args, p.code);
         this.pastStratus.update(delta, p.wind, pCovers.stratus, ...args, p.code);
         this.pastCirrus.update(delta,  p.wind, pCovers.cirrus,  ...args, p.code);
         this.pastDust.update(delta, p.wind, p.dir, p.rain, lightColor);
+        this.pastFog.setIntensity(fogIntensity(p.code));
+        this.pastFog.update(delta, p.wind, p.dir);
 
         this.currRain.update(delta, c.wind, c.dir, c.rain, this.raycaster, this.sundialGroup, (pos) => this.spawnSplash(pos), lightColor);
         this.currSnow.update(delta, c.wind, c.dir, c.snow, lightColor);
@@ -1171,6 +1268,8 @@ export class WeatherEffects {
         this.currStratus.update(delta, c.wind, cCovers.stratus, ...args, c.code);
         this.currCirrus.update(delta,  c.wind, cCovers.cirrus,  ...args, c.code);
         this.currDust.update(delta, c.wind, c.dir, c.rain, lightColor);
+        this.currFog.setIntensity(fogIntensity(c.code));
+        this.currFog.update(delta, c.wind, c.dir);
 
         this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null, lightColor);
         this.futureSnow.update(delta, f.wind, f.dir, f.snow, lightColor);
@@ -1178,6 +1277,8 @@ export class WeatherEffects {
         this.futureStratus.update(delta, f.wind, fCovers.stratus, ...args, f.code);
         this.futureCirrus.update(delta,  f.wind, fCovers.cirrus,  ...args, f.code);
         this.futureDust.update(delta, f.wind, f.dir, f.rain, lightColor);
+        this.futureFog.setIntensity(fogIntensity(f.code));
+        this.futureFog.update(delta, f.wind, f.dir);
 
         if (sunPos) {
             this.starField.update(sunPos);

@@ -1,6 +1,16 @@
 // UI management: DOM updates and event listeners
 import { calculateMoonPhase } from './moonPhase.js';
 
+/**
+ * Convert wind direction degrees to 8-point compass abbreviation
+ * @param {number} deg - Wind direction in degrees (0 = North)
+ * @returns {string} Compass abbreviation e.g. "NE"
+ */
+function compassDir(deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+}
+
 const UI_CONFIG = {
     timeWarpColorActive: 'rgba(255, 100, 100, 0.8)',
     timeWarpColorInactive: 'rgba(100, 255, 100, 0.4)',
@@ -92,8 +102,24 @@ export function updateWeatherDisplay(data, weatherService) {
         const temp = document.getElementById('current-temp');
         if (temp) temp.textContent = `${t(data.current.temp)}${deg}`;
 
+        const feelsLike = document.getElementById('feels-like-temp');
+        if (feelsLike && data.current.feelsLike != null) {
+            feelsLike.textContent = `Feels like ${t(data.current.feelsLike)}${deg}`;
+        }
+
+        const humidity = document.getElementById('current-humidity');
+        if (humidity && data.current.humidity != null) {
+            humidity.textContent = `${Math.round(data.current.humidity)}%`;
+        }
+
+        const windConverted = weatherService.convertWind(data.current.windSpeed);
         const wind = document.getElementById('current-wind');
-        if (wind) wind.textContent = `${Math.round(data.current.windSpeed)} km/h`;
+        if (wind) wind.textContent = `${windConverted.value} ${windConverted.unit}`;
+
+        const windDir = document.getElementById('current-wind-dir');
+        if (windDir && data.current.windDirection != null) {
+            windDir.textContent = compassDir(data.current.windDirection);
+        }
     }
 
     // Left panel (past)
@@ -104,8 +130,9 @@ export function updateWeatherDisplay(data, weatherService) {
         const temp = document.getElementById('past-temp');
         if (temp) temp.textContent = `${t(data.past.temp)}${deg}`;
 
+        const pastWindConverted = weatherService.convertWind(data.past.windSpeed);
         const wind = document.getElementById('past-wind');
-        if (wind) wind.textContent = `${Math.round(data.past.windSpeed)} km/h`;
+        if (wind) wind.textContent = `${pastWindConverted.value} ${pastWindConverted.unit}`;
 
         const cloud = document.getElementById('past-cloud');
         if (cloud) cloud.textContent = `${Math.round(data.past.cloudCover)}%`;
@@ -119,8 +146,9 @@ export function updateWeatherDisplay(data, weatherService) {
         const temp = document.getElementById('forecast-temp');
         if (temp) temp.textContent = `${t(data.forecast.temp)}${deg}`;
 
+        const forecastWindConverted = weatherService.convertWind(data.forecast.windSpeed);
         const wind = document.getElementById('forecast-wind');
-        if (wind) wind.textContent = `${Math.round(data.forecast.windSpeed)} km/h`;
+        if (wind) wind.textContent = `${forecastWindConverted.value} ${forecastWindConverted.unit}`;
 
         const cloud = document.getElementById('forecast-cloud');
         if (cloud) cloud.textContent = `${Math.round(data.forecast.cloudCover)}%`;
@@ -256,6 +284,71 @@ export function setSearchLoading(isLoading) {
     if (searchBtn) {
         searchBtn.textContent = isLoading ? '...' : 'Go';
     }
+}
+
+/**
+ * Update sunrise and sunset time displays
+ * @param {Date} sunrise - Sunrise Date object from SunCalc
+ * @param {Date} sunset - Sunset Date object from SunCalc
+ */
+export function updateSunriseSunset(sunrise, sunset) {
+    const riseEl = document.getElementById('sunrise-time');
+    if (riseEl && sunrise instanceof Date && !isNaN(sunrise)) {
+        riseEl.textContent = formatTime12(sunrise);
+    }
+    const setEl = document.getElementById('sunset-time');
+    if (setEl && sunset instanceof Date && !isNaN(sunset)) {
+        setEl.textContent = formatTime12(sunset);
+    }
+}
+
+/**
+ * Show a toast notification
+ * @param {string} message - Message to display
+ * @param {'error'|'info'|'success'} type - Toast type
+ * @param {number} durationMs - Auto-dismiss duration in milliseconds
+ */
+export function showToast(message, type = 'error', durationMs = 4000) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    // Trigger animation
+    requestAnimationFrame(() => toast.classList.add('toast-visible'));
+
+    setTimeout(() => {
+        toast.classList.remove('toast-visible');
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    }, durationMs);
+}
+
+/**
+ * Setup keyboard shortcuts
+ * @param {Object} callbacks - Same callbacks object from setupEventListeners
+ */
+export function setupKeyboardShortcuts(callbacks) {
+    document.addEventListener('keydown', (e) => {
+        // Don't fire when user is typing in an input
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+        switch (e.key.toLowerCase()) {
+            case 'w':
+                callbacks.onToggleTimeWarp();
+                break;
+            case 'f':
+                callbacks.onToggleUnit();
+                break;
+            case '/':
+                e.preventDefault();
+                document.getElementById('location-search')?.focus();
+                break;
+        }
+    });
 }
 
 export { UI_CONFIG };
