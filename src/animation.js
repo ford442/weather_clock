@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { updateMoonVisuals } from './moonPhase.js';
 import { updateWeatherLighting } from './weatherLighting.js';
 import { getWeatherAtTime, getActiveWeatherData } from './weather-simulation.js';
-import { updateTimeDisplay, updateWeatherDisplay } from './ui.js';
+import { updateTimeDisplay, updateWeatherDisplay, updateSunriseSunset } from './ui.js';
 
 const ANIMATION_CONFIG = {
     realTimeScale: 1.0,
@@ -17,6 +17,7 @@ export class AnimationController {
         this.services = services;
         this.scene3d = scene3d;
         this.isRunning = false;
+        this._lastSunriseDay = -1; // track day to avoid per-frame DOM updates
     }
 
     /**
@@ -82,6 +83,13 @@ export class AnimationController {
 
         // Update UI time display
         updateTimeDisplay(state.simulationTime, state.isTimeWarping);
+
+        // Update sunrise/sunset only when the day changes (not every frame)
+        const simDay = state.simulationTime.getDate();
+        if (simDay !== this._lastSunriseDay && astroData.sunrise && astroData.sunset) {
+            updateSunriseSunset(astroData.sunrise, astroData.sunset);
+            this._lastSunriseDay = simDay;
+        }
 
         // Get active weather data
         const activeWeatherData = getActiveWeatherData(state.simulationTime, state.weatherData);

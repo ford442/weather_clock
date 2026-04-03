@@ -5,6 +5,7 @@ export class WeatherService {
         this.longitude = null;
         this.location = null;
         this.unit = 'imperial'; // Default to Fahrenheit
+        this.windUnit = 'metric'; // 'metric' = km/h, 'imperial' = mph
     }
 
     async initialize() {
@@ -22,10 +23,21 @@ export class WeatherService {
         return (celsius * 9/5) + 32;
     }
 
+    setWindUnit(unit) {
+        this.windUnit = unit; // 'metric' or 'imperial'
+    }
+
+    convertWind(kmh) {
+        if (this.windUnit === 'imperial') {
+            return { value: Math.round(kmh * 0.621371), unit: 'mph' };
+        }
+        return { value: Math.round(kmh), unit: 'km/h' };
+    }
+
     async searchLocation(query) {
         try {
             const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`
+                `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(query)}`
             );
             const data = await response.json();
             return data;
@@ -78,6 +90,7 @@ export class WeatherService {
         this.latitude = 40.7128;
         this.longitude = -74.0060;
         this.location = 'New York, USA (default)';
+        this.windUnit = 'imperial'; // NYC default is US
     }
 
     async reverseGeocode(lat, lon) {
@@ -90,6 +103,8 @@ export class WeatherService {
             if (data.address) {
                 const city = data.address.city || data.address.town || data.address.village;
                 const country = data.address.country;
+                // Auto-detect wind unit: mph for US, km/h everywhere else
+                this.windUnit = data.address.country_code === 'us' ? 'imperial' : 'metric';
                 return city ? `${city}, ${country}` : country;
             }
             return `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
@@ -111,7 +126,7 @@ export class WeatherService {
             // Request past_days=1 to ensure we have historical hourly data for the "Past" zone interpolation
             // even if the current time is just after midnight.
             const currentResponse = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall&timezone=auto&past_days=1`
+                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall&timezone=auto&past_days=1`
             );
             const currentData = await currentResponse.json();
 
@@ -122,7 +137,7 @@ export class WeatherService {
             const todayStr = now.toISOString().split('T')[0];
             
             const historicalResponse = await fetch(
-                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,rain,showers,snowfall&timezone=auto`
+                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,rain,showers,snowfall&timezone=auto`
             );
             const historicalData = await historicalResponse.json();
 
@@ -139,6 +154,8 @@ export class WeatherService {
                     timeline.push({
                         time: new Date(hourly.time[i]),
                         temp: hourly.temperature_2m[i],
+                        feelsLike: hourly.apparent_temperature ? hourly.apparent_temperature[i] : hourly.temperature_2m[i],
+                        humidity: hourly.relative_humidity_2m ? hourly.relative_humidity_2m[i] : null,
                         weatherCode: hourly.weather_code[i],
                         description: this.getWeatherDescription(hourly.weather_code[i]),
                         cloudCover: hourly.cloud_cover[i],
@@ -155,6 +172,8 @@ export class WeatherService {
             // Parse current weather
             const current = {
                 temp: currentData.current.temperature_2m,
+                feelsLike: currentData.current.apparent_temperature ?? currentData.current.temperature_2m,
+                humidity: currentData.current.relative_humidity_2m ?? null,
                 weatherCode: currentData.current.weather_code,
                 description: this.getWeatherDescription(currentData.current.weather_code),
                 cloudCover: currentData.current.cloud_cover,
@@ -170,6 +189,8 @@ export class WeatherService {
             const pastHourIndex = this.findClosestHourIndex(historicalData.hourly.time, pastDate);
             const past = {
                 temp: historicalData.hourly.temperature_2m[pastHourIndex] || current.temp,
+                feelsLike: historicalData.hourly.apparent_temperature ? (historicalData.hourly.apparent_temperature[pastHourIndex] ?? current.feelsLike) : current.feelsLike,
+                humidity: historicalData.hourly.relative_humidity_2m ? (historicalData.hourly.relative_humidity_2m[pastHourIndex] ?? null) : null,
                 weatherCode: historicalData.hourly.weather_code[pastHourIndex] || current.weatherCode,
                 description: this.getWeatherDescription(historicalData.hourly.weather_code[pastHourIndex] || current.weatherCode),
                 cloudCover: historicalData.hourly.cloud_cover[pastHourIndex] || current.cloudCover,
@@ -185,6 +206,8 @@ export class WeatherService {
             const futureHourIndex = this.findClosestHourIndex(currentData.hourly.time, futureDate);
             const forecast = {
                 temp: currentData.hourly.temperature_2m[futureHourIndex] || current.temp,
+                feelsLike: currentData.hourly.apparent_temperature ? (currentData.hourly.apparent_temperature[futureHourIndex] ?? current.feelsLike) : current.feelsLike,
+                humidity: currentData.hourly.relative_humidity_2m ? (currentData.hourly.relative_humidity_2m[futureHourIndex] ?? null) : null,
                 weatherCode: currentData.hourly.weather_code[futureHourIndex] || current.weatherCode,
                 description: this.getWeatherDescription(currentData.hourly.weather_code[futureHourIndex] || current.weatherCode),
                 cloudCover: currentData.hourly.cloud_cover[futureHourIndex] || current.cloudCover,

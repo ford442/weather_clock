@@ -33,10 +33,15 @@ export class AstronomyService {
         // Get Moon Illumination (Phase)
         const moonIllum = SunCalc.getMoonIllumination(date);
 
+        // Get sunrise/sunset times for this date and location
+        const sunTimes = SunCalc.getTimes(date, latitude, longitude);
+
         return {
             sunPosition: this.sunPosition,
             moonPosition: this.moonPosition,
-            moonIllumination: moonIllum
+            moonIllumination: moonIllum,
+            sunrise: sunTimes.sunrise,
+            sunset: sunTimes.sunset
         };
     }
 
