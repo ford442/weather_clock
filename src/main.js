@@ -1,20 +1,19 @@
 import * as THREE from 'three';
 import Stats from 'three/addons/libs/stats.module.js';
 
-// Import modular components
 import { setupRendering } from './rendering.js';
 import { setupLights } from './lights.js';
 import { setupSky, setupSundial, setupMoon, setupWeatherEffects, addToScene } from './scene-objects.js';
 import { WeatherService } from './weather.js';
 import { AstronomyService } from './astronomy.js';
 import {
-    formatTime12,
     updateTimeDisplay,
     updateWeatherDisplay,
     updateUnitButton,
     setupEventListeners,
     updateTimeWarpButton,
     setSearchLoading,
+    drawSparkline,
     updateSunriseSunset,
     showToast,
     setupKeyboardShortcuts
@@ -22,7 +21,7 @@ import {
 import { AnimationController } from './animation.js';
 import { setupDebugAPI } from './debug.js';
 
-// ============= Application State =============
+// ── Application State ────────────────────────────────────────────────────────
 const state = {
     weatherData: null,
     simulationTime: new Date(),
@@ -30,8 +29,10 @@ const state = {
     isDebugMode: false
 };
 
-const WEATHER_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const WEATHER_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
 
+// ── Rendering ────────────────────────────────────────────────────────────────
+const { scene, camera, renderer, composer, clock, controls } = setupRendering();
 // ============= Preferences (localStorage) =============
 const PREF_KEYS = {
     lat: 'weatherclock_lat',
@@ -71,52 +72,50 @@ function savePreferences() {
 }
 
 // ============= Initialize 3D Rendering =============
-const { scene, camera, renderer, composer, clock } = setupRendering();
 
-// ============= Setup Scene Lighting =============
+// ── Lighting ─────────────────────────────────────────────────────────────────
 const { ambientLight, sunLight, moonLight } = setupLights(scene);
 
-// ============= Setup Scene Objects =============
+// ── Scene Objects ────────────────────────────────────────────────────────────
 const sky = setupSky();
 const sundial = setupSundial();
-const { moonGroup, moonPhaseData } = setupMoon();
+const { moonGroup } = setupMoon();
 const weatherEffects = setupWeatherEffects(scene, sundial, camera);
-
-// Add objects to scene
 addToScene(scene, { sky, sundial, moonGroup });
 
-// ============= Setup Services =============
+// ── Services ─────────────────────────────────────────────────────────────────
 const weatherService = new WeatherService();
 const astronomyService = new AstronomyService();
 
-// ============= Setup Performance Monitoring =============
+// ── Stats (hidden by default; backtick ` toggles) ────────────────────────────
 const stats = new Stats();
+stats.dom.style.display = 'none';
 document.body.appendChild(stats.dom);
 
-// ============= Setup Animation Loop =============
-const animationController = new AnimationController(state, { weatherService, astronomyService }, {
-    scene,
-    camera,
-    composer,
-    sky,
-    sundial,
-    moonGroup,
-    weatherEffects,
-    sunLight,
-    moonLight,
-    ambientLight
+window.addEventListener('keydown', (e) => {
+    if (e.key === '`') {
+        stats.dom.style.display = stats.dom.style.display === 'none' ? 'block' : 'none';
+    }
 });
 
-// ============= UI Event Handlers =============
+// ── Animation loop ────────────────────────────────────────────────────────────
+const animationController = new AnimationController(
+    state,
+    { weatherService, astronomyService },
+    { scene, camera, composer, sky, sundial, moonGroup, weatherEffects, sunLight, moonLight, ambientLight, controls }
+);
+
+// ── UI Event Callbacks ────────────────────────────────────────────────────────
 function setupUICallbacks() {
     return {
         onRetryLocation: async () => {
-            document.getElementById('location').textContent = 'Retrying...';
+            document.getElementById('location').textContent = 'Retrying…';
             try {
                 await weatherService.getLocation();
                 const data = await weatherService.fetchWeather();
                 state.weatherData = data;
                 updateWeatherDisplay(data, weatherService);
+                drawSparkline(state.simulationTime, data, weatherService);
                 savePreferences();
             } catch (error) {
                 console.error('Location retry failed:', error);
@@ -130,13 +129,13 @@ function setupUICallbacks() {
             updateUnitButton(weatherService);
             if (state.weatherData) {
                 updateWeatherDisplay(state.weatherData, weatherService);
+                drawSparkline(state.simulationTime, state.weatherData, weatherService);
             }
             savePreferences();
         },
 
         onSearch: async (query) => {
             if (!query) return;
-
             setSearchLoading(true);
             try {
                 const results = await weatherService.searchLocation(query);
@@ -151,13 +150,13 @@ function setupUICallbacks() {
                         best.display_name.split(',')[0]
                     );
 
-                    document.getElementById('location').textContent = 'Updating...';
+                    document.getElementById('location').textContent = 'Updating…';
                     const data = await weatherService.fetchWeather();
                     state.weatherData = data;
                     updateWeatherDisplay(data, weatherService);
+                    drawSparkline(state.simulationTime, data, weatherService);
                     savePreferences();
 
-                    // Clear search input
                     const searchInput = document.getElementById('location-search');
                     if (searchInput) searchInput.value = '';
                 } else {
@@ -178,11 +177,11 @@ function setupUICallbacks() {
     };
 }
 
-// ============= Fetch and Display Weather =============
+// ── Weather fetch ─────────────────────────────────────────────────────────────
 async function fetchAndDisplayWeather() {
     if (state.isDebugMode) return;
 
-    document.getElementById('location').textContent = 'Loading...';
+    document.getElementById('location').textContent = 'Loading…';
     try {
         // Try to restore saved location; fall back to geolocation if none saved
         const hadSavedLocation = loadPreferences();
@@ -199,6 +198,7 @@ async function fetchAndDisplayWeather() {
         if (state.isDebugMode) return;
         state.weatherData = data;
         updateWeatherDisplay(data, weatherService);
+        drawSparkline(state.simulationTime, data, weatherService);
     } catch (error) {
         console.error('Weather initialization failed:', error);
         document.getElementById('location').textContent = 'Weather data unavailable';
@@ -207,9 +207,8 @@ async function fetchAndDisplayWeather() {
     }
 }
 
-// ============= Initialize Application =============
+// ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-    // Update initial UI state
     updateTimeDisplay(state.simulationTime, state.isTimeWarping);
     updateUnitButton(weatherService);
 
@@ -218,23 +217,14 @@ async function init() {
     setupEventListeners(callbacks);
     setupKeyboardShortcuts(callbacks);
 
-    // Setup debug API
     setupDebugAPI(state, { weatherService, astronomyService }, {
-        scene,
-        sky,
-        weatherEffects,
-        sunLight,
-        moonLight,
-        ambientLight
+        scene, sky, weatherEffects, sunLight, moonLight, ambientLight
     });
 
-    // Start animation loop
     animationController.start(clock, stats);
 
-    // Fetch initial weather
     await fetchAndDisplayWeather();
 
-    // Setup weather refresh interval
     setInterval(async () => {
         if (state.isDebugMode) return;
         try {
@@ -242,11 +232,11 @@ async function init() {
             if (state.isDebugMode) return;
             state.weatherData = data;
             updateWeatherDisplay(data, weatherService);
+            drawSparkline(state.simulationTime, data, weatherService);
         } catch (error) {
             console.error('Weather update failed:', error);
         }
     }, WEATHER_REFRESH_INTERVAL);
 }
 
-// ============= Start Application =============
 init();

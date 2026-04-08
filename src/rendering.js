@@ -1,8 +1,9 @@
-// Rendering setup: scene, renderer, camera, post-processing
+// Rendering setup: scene, renderer, camera, post-processing, orbit controls
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // Configuration constants
 const RENDERING_CONFIG = {
@@ -80,7 +81,16 @@ export function setupRendering() {
     };
     window.addEventListener('resize', handleResize);
 
-    return { scene, camera, renderer, composer, clock: new THREE.Clock() };
+    // Orbit controls — lets the user drag to explore the scene
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 0, 0);
+    controls.minDistance = 4;
+    controls.maxDistance = 30;
+    controls.maxPolarAngle = Math.PI / 2; // Don't go below ground
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    return { scene, camera, renderer, composer, clock: new THREE.Clock(), controls };
 }
 
 export { RENDERING_CONFIG };

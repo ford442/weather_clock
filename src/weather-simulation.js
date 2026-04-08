@@ -56,17 +56,23 @@ export function getWeatherAtTime(time, timeline) {
     if (windDir < 0) windDir += 360;
     if (windDir >= 360) windDir -= 360;
 
+    const lerp = (a, b) => (a || 0) + ((b || 0) - (a || 0)) * factor;
+
     return {
-        temp: prev.temp + (next.temp - prev.temp) * factor,
+        temp: lerp(prev.temp, next.temp),
+        apparentTemp: lerp(prev.apparentTemp ?? prev.temp, next.apparentTemp ?? next.temp),
+        humidity: lerp(prev.humidity, next.humidity),
+        uvIndex: lerp(prev.uvIndex, next.uvIndex),
+        precipProb: lerp(prev.precipProb, next.precipProb),
         weatherCode: weatherCode,
         description: description,
-        cloudCover: prev.cloudCover + (next.cloudCover - prev.cloudCover) * factor,
-        windSpeed: prev.windSpeed + (next.windSpeed - prev.windSpeed) * factor,
+        cloudCover: lerp(prev.cloudCover, next.cloudCover),
+        windSpeed: lerp(prev.windSpeed, next.windSpeed),
         windDirection: windDir,
-        visibility: (prev.visibility || 10000) + ((next.visibility || 10000) - (prev.visibility || 10000)) * factor,
-        rain: (prev.rain || 0) + ((next.rain || 0) - (prev.rain || 0)) * factor,
-        showers: (prev.showers || 0) + ((next.showers || 0) - (prev.showers || 0)) * factor,
-        snowfall: (prev.snowfall || 0) + ((next.snowfall || 0) - (prev.snowfall || 0)) * factor,
+        visibility: lerp(prev.visibility ?? 10000, next.visibility ?? 10000),
+        rain: lerp(prev.rain, next.rain),
+        showers: lerp(prev.showers, next.showers),
+        snowfall: lerp(prev.snowfall, next.snowfall),
         severity: severity
     };
 }
