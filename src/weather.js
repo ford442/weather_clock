@@ -6,6 +6,7 @@ export class WeatherService {
         this.longitude = null;
         this.location = null;
         this.unit = 'imperial'; // Default to Fahrenheit
+        this.windUnit = 'metric'; // 'metric' = km/h, 'imperial' = mph
     }
 
     async initialize() {
@@ -23,10 +24,21 @@ export class WeatherService {
         return (celsius * 9 / 5) + 32;
     }
 
+    setWindUnit(unit) {
+        this.windUnit = unit; // 'metric' or 'imperial'
+    }
+
+    convertWind(kmh) {
+        if (this.windUnit === 'imperial') {
+            return { value: Math.round(kmh * 0.621371), unit: 'mph' };
+        }
+        return { value: Math.round(kmh), unit: 'km/h' };
+    }
+
     async searchLocation(query) {
         try {
             const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`
+                `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(query)}`
             );
             const data = await response.json();
             return data;
@@ -77,6 +89,7 @@ export class WeatherService {
         this.latitude = 40.7128;
         this.longitude = -74.0060;
         this.location = 'New York, USA (default)';
+        this.windUnit = 'imperial'; // NYC default is US
     }
 
     async reverseGeocode(lat, lon) {
@@ -89,6 +102,8 @@ export class WeatherService {
             if (data.address) {
                 const city = data.address.city || data.address.town || data.address.village;
                 const country = data.address.country;
+                // Auto-detect wind unit: mph for US, km/h everywhere else
+                this.windUnit = data.address.country_code === 'us' ? 'imperial' : 'metric';
                 return city ? `${city}, ${country}` : country;
             }
             return `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
@@ -136,7 +151,14 @@ export class WeatherService {
                 '&timezone=auto&past_days=1'
             ].join('');
 
-            const currentResponse = await fetch(forecastUrl);
+            // Using Open-Meteo API (free, no key required)
+            // Get current and forecast weather
+            // Added 'visibility' to current params
+            // Request past_days=1 to ensure we have historical hourly data for the "Past" zone interpolation
+            // even if the current time is just after midnight.
+            const currentResponse = await fetch(
+                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall&timezone=auto&past_days=1`
+            );
             const currentData = await currentResponse.json();
 
             // Archive API — no UV/precipProb in archive, use apparent_temp + humidity
@@ -157,6 +179,18 @@ export class WeatherService {
                     timeline.push({
                         time: new Date(hourly.time[i]),
                         ...this._parseHourlyPoint(hourly, i)
+                        temp: hourly.temperature_2m[i],
+                        feelsLike: hourly.apparent_temperature ? hourly.apparent_temperature[i] : hourly.temperature_2m[i],
+                        humidity: hourly.relative_humidity_2m ? hourly.relative_humidity_2m[i] : null,
+                        weatherCode: hourly.weather_code[i],
+                        description: this.getWeatherDescription(hourly.weather_code[i]),
+                        cloudCover: hourly.cloud_cover[i],
+                        windSpeed: hourly.wind_speed_10m[i],
+                        windDirection: hourly.wind_direction_10m ? hourly.wind_direction_10m[i] : 0,
+                        visibility: hourly.visibility ? hourly.visibility[i] : 10000,
+                        rain: hourly.rain ? hourly.rain[i] : 0,
+                        showers: hourly.showers ? hourly.showers[i] : 0,
+                        snowfall: hourly.snowfall ? hourly.snowfall[i] : 0
                     });
                 }
             }
@@ -165,6 +199,7 @@ export class WeatherService {
             const cur = currentData.current;
             const current = {
                 temp: cur.temperature_2m,
+                feelsLike: currentData.current.apparent_temperature ?? currentData.current.temperature_2m,
                 apparentTemp: cur.apparent_temperature ?? cur.temperature_2m,
                 humidity: cur.relative_humidity_2m ?? 0,
                 uvIndex: cur.uv_index ?? 0,
@@ -185,6 +220,7 @@ export class WeatherService {
             const pastIdx = this.findClosestHourIndex(hist.time, pastDate);
             const past = {
                 temp: hist.temperature_2m[pastIdx] ?? current.temp,
+                feelsLike: historicalData.hourly.apparent_temperature ? (historicalData.hourly.apparent_temperature[pastHourIndex] ?? current.feelsLike) : current.feelsLike,
                 apparentTemp: hist.apparent_temperature ? (hist.apparent_temperature[pastIdx] ?? current.apparentTemp) : current.apparentTemp,
                 humidity: hist.relative_humidity_2m ? (hist.relative_humidity_2m[pastIdx] ?? current.humidity) : current.humidity,
                 uvIndex: 0,      // Not available in archive
@@ -206,6 +242,7 @@ export class WeatherService {
             const forecast = {
                 temp: fc.temperature_2m[futureIdx] ?? current.temp,
                 apparentTemp: fc.apparent_temperature ? (fc.apparent_temperature[futureIdx] ?? current.apparentTemp) : current.apparentTemp,
+                feelsLike: currentData.hourly.apparent_temperature ? (currentData.hourly.apparent_temperature[futureHourIndex] ?? current.feelsLike) : current.feelsLike,
                 humidity: fc.relative_humidity_2m ? (fc.relative_humidity_2m[futureIdx] ?? current.humidity) : current.humidity,
                 uvIndex: fc.uv_index ? (fc.uv_index[futureIdx] ?? 0) : 0,
                 precipProb: fc.precipitation_probability ? (fc.precipitation_probability[futureIdx] ?? 0) : 0,

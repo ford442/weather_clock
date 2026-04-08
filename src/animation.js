@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { updateMoonVisuals } from './moonPhase.js';
 import { updateWeatherLighting } from './weatherLighting.js';
-import { getActiveWeatherData } from './weather-simulation.js';
-import {
+import { getWeatherAtTime, getActiveWeatherData } from './weather-simulation.js';
+import { updateTimeDisplay, updateWeatherDisplay, updateSunriseSunset } from './ui.js';import {
     updateTimeDisplay,
     updateWeatherDisplay,
     updateWindCompass,
@@ -28,6 +28,7 @@ export class AnimationController {
         // Throttle trackers
         this._lastThemeMs = 0;
         this._lastSparklineHour = -1;
+        this._lastSunriseDay = -1; // track day to avoid per-frame DOM updates
     }
 
     /** Start the rAF loop */
@@ -84,7 +85,14 @@ export class AnimationController {
         // ── Time display ──
         updateTimeDisplay(state.simulationTime, state.isTimeWarping);
 
-        // ── Weather data for simulation time ──
+        // Update sunrise/sunset only when the day changes (not every frame)
+        const simDay = state.simulationTime.getDate();
+        if (simDay !== this._lastSunriseDay && astroData.sunrise && astroData.sunset) {
+            updateSunriseSunset(astroData.sunrise, astroData.sunset);
+            this._lastSunriseDay = simDay;
+        }
+
+        // Get active weather data
         const activeWeatherData = getActiveWeatherData(state.simulationTime, state.weatherData);
 
         if (activeWeatherData) {

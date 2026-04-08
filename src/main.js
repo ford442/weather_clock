@@ -13,7 +13,10 @@ import {
     setupEventListeners,
     updateTimeWarpButton,
     setSearchLoading,
-    drawSparkline
+    drawSparkline,
+    updateSunriseSunset,
+    showToast,
+    setupKeyboardShortcuts
 } from './ui.js';
 import { AnimationController } from './animation.js';
 import { setupDebugAPI } from './debug.js';
@@ -30,6 +33,45 @@ const WEATHER_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
 
 // ── Rendering ────────────────────────────────────────────────────────────────
 const { scene, camera, renderer, composer, clock, controls } = setupRendering();
+// ============= Preferences (localStorage) =============
+const PREF_KEYS = {
+    lat: 'weatherclock_lat',
+    lon: 'weatherclock_lon',
+    location: 'weatherclock_location',
+    unit: 'weatherclock_unit',
+    windUnit: 'weatherclock_wind_unit'
+};
+
+function loadPreferences() {
+    const lat = localStorage.getItem(PREF_KEYS.lat);
+    const lon = localStorage.getItem(PREF_KEYS.lon);
+    const location = localStorage.getItem(PREF_KEYS.location);
+    const unit = localStorage.getItem(PREF_KEYS.unit);
+    const windUnit = localStorage.getItem(PREF_KEYS.windUnit);
+
+    if (lat && lon && location) {
+        weatherService.setManualLocation(lat, lon, location);
+    }
+    if (unit) {
+        weatherService.unit = unit;
+    }
+    if (windUnit) {
+        weatherService.windUnit = windUnit;
+    }
+    return !!(lat && lon);
+}
+
+function savePreferences() {
+    if (weatherService.latitude) {
+        localStorage.setItem(PREF_KEYS.lat, weatherService.latitude);
+        localStorage.setItem(PREF_KEYS.lon, weatherService.longitude);
+        localStorage.setItem(PREF_KEYS.location, weatherService.location);
+    }
+    localStorage.setItem(PREF_KEYS.unit, weatherService.unit);
+    localStorage.setItem(PREF_KEYS.windUnit, weatherService.windUnit);
+}
+
+// ============= Initialize 3D Rendering =============
 
 // ── Lighting ─────────────────────────────────────────────────────────────────
 const { ambientLight, sunLight, moonLight } = setupLights(scene);
@@ -74,9 +116,11 @@ function setupUICallbacks() {
                 state.weatherData = data;
                 updateWeatherDisplay(data, weatherService);
                 drawSparkline(state.simulationTime, data, weatherService);
+                savePreferences();
             } catch (error) {
                 console.error('Location retry failed:', error);
                 document.getElementById('location').textContent = 'Location unavailable';
+                showToast('Could not detect location. Try searching for a city.', 'error');
             }
         },
 
@@ -87,6 +131,7 @@ function setupUICallbacks() {
                 updateWeatherDisplay(state.weatherData, weatherService);
                 drawSparkline(state.simulationTime, state.weatherData, weatherService);
             }
+            savePreferences();
         },
 
         onSearch: async (query) => {
@@ -96,22 +141,30 @@ function setupUICallbacks() {
                 const results = await weatherService.searchLocation(query);
                 if (results && results.length > 0) {
                     const best = results[0];
-                    weatherService.setManualLocation(best.lat, best.lon, best.display_name.split(',')[0]);
+                    // Detect wind unit from country code
+                    const isUS = best.address?.country_code === 'us';
+                    weatherService.setWindUnit(isUS ? 'imperial' : 'metric');
+                    weatherService.setManualLocation(
+                        best.lat,
+                        best.lon,
+                        best.display_name.split(',')[0]
+                    );
 
                     document.getElementById('location').textContent = 'Updating…';
                     const data = await weatherService.fetchWeather();
                     state.weatherData = data;
                     updateWeatherDisplay(data, weatherService);
                     drawSparkline(state.simulationTime, data, weatherService);
+                    savePreferences();
 
                     const searchInput = document.getElementById('location-search');
                     if (searchInput) searchInput.value = '';
                 } else {
-                    alert('Location not found');
+                    showToast(`No results found for "${query}"`, 'error');
                 }
             } catch (error) {
                 console.error('Search failed:', error);
-                alert('Search failed');
+                showToast('Search failed. Check your connection and try again.', 'error');
             } finally {
                 setSearchLoading(false);
             }
@@ -130,7 +183,18 @@ async function fetchAndDisplayWeather() {
 
     document.getElementById('location').textContent = 'Loading…';
     try {
-        const data = await weatherService.initialize();
+        // Try to restore saved location; fall back to geolocation if none saved
+        const hadSavedLocation = loadPreferences();
+        updateUnitButton(weatherService);
+
+        let data;
+        if (hadSavedLocation) {
+            data = await weatherService.fetchWeather();
+        } else {
+            data = await weatherService.initialize();
+            savePreferences();
+        }
+
         if (state.isDebugMode) return;
         state.weatherData = data;
         updateWeatherDisplay(data, weatherService);
@@ -139,6 +203,7 @@ async function fetchAndDisplayWeather() {
         console.error('Weather initialization failed:', error);
         document.getElementById('location').textContent = 'Weather data unavailable';
         document.getElementById('current-description').textContent = 'Unable to fetch';
+        showToast('Failed to load weather data. Check your connection.', 'error');
     }
 }
 
@@ -147,8 +212,10 @@ async function init() {
     updateTimeDisplay(state.simulationTime, state.isTimeWarping);
     updateUnitButton(weatherService);
 
+    // Setup event listeners and keyboard shortcuts
     const callbacks = setupUICallbacks();
     setupEventListeners(callbacks);
+    setupKeyboardShortcuts(callbacks);
 
     setupDebugAPI(state, { weatherService, astronomyService }, {
         scene, sky, weatherEffects, sunLight, moonLight, ambientLight

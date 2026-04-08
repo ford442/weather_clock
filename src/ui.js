@@ -2,6 +2,16 @@
 import { calculateMoonPhase } from './moonPhase.js';
 import { getWeatherAtTime } from './weather-simulation.js';
 
+/**
+ * Convert wind direction degrees to 8-point compass abbreviation
+ * @param {number} deg - Wind direction in degrees (0 = North)
+ * @returns {string} Compass abbreviation e.g. "NE"
+ */
+function compassDir(deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+}
+
 const UI_CONFIG = {
     timeWarpColorActive: 'rgba(255, 100, 100, 0.8)',
     timeWarpColorInactive: 'rgba(100, 255, 100, 0.4)',
@@ -109,6 +119,25 @@ export function updateWeatherDisplay(data, weatherService) {
 
     // ── Location ──
     setText('location', data.location || 'Unknown');
+        const feelsLike = document.getElementById('feels-like-temp');
+        if (feelsLike && data.current.feelsLike != null) {
+            feelsLike.textContent = `Feels like ${t(data.current.feelsLike)}${deg}`;
+        }
+
+        const humidity = document.getElementById('current-humidity');
+        if (humidity && data.current.humidity != null) {
+            humidity.textContent = `${Math.round(data.current.humidity)}%`;
+        }
+
+        const windConverted = weatherService.convertWind(data.current.windSpeed);
+        const wind = document.getElementById('current-wind');
+        if (wind) wind.textContent = `${windConverted.value} ${windConverted.unit}`;
+
+        const windDir = document.getElementById('current-wind-dir');
+        if (windDir && data.current.windDirection != null) {
+            windDir.textContent = compassDir(data.current.windDirection);
+        }
+    }
 
     // ── Current (center) ──
     if (data.current) {
@@ -120,6 +149,9 @@ export function updateWeatherDisplay(data, weatherService) {
         if (uvEl) uvEl.textContent = `UV ${Math.round(data.current.uvIndex ?? 0)}`;
 
         setNum('current-wind', data.current.windSpeed, ' km/h');
+        const pastWindConverted = weatherService.convertWind(data.past.windSpeed);
+        const wind = document.getElementById('past-wind');
+        if (wind) wind.textContent = `${pastWindConverted.value} ${pastWindConverted.unit}`;
 
         // Wind compass
         if (data.current.windDirection != null) {
@@ -137,7 +169,18 @@ export function updateWeatherDisplay(data, weatherService) {
         setNum('past-cloud', data.past.cloudCover, '%');
         setNum('past-precip-prob', data.past.precipProb ?? 0, '%');
     }
+    // Right panel (forecast)
+    if (data.forecast) {
+        const desc = document.getElementById('forecast-description');
+        if (desc) desc.textContent = data.forecast.description;
 
+        const temp = document.getElementById('forecast-temp');
+        if (temp) temp.textContent = `${t(data.forecast.temp)}${deg}`;
+
+        const forecastWindConverted = weatherService.convertWind(data.forecast.windSpeed);
+        const wind = document.getElementById('forecast-wind');
+        if (wind) wind.textContent = `${forecastWindConverted.value} ${forecastWindConverted.unit}`;
+    }
     // ── Forecast (right panel) ──
     if (data.forecast) {
         setText('forecast-description', data.forecast.description);
@@ -379,6 +422,71 @@ export function drawSparkline(simulationTime, weatherData, weatherService) {
     ctx.fillText(`${Math.round(pts[0].y)}°`, 2, toY(pts[0].y) - 3);
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.round(pts[pts.length - 1].y)}°`, W - 2, toY(pts[pts.length - 1].y) - 3);
+}
+
+/**
+ * Update sunrise and sunset time displays
+ * @param {Date} sunrise - Sunrise Date object from SunCalc
+ * @param {Date} sunset - Sunset Date object from SunCalc
+ */
+export function updateSunriseSunset(sunrise, sunset) {
+    const riseEl = document.getElementById('sunrise-time');
+    if (riseEl && sunrise instanceof Date && !isNaN(sunrise)) {
+        riseEl.textContent = formatTime12(sunrise);
+    }
+    const setEl = document.getElementById('sunset-time');
+    if (setEl && sunset instanceof Date && !isNaN(sunset)) {
+        setEl.textContent = formatTime12(sunset);
+    }
+}
+
+/**
+ * Show a toast notification
+ * @param {string} message - Message to display
+ * @param {'error'|'info'|'success'} type - Toast type
+ * @param {number} durationMs - Auto-dismiss duration in milliseconds
+ */
+export function showToast(message, type = 'error', durationMs = 4000) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    // Trigger animation
+    requestAnimationFrame(() => toast.classList.add('toast-visible'));
+
+    setTimeout(() => {
+        toast.classList.remove('toast-visible');
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    }, durationMs);
+}
+
+/**
+ * Setup keyboard shortcuts
+ * @param {Object} callbacks - Same callbacks object from setupEventListeners
+ */
+export function setupKeyboardShortcuts(callbacks) {
+    document.addEventListener('keydown', (e) => {
+        // Don't fire when user is typing in an input
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+        switch (e.key.toLowerCase()) {
+            case 'w':
+                callbacks.onToggleTimeWarp();
+                break;
+            case 'f':
+                callbacks.onToggleUnit();
+                break;
+            case '/':
+                e.preventDefault();
+                document.getElementById('location-search')?.focus();
+                break;
+        }
+    });
 }
 
 export { UI_CONFIG };
