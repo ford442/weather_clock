@@ -129,7 +129,8 @@ export class WeatherService {
             visibility: hourly.visibility ? hourly.visibility[i] : 10000,
             rain: hourly.rain ? hourly.rain[i] : 0,
             showers: hourly.showers ? hourly.showers[i] : 0,
-            snowfall: hourly.snowfall ? hourly.snowfall[i] : 0
+            snowfall: hourly.snowfall ? hourly.snowfall[i] : 0,
+            pressure: hourly.pressure_msl ? hourly.pressure_msl[i] : 1013.25
         };
     }
 
@@ -157,7 +158,7 @@ export class WeatherService {
             // Request past_days=1 to ensure we have historical hourly data for the "Past" zone interpolation
             // even if the current time is just after midnight.
             const currentResponse = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall&timezone=auto&past_days=1`
+                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&timezone=auto&past_days=1`
             );
             const currentData = await currentResponse.json();
 
@@ -167,7 +168,7 @@ export class WeatherService {
             const todayStr = now.toISOString().split('T')[0];
 
             const historicalResponse = await fetch(
-                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,rain,showers,snowfall&timezone=auto`
+                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,rain,showers,snowfall,pressure_msl&timezone=auto`
             );
             const historicalData = await historicalResponse.json();
 
@@ -179,18 +180,6 @@ export class WeatherService {
                     timeline.push({
                         time: new Date(hourly.time[i]),
                         ...this._parseHourlyPoint(hourly, i)
-                        temp: hourly.temperature_2m[i],
-                        feelsLike: hourly.apparent_temperature ? hourly.apparent_temperature[i] : hourly.temperature_2m[i],
-                        humidity: hourly.relative_humidity_2m ? hourly.relative_humidity_2m[i] : null,
-                        weatherCode: hourly.weather_code[i],
-                        description: this.getWeatherDescription(hourly.weather_code[i]),
-                        cloudCover: hourly.cloud_cover[i],
-                        windSpeed: hourly.wind_speed_10m[i],
-                        windDirection: hourly.wind_direction_10m ? hourly.wind_direction_10m[i] : 0,
-                        visibility: hourly.visibility ? hourly.visibility[i] : 10000,
-                        rain: hourly.rain ? hourly.rain[i] : 0,
-                        showers: hourly.showers ? hourly.showers[i] : 0,
-                        snowfall: hourly.snowfall ? hourly.snowfall[i] : 0
                     });
                 }
             }
@@ -212,7 +201,8 @@ export class WeatherService {
                 visibility: cur.visibility,
                 rain: cur.rain,
                 showers: cur.showers,
-                snowfall: cur.snowfall
+                snowfall: cur.snowfall,
+                pressure: cur.pressure_msl ?? 1013.25
             };
 
             // Past conditions (3 h ago, from archive)
@@ -232,7 +222,8 @@ export class WeatherService {
                 windDirection: hist.wind_direction_10m ? (hist.wind_direction_10m[pastIdx] ?? current.windDirection) : current.windDirection,
                 rain: hist.rain ? (hist.rain[pastIdx] ?? 0) : 0,
                 showers: hist.showers ? (hist.showers[pastIdx] ?? 0) : 0,
-                snowfall: hist.snowfall ? (hist.snowfall[pastIdx] ?? 0) : 0
+                snowfall: hist.snowfall ? (hist.snowfall[pastIdx] ?? 0) : 0,
+                pressure: hist.pressure_msl ? (hist.pressure_msl[pastIdx] ?? current.pressure) : current.pressure
             };
 
             // Forecast conditions (+3 h)
@@ -253,7 +244,8 @@ export class WeatherService {
                 windDirection: fc.wind_direction_10m ? (fc.wind_direction_10m[futureIdx] ?? current.windDirection) : current.windDirection,
                 rain: fc.rain ? (fc.rain[futureIdx] ?? 0) : 0,
                 showers: fc.showers ? (fc.showers[futureIdx] ?? 0) : 0,
-                snowfall: fc.snowfall ? (fc.snowfall[futureIdx] ?? 0) : 0
+                snowfall: fc.snowfall ? (fc.snowfall[futureIdx] ?? 0) : 0,
+                pressure: fc.pressure_msl ? (fc.pressure_msl[futureIdx] ?? current.pressure) : current.pressure
             };
 
             // Sunrise/sunset via SunCalc

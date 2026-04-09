@@ -264,6 +264,15 @@
             opacity: 0.85;
         }
 
+        /* ── Pressure gauge canvas ── */
+        #pressure-gauge {
+            display: block;
+            margin: 10px auto 0;
+            width: 140px;
+            height: 140px;
+            opacity: 0.9;
+        }
+
         /* ── Center stats pill ── */
         .center-stats {
             margin-top: 18px;
@@ -480,6 +489,9 @@
 
             <!-- 12-hour sparkline -->
             <canvas id="sparkline" width="280" height="60"></canvas>
+
+            <!-- Pressure gauge -->
+            <canvas id="pressure-gauge" width="140" height="140"></canvas>
 
             <!-- Stats pill -->
             <div class="center-stats">

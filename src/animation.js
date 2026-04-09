@@ -3,9 +3,10 @@ import * as THREE from 'three';
 import { updateMoonVisuals } from './moonPhase.js';
 import { updateWeatherLighting } from './weatherLighting.js';
 import { getWeatherAtTime, getActiveWeatherData } from './weather-simulation.js';
-import { updateTimeDisplay, updateWeatherDisplay, updateSunriseSunset } from './ui.js';import {
+import {
     updateTimeDisplay,
     updateWeatherDisplay,
+    updateSunriseSunset,
     updateWindCompass,
     updatePanelTheme,
     drawSparkline
