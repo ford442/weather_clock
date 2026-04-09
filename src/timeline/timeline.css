@@ -1,0 +1,1032 @@
+/**
+ * timeline.css - Styles for the Weather Timeline UI
+ * 
+ * Features:
+ * - Glassmorphism panels with backdrop-filter blur
+ * - Gradient timeline scrubber with day markers
+ * - Responsive design with breakpoints
+ * - prefers-reduced-motion support
+ * - High contrast mode support
+ * - CSS custom properties for theming
+ */
+
+/* ==================== CSS CUSTOM PROPERTIES ==================== */
+:root {
+  /* Panel styling */
+  --panel-bg: rgba(0, 0, 0, 0.7);
+  --panel-bg-hover: rgba(0, 0, 0, 0.8);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --panel-border-hover: rgba(255, 255, 255, 0.25);
+  --panel-radius: 16px;
+  --panel-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  
+  /* Colors - Timeline segments */
+  --color-historical: #4fc3f7;
+  --color-historical-glow: rgba(79, 195, 247, 0.4);
+  --color-today: #fff176;
+  --color-today-glow: rgba(255, 241, 118, 0.6);
+  --color-forecast: #81c784;
+  --color-forecast-glow: rgba(129, 199, 132, 0.4);
+  
+  /* Colors - Temperature anomalies */
+  --color-extreme-hot: #e53935;
+  --color-hot: #ffb74d;
+  --color-normal: #81c784;
+  --color-cold: #4fc3f7;
+  --color-extreme-cold: #1a237e;
+  
+  /* Colors - Patterns */
+  --color-heatwave: #ff6b35;
+  --color-coldsnap: #4fc3f7;
+  --color-warming: #ffb74d;
+  --color-cooling: #64b5f6;
+  --color-storm: #7c4dff;
+  
+  /* Typography */
+  --font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-xxl: 28px;
+  
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-xxl: 32px;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 400ms ease;
+  
+  /* Blur amounts */
+  --blur-light: blur(8px);
+  --blur-medium: blur(16px);
+  --blur-heavy: blur(24px);
+}
+
+/* ==================== MAIN CONTAINER ==================== */
+.timeline-ui {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  pointer-events: none;
+  font-family: var(--font-family);
+  color: white;
+  
+  /* Entry animation */
+  animation: timelineEnter 0.5s ease-out;
+}
+
+@keyframes timelineEnter {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.timeline-ui.is-closing {
+  animation: timelineExit 0.3s ease-in forwards;
+}
+
+@keyframes timelineExit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+/* ==================== TIMELINE PANEL ==================== */
+.timeline-panel {
+  pointer-events: auto;
+  background: var(--panel-bg);
+  backdrop-filter: var(--blur-medium);
+  -webkit-backdrop-filter: var(--blur-medium);
+  border-top: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius) var(--panel-radius) 0 0;
+  padding: var(--space-lg) var(--space-xl);
+  box-shadow: var(--panel-shadow);
+  max-width: 900px;
+  margin: 0 auto;
+  position: relative;
+  transition: background var(--transition-normal), 
+              border-color var(--transition-normal);
+}
+
+.timeline-panel:hover {
+  background: var(--panel-bg-hover);
+  border-color: var(--panel-border-hover);
+}
+
+/* Loading state */
+.timeline-panel.is-loading {
+  pointer-events: none;
+}
+
+/* ==================== HEADER ==================== */
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.timeline-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.timeline-close {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.timeline-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.timeline-close:active {
+  transform: scale(0.95);
+}
+
+/* ==================== NAVIGATION CONTROLS ==================== */
+.timeline-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+/* Navigation buttons */
+.nav-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+}
+
+.nav-btn:active {
+  transform: scale(0.95);
+}
+
+.nav-btn:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: 2px;
+}
+
+.nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ==================== TIMELINE SCRUBBER ==================== */
+.timeline-scrubber {
+  flex: 1;
+  position: relative;
+  height: 60px;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.scrubber-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: visible;
+}
+
+.scrubber-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    var(--color-historical) 0%,
+    var(--color-historical) 45%,
+    var(--color-today) 50%,
+    var(--color-forecast) 55%,
+    var(--color-forecast) 100%
+  );
+  opacity: 0.3;
+  border-radius: 2px;
+}
+
+.scrubber-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  background: linear-gradient(
+    90deg,
+    var(--color-historical) 0%,
+    var(--color-today) 100%
+  );
+  border-radius: 2px;
+  transition: width var(--transition-fast);
+}
+
+.scrubber-thumb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.scrubber-thumb::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--color-today);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.timeline-scrubber:hover .scrubber-thumb,
+.timeline-scrubber:focus .scrubber-thumb {
+  transform: translate(-50%, -50%) scale(1.2);
+  box-shadow: 0 0 0 4px var(--color-today-glow);
+}
+
+.timeline-scrubber.is-dragging .scrubber-thumb {
+  transform: translate(-50%, -50%) scale(1.3);
+  cursor: grabbing;
+}
+
+.timeline-scrubber.is-dragging .scrubber-thumb::before {
+  opacity: 1;
+}
+
+.timeline-scrubber:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* ==================== DAY MARKERS ==================== */
+.day-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.day-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: none;
+  padding: 8px 4px;
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition-fast);
+}
+
+.marker-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: all var(--transition-fast);
+}
+
+.marker-label {
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+/* Marker states */
+.day-marker:hover .marker-dot,
+.day-marker:focus .marker-dot {
+  background: white;
+  transform: scale(1.3);
+}
+
+.day-marker:hover .marker-label,
+.day-marker:focus .marker-label {
+  color: white;
+}
+
+.day-marker.is-today .marker-dot {
+  background: var(--color-today);
+  box-shadow: 0 0 8px var(--color-today-glow);
+  width: 12px;
+  height: 12px;
+}
+
+.day-marker.is-today .marker-label {
+  color: var(--color-today);
+  font-weight: 600;
+}
+
+.day-marker.is-active .marker-dot {
+  background: white;
+  transform: scale(1.5);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+}
+
+.day-marker.is-active .marker-label {
+  color: white;
+  font-weight: 600;
+}
+
+.day-marker.is-historical:not(.is-today) .marker-dot {
+  background: var(--color-historical);
+}
+
+.day-marker.is-forecast .marker-dot {
+  background: var(--color-forecast);
+}
+
+/* Temperature anomaly indicators */
+.day-marker.is-extreme-hot .marker-dot {
+  background: var(--color-extreme-hot);
+  box-shadow: 0 0 8px rgba(229, 57, 53, 0.5);
+}
+
+.day-marker.is-extreme-cold .marker-dot {
+  background: var(--color-extreme-cold);
+  box-shadow: 0 0 8px rgba(26, 35, 126, 0.5);
+}
+
+.day-marker:focus-visible {
+  outline: 2px solid var(--color-today);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ==================== ZOOM CONTROLS ==================== */
+.timeline-zoom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.zoom-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.zoom-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.zoom-label {
+  font-size: var(--font-size-sm);
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 70px;
+  text-align: center;
+}
+
+/* ==================== CURRENT DAY DISPLAY ==================== */
+.current-day-display {
+  text-align: center;
+  margin-bottom: var(--space-md);
+}
+
+.day-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: var(--space-xs);
+}
+
+.day-date {
+  display: block;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: white;
+}
+
+/* ==================== LEGEND ==================== */
+.timeline-legend {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-xl);
+  padding-top: var(--space-md);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.legend-marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.legend-marker.historical {
+  background: var(--color-historical);
+}
+
+.legend-marker.today {
+  background: var(--color-today);
+  box-shadow: 0 0 6px var(--color-today-glow);
+}
+
+.legend-marker.forecast {
+  background: var(--color-forecast);
+}
+
+.legend-label {
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ==================== LOADING INDICATOR ==================== */
+.timeline-loading {
+  position: absolute;
+  inset: 0;
+  background: var(--panel-bg);
+  backdrop-filter: var(--blur-heavy);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-normal), visibility var(--transition-normal);
+  border-radius: var(--panel-radius) var(--panel-radius) 0 0;
+}
+
+.timeline-loading.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--color-today);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-size: var(--font-size-sm);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ==================== CONTEXT RIBBON ==================== */
+.context-ribbon {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(20, 20, 30, 0.85) 100%
+  );
+  backdrop-filter: var(--blur-medium);
+  border-top: 1px solid var(--panel-border);
+  padding: var(--space-md) var(--space-xl);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.ribbon-patterns {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.pattern-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  font-size: var(--font-size-xs);
+  transition: all var(--transition-fast);
+}
+
+.pattern-indicator:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pattern-indicator.is-current {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--color-today);
+  box-shadow: 0 0 8px var(--color-today-glow);
+}
+
+.pattern-icon {
+  font-size: 14px;
+}
+
+.pattern-name {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+}
+
+.pattern-range {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Pattern type colors */
+.pattern-heatwave {
+  border-color: var(--color-heatwave);
+}
+
+.pattern-coldsnap {
+  border-color: var(--color-coldsnap);
+}
+
+.pattern-warming {
+  border-color: var(--color-warming);
+}
+
+.pattern-cooling {
+  border-color: var(--color-cooling);
+}
+
+.pattern-storm {
+  border-color: var(--color-storm);
+}
+
+.ribbon-narrative {
+  flex: 1;
+  min-width: 200px;
+  max-width: 400px;
+}
+
+.narrative-text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.ribbon-accuracy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.accuracy-value {
+  color: var(--color-normal);
+  font-weight: 600;
+}
+
+/* ==================== TOOLTIP ==================== */
+.timeline-tooltip {
+  position: fixed;
+  background: var(--panel-bg);
+  backdrop-filter: var(--blur-heavy);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: var(--space-md);
+  min-width: 160px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity var(--transition-fast), 
+              visibility var(--transition-fast),
+              transform var(--transition-fast);
+  pointer-events: none;
+}
+
+.timeline-tooltip.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm);
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tooltip-date {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: white;
+}
+
+.tooltip-type {
+  font-size: var(--font-size-xs);
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tooltip-type.type-historical {
+  background: rgba(79, 195, 247, 0.2);
+  color: var(--color-historical);
+}
+
+.tooltip-type.type-today {
+  background: rgba(255, 241, 118, 0.2);
+  color: var(--color-today);
+}
+
+.tooltip-type.type-forecast {
+  background: rgba(129, 199, 132, 0.2);
+  color: var(--color-forecast);
+}
+
+.tooltip-temp {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.temp-high {
+  font-size: var(--font-size-xxl);
+  font-weight: 700;
+  color: white;
+}
+
+.temp-divider {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.temp-low {
+  font-size: var(--font-size-lg);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.tooltip-condition {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  font-size: var(--font-size-sm);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.condition-icon {
+  font-size: 20px;
+}
+
+.tooltip-anomaly {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.6);
+  padding-top: var(--space-xs);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.anomaly-value {
+  font-weight: 600;
+}
+
+.anomaly-value.hot {
+  color: var(--color-hot);
+}
+
+.anomaly-value.cold {
+  color: var(--color-cold);
+}
+
+.anomaly-value.normal {
+  color: var(--color-normal);
+}
+
+.tooltip-accuracy {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.6);
+  padding-top: var(--space-xs);
+  margin-top: var(--space-xs);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tooltip-accuracy[data-has-accuracy="false"] {
+  display: none;
+}
+
+/* ==================== KEYBOARD HINTS ==================== */
+.keyboard-hints {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: var(--blur-light);
+  border-radius: 20px 20px 0 0;
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
+
+.keyboard-hints span {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* ==================== RESPONSIVE BREAKPOINTS ==================== */
+
+/* Tablet */
+@media (max-width: 768px) {
+  .timeline-panel {
+    padding: var(--space-md);
+    border-radius: var(--panel-radius) var(--panel-radius) 0 0;
+  }
+  
+  .timeline-nav {
+    gap: var(--space-sm);
+  }
+  
+  .nav-btn {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .day-marker {
+    padding: 6px 2px;
+  }
+  
+  .marker-label {
+    font-size: 10px;
+  }
+  
+  .timeline-legend {
+    gap: var(--space-md);
+  }
+  
+  .context-ribbon {
+    flex-direction: column;
+    gap: var(--space-md);
+    text-align: center;
+    padding: var(--space-md);
+  }
+  
+  .ribbon-narrative {
+    max-width: none;
+    order: -1;
+  }
+  
+  .keyboard-hints {
+    display: none;
+  }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .timeline-panel {
+    padding: var(--space-sm);
+  }
+  
+  .timeline-title {
+    font-size: var(--font-size-md);
+  }
+  
+  .timeline-nav {
+    gap: var(--space-xs);
+  }
+  
+  .nav-btn {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .day-marker:nth-child(odd) .marker-label {
+    display: none;
+  }
+  
+  .marker-dot {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .day-marker.is-today .marker-dot {
+    width: 10px;
+    height: 10px;
+  }
+  
+  .timeline-legend {
+    gap: var(--space-sm);
+  }
+  
+  .legend-label {
+    font-size: 10px;
+  }
+  
+  .pattern-indicator {
+    padding: 2px 8px;
+  }
+  
+  .pattern-name {
+    display: none;
+  }
+  
+  .ribbon-accuracy {
+    font-size: 10px;
+  }
+}
+
+/* ==================== PREFERS REDUCED MOTION ==================== */
+@media (prefers-reduced-motion: reduce) {
+  .timeline-ui,
+  .timeline-ui.is-closing,
+  .scrubber-fill,
+  .scrubber-thumb,
+  .day-marker,
+  .marker-dot,
+  .marker-label,
+  .timeline-loading,
+  .timeline-tooltip,
+  .nav-btn,
+  .zoom-btn,
+  .timeline-close,
+  .pattern-indicator,
+  .loading-spinner {
+    animation: none !important;
+    transition: none !important;
+  }
+  
+  .loading-spinner {
+    border-top-color: rgba(255, 255, 255, 0.5);
+  }
+}
+
+/* ==================== HIGH CONTRAST MODE ==================== */
+@media (prefers-contrast: high) {
+  :root {
+    --panel-bg: rgba(0, 0, 0, 0.95);
+    --panel-border: rgba(255, 255, 255, 0.5);
+    --color-historical: #80deea;
+    --color-today: #fff59d;
+    --color-forecast: #a5d6a7;
+  }
+  
+  .timeline-panel {
+    border-width: 2px;
+  }
+  
+  .nav-btn,
+  .zoom-btn {
+    border-width: 2px;
+    background: rgba(0, 0, 0, 0.8);
+  }
+  
+  .marker-dot {
+    width: 10px;
+    height: 10px;
+    background: white;
+  }
+  
+  .day-marker.is-active .marker-dot {
+    box-shadow: 0 0 0 3px black, 0 0 0 5px white;
+  }
+  
+  .scrubber-thumb {
+    box-shadow: 0 0 0 3px black;
+    border: 2px solid white;
+  }
+  
+  .timeline-tooltip {
+    border-width: 2px;
+  }
+  
+  .pattern-indicator {
+    border-width: 2px;
+  }
+  
+  /* Focus indicators */
+  .nav-btn:focus-visible,
+  .zoom-btn:focus-visible,
+  .timeline-close:focus-visible,
+  .day-marker:focus-visible,
+  .timeline-scrubber:focus-visible {
+    outline: 3px solid white;
+    outline-offset: 3px;
+  }
+}
+
+/* ==================== DARK MODE (System Preference) ==================== */
+@media (prefers-color-scheme: light) {
+  /* Keep dark UI regardless of system preference since this is an overlay */
+  /* These styles ensure consistency with the 3D scene */
+}
+
+/* ==================== PRINT STYLES ==================== */
+@media print {
+  .timeline-ui {
+    display: none;
+  }
+}
+
+/* ==================== FOCUS VISIBLE POLYFILL ==================== */
+.js-focus-visible :focus:not(.focus-visible) {
+  outline: none;
+}

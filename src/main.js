@@ -20,6 +20,7 @@ import {
 } from './ui.js';
 import { AnimationController } from './animation.js';
 import { setupDebugAPI } from './debug.js';
+import { ModeController } from './ModeController.js';
 
 // ── Application State ────────────────────────────────────────────────────────
 const state = {
@@ -28,6 +29,9 @@ const state = {
     isTimeWarping: false,
     isDebugMode: false
 };
+
+// ── Mode Controller (Clock/Timeline) ─────────────────────────────────────────
+let modeController = null;
 
 const WEATHER_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
 
@@ -180,6 +184,7 @@ function setupUICallbacks() {
 // ── Weather fetch ─────────────────────────────────────────────────────────────
 async function fetchAndDisplayWeather() {
     if (state.isDebugMode) return;
+    if (state.isDebugMode) return;
 
     document.getElementById('location').textContent = 'Loading…';
     try {
@@ -221,10 +226,26 @@ async function init() {
         scene, sky, weatherEffects, sunLight, moonLight, ambientLight
     });
 
+    // Initialize Mode Controller for Clock/Timeline switching
+    modeController = new ModeController(
+        scene,
+        camera,
+        controls,
+        renderer,
+        weatherService
+    );
+    
+    // Connect mode controller to animation controller for timeline updates
+    animationController.setModeController(modeController);
+    
+    // Expose mode controller to window for debugging
+    window.modeController = modeController;
+
     animationController.start(clock, stats);
 
     await fetchAndDisplayWeather();
 
+    // Weather refresh interval
     setInterval(async () => {
         if (state.isDebugMode) return;
         try {

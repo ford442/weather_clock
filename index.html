@@ -386,6 +386,71 @@
             pointer-events: none;
         }
 
+        /* Timeline UI Container */
+        #timeline-ui-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+
+        #timeline-ui-container.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Mode Toggle Button */
+        .mode-toggle-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            pointer-events: auto;
+        }
+
+        .mode-toggle-btn:hover {
+            transform: scale(1.1);
+            background: rgba(0, 0, 0, 0.8);
+            border-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .mode-toggle-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Clock UI elements transition */
+        .panel {
+            transition: opacity 0.5s ease, background 0.8s ease, border-color 0.8s ease, box-shadow 0.6s ease;
+        }
+
+        .panel.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         .toast {
             background: rgba(30, 30, 40, 0.92);
             border-radius: 10px;
@@ -566,6 +631,9 @@
         </div>
     </div>
 
+    <!-- Timeline UI Container (hidden by default) -->
+    <div id="timeline-ui-container"></div>
+    
     <!-- DEV hint -->
     <div id="dev-hint">` — toggle stats</div>
     <div id="toast-container"></div>

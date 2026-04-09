@@ -25,11 +25,20 @@ export class AnimationController {
         this.services = services;
         this.scene3d = scene3d;
         this.isRunning = false;
+        this.modeController = null; // Set by main.js after initialization
 
         // Throttle trackers
         this._lastThemeMs = 0;
         this._lastSparklineHour = -1;
         this._lastSunriseDay = -1; // track day to avoid per-frame DOM updates
+    }
+    
+    /**
+     * Set the mode controller reference for timeline updates
+     * @param {ModeController} controller
+     */
+    setModeController(controller) {
+        this.modeController = controller;
     }
 
     /** Start the rAF loop */
@@ -179,6 +188,11 @@ export class AnimationController {
             if (scene.fog) {
                 scene.fog.color.copy(ambientLight.color).multiplyScalar(0.8);
             }
+        }
+        
+        // ── Timeline update (if in timeline mode) ──
+        if (this.modeController?.isTimelineMode() && this.modeController.timelineController) {
+            this.modeController.timelineController.update(delta);
         }
 
         composer.render();
