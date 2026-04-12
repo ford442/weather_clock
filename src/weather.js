@@ -210,7 +210,7 @@ export class WeatherService {
             const pastIdx = this.findClosestHourIndex(hist.time, pastDate);
             const past = {
                 temp: hist.temperature_2m[pastIdx] ?? current.temp,
-                feelsLike: historicalData.hourly.apparent_temperature ? (historicalData.hourly.apparent_temperature[pastHourIndex] ?? current.feelsLike) : current.feelsLike,
+                feelsLike: historicalData.hourly.apparent_temperature ? (historicalData.hourly.apparent_temperature[pastIdx] ?? current.feelsLike) : current.feelsLike,
                 apparentTemp: hist.apparent_temperature ? (hist.apparent_temperature[pastIdx] ?? current.apparentTemp) : current.apparentTemp,
                 humidity: hist.relative_humidity_2m ? (hist.relative_humidity_2m[pastIdx] ?? current.humidity) : current.humidity,
                 uvIndex: 0,      // Not available in archive
@@ -233,7 +233,7 @@ export class WeatherService {
             const forecast = {
                 temp: fc.temperature_2m[futureIdx] ?? current.temp,
                 apparentTemp: fc.apparent_temperature ? (fc.apparent_temperature[futureIdx] ?? current.apparentTemp) : current.apparentTemp,
-                feelsLike: currentData.hourly.apparent_temperature ? (currentData.hourly.apparent_temperature[futureHourIndex] ?? current.feelsLike) : current.feelsLike,
+                feelsLike: currentData.hourly.apparent_temperature ? (currentData.hourly.apparent_temperature[futureIdx] ?? current.feelsLike) : current.feelsLike,
                 humidity: fc.relative_humidity_2m ? (fc.relative_humidity_2m[futureIdx] ?? current.humidity) : current.humidity,
                 uvIndex: fc.uv_index ? (fc.uv_index[futureIdx] ?? 0) : 0,
                 precipProb: fc.precipitation_probability ? (fc.precipitation_probability[futureIdx] ?? 0) : 0,
