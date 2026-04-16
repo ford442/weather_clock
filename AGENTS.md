@@ -3,74 +3,186 @@
 ## Scope
 This file applies to the entire `weather_clock` repository.
 
-## Guiding Principles
-- **Code Quality**: Write clean, modular, and well-documented ES6+ JavaScript code.
-- **Performance**: Prioritize performance, especially in the 3D rendering loop. Reuse geometries and materials where possible. Optimize particle systems.
-- **User Experience**: Ensure smooth animations and responsive design.
-- **Testing**: Verify all changes visually since this is a graphical application.
+---
 
-## Working with Three.js
-- **Memory Management**: Dispose of geometries, materials, and textures when they are no longer needed to prevent memory leaks.
-- **Animation**: Use `requestAnimationFrame` for the render loop.
-- **Responsiveness**: Handle window resize events correctly to update camera aspect ratio and renderer size.
+## Project Overview
 
-## File Structure
-- `src/`: Contains all source code.
-- `src/main.js`: Entry point and main scene setup.
-- `src/weatherEffects.js`: Handles weather particle systems.
-- `src/sundial.js`: Sundial geometry and logic.
-- `src/moonPhase.js`: Moon logic.
-- `src/weather.js`: Weather API service.
+`weather_clock` is a **photorealistic 3D weather clock** built with **Three.js** and **vanilla JavaScript**. It renders a dynamic sky environment that evolves in real-time based on:
 
-## Instructions for Agents
-- When modifying the particle system, ensure it remains performant (e.g., limit particle counts, use efficient collision detection).
-- When adding new 3D objects, ensure they cast/receive shadows as appropriate.
+- **Local weather data** — fetched from the [Open-Meteo API](https://open-meteo.com/) (free, no API key required).
+- **Astronomical calculations** — sun position, moon phases, and twilight transitions via [SunCalc](https://github.com/mourner/suncalc).
+- **Particle effects** — rain, snow, wind dust, volumetric-style clouds, stars, and lightning.
+- **Time simulation** — runs on a decoupled `simulationTime` with an optional time-warp feature (24-hour cycle in 60 seconds).
+
+The app has two viewing modes:
+1. **Clock Mode** — A 3D sundial with analog hands, surrounding sky, and overlaid weather panels.
+2. **Timeline Mode** — A 21-day horizontal timeline of weather columns. Toggle with the button in the top-right or press `T`.
 
 ---
 
-# AGENT: THE AETHER ARCHITECT ☁️ (3D Weather & Time)
+## Technology Stack
 
-## IDENTITY
-You are "The Aether Architect," a Senior Graphics Engineer specialized in **Atmospheric Rendering, Shader Art, and Simulation Logic.**
-Your goal is to transform `weather_clock` from a data dashboard into a **photorealistic window to the sky.**
+| Layer | Technology | Version / Notes |
+|-------|------------|-----------------|
+| **Language** | Vanilla JavaScript (ES modules) | `"type": "module"` in `package.json` |
+| **3D Engine** | Three.js | `^0.181.2` |
+| **Build Tool** | Vite | `^7.2.4` |
+| **Unit Tests** | Vitest | `^3.2.4` |
+| **Astronomy** | SunCalc | Vendored as ES module in `src/vendor/suncalc.js` |
+| **Weather Data** | Open-Meteo API | Forecast + Archive endpoints |
+| **Geocoding** | Nominatim (OpenStreetMap) | Used for search & reverse geocoding |
+| **Visual Testing** | Python + Playwright | Scripts in `verification/` |
 
-## CONTEXT
-- **Engine:** Three.js (Standard WebGLRenderer).
-- **Data Source:** `src/weather.js` (Open-Meteo).
-- **Time Logic:** `src/astronomy.js` (SunCalc).
-- **Visuals:** `src/weatherEffects.js` (Particles), `src/weatherLighting.js` (Light/Color).
+---
 
-## CORE PHILOSOPHY: "FEEL THE TIME" ⏳
-1.  **Seconds:** Wind should rustle invisible grass, rain should splash, lights should flicker.
-2.  **Hours:** The sky gradient must shift smoothly from dawn orange to noon blue to dusk purple. Shadows must lengthen.
-3.  **Days:** Moon phases must cast different amounts of "silver" light. Seasons should affect the sun's maximum altitude.
+## File Structure
 
-## AETHER'S DAILY PROCESS
+### Root
+- `index.html` — Entry point. Loads Three.js via an import map and mounts `src/main.js`.
+- `package.json` — NPM manifest with Vite/Vitest scripts.
+- `deploy.py` — **Security note:** Paramiko SFTP deployment script containing hardcoded server credentials.
 
-### 1. 🎨 ATMOSPHERE & LIGHTING (The Sky)
-Scan `src/weatherLighting.js` and `src/main.js`.
-- **Sky Upgrade:** Replace the simple `scene.background` color lerp with a **GLSL Sky Shader** (Rayleigh/Mie scattering) that reacts to `sunLight.position`.
-- **Volumetric Fog:** Add `THREE.FogExp2` that changes density based on `weatherData.current.visibility` or `cloudCover`.
-- **Post-Processing:** Implement `EffectComposer` with **UnrealBloomPass** to make the sun and moon glow intensely.
+### Source (`src/`)
+| File | Responsibility |
+|------|----------------|
+| `main.js` | Application orchestrator. Sets up state, rendering, lights, scene objects, services, animation loop, UI callbacks, and debug API. |
+| `rendering.js` | Scene, WebGL renderer, perspective camera, `EffectComposer` + `UnrealBloomPass`, `OrbitControls`, window resize handling. |
+| `lights.js` | Ambient light, directional sun light, directional moon light; shadow map configuration. |
+| `scene-objects.js` | Factory functions for the `Sky` object, sundial, moon group, and weather effects. |
+| `animation.js` | `AnimationController` class. Drives the `requestAnimationFrame` loop, advances `simulationTime`, handles time-warp, throttles UI updates. |
+| `ui.js` | All DOM manipulation: time/date displays, weather panel updates, unit toggle, search box, sparkline canvas, pressure gauge, toasts, keyboard shortcuts. |
+| `weather-simulation.js` | Weather interpolation over the hourly timeline (`getWeatherAtTime`), plus `getActiveWeatherData` for past/current/forecast snapshots. |
+| `weather.js` | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timeline, handles geolocation/search, unit conversion, and advanced analytics (historical year-ago, regional offsets, accuracy mock). |
+| `astronomy.js` | `AstronomyService` class. Wraps SunCalc to compute sun/moon positions and illumination, converting spherical coordinates to Three.js Cartesian. |
+| `weatherEffects.js` | Particle systems: `RainSystem`, `SnowSystem`, `WindDustSystem`, `CloudSystem` (`InstancedMesh` with cumulus/stratus/cirrus types), `StarField`, splash effects, and lightning flashes. |
+| `weatherLighting.js` | `updateWeatherLighting()` — calculates day/night factor, weighted cloud cover, severity, fog density, sky shader uniforms, and smoothly interpolates sun/moon/ambient colors and intensities. |
+| `shaders.js` | GLSL shader strings used by rain and cloud materials. |
+| `sundial.js` | 3D sundial geometry (base, clock face, hour markers, gnomon, analog hands) with an `update(time)` method. |
+| `moonPhase.js` | Moon phase math and visual moon mesh creation. |
+| `debug.js` | Exposes `window.setDebugWeather(code)`, `window.setDebugTime(hour)`, and `window.aetherDebug` for runtime inspection. |
+| `ModeController.js` | Manages switching between Clock and Timeline modes, camera animations, UI visibility toggles, and browser history (`?mode=timeline`). |
 
-### 2. 🌧️ PARTICLE EVOLUTION (The Weather)
-Scan `src/weatherEffects.js`.
-- **Cloud Upgrade:** Stop using `SphereGeometry` for clouds. Implement **InstancedMesh** with soft, noise-textured sprites or a Raymarched Volume shader for fluffy, organic clouds.
-- **Precipitation:** Align rain streaks with the `windSpeed` vector relative to the camera. Make snow flutter using curl noise.
-- **Interaction:** Ensure particles collide with the `sundial` (add a simple depth map or geometric bounds check) and create splash decals.
+### Timeline Subsystem (`src/timeline/`)
+- `TimelineController.js` — Manages 21-day 3D column visualization, raycasting, hover/selection states.
+- `TimelineUI.js` — DOM overlay for timeline details.
+- `DayColumn.js` — Individual 3D column representing one day.
+- `TimelineData.js` — Fetches and caches timeline weather data.
+- `AnomalyCalculator.js` — Computes weather anomalies for the timeline.
+- `index.js` — Re-exports.
+- `timeline.css` — Styles for timeline UI.
 
-### 3. ⚙️ TIME LOGIC (The Simulation)
-Scan `src/main.js` and `src/astronomy.js`.
-- **Decouple Time:** Currently, `animate()` relies on `new Date()`. Refactor this to use a `simulationTime` variable.
-- **Time-Lapse Feature:** Create a "Fast Forward" function that accelerates `simulationTime` so we can watch a 24-hour weather cycle in 60 seconds.
-- **Smooth Transitions:** When weather data updates (every 10 mins), interpolate the changes over 5 seconds. Don't snap from "Sunny" to "Rainy."
+### Tests (`src/tests/`)
+- `astronomy.test.js` — Validates sun/moon position calculations.
+- `weather.test.js` — Validates `WeatherService` initialization, unit conversion, and description mapping.
 
-### 4. 🔨 IMPLEMENTATION
-- **Constraint:** Maintain 60 FPS. Use **Object Pooling** for particles (don't `new` and `dispose` repeatedly).
-- **Code Style:** Use ES6 Modules. Keep shaders in separate `.glsl.js` strings or files if possible.
+### Visual Verification (`verification/`)
+Python + Playwright scripts for screenshot-based regression testing:
+- `verify_weather.py`, `verify_date_display.py`, `verify_scene.py`, `verify_sky.py`, `verify_night.py`, `verify_sunny.py`, `verify_changes.py`, etc.
 
-## AETHER'S JOURNAL - VISUAL LOG
-Record what makes the simulation feel real:
-- "The moon needs to cast a 'Blue/Silver' light, not just dim white light."
-- "Rain looks better if the opacity drops based on camera distance (fade out close particles)."
-- "During 'Thunderstorms', the lightning light should override the global ambient light for 0.1s."
+---
+
+## Build and Test Commands
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server (http://localhost:5173)
+npm run dev
+
+# Production build — output goes to dist/
+npm run build
+
+# Preview production build locally
+npm run preview
+
+# Run unit tests (Vitest)
+npm test
+```
+
+### Visual Regression Tests
+Requires the dev server to be running (`npm run dev` in another terminal) and Python with Playwright installed:
+
+```bash
+pip install playwright
+playwright install
+
+python3 verification/verify_weather.py
+python3 verification/verify_date_display.py
+python3 verification/verify_scene.py
+```
+
+Screenshots are saved into `verification/` for manual comparison.
+
+---
+
+## Code Style Guidelines
+
+- **ES Modules:** All source code uses native `import`/`export`. Do not use CommonJS.
+- **Module Boundaries:** Each module has a single responsibility. `main.js` is the orchestrator; implementation details live in feature modules.
+- **Configuration Constants:** Magic numbers are centralized in module-level config objects (e.g., `RENDERING_CONFIG`, `LIGHTS_CONFIG`, `SKY_CONFIG`, `ANIMATION_CONFIG`, `UI_CONFIG`).
+- **Animation:** Use `requestAnimationFrame` only. Never use `setInterval` for render-related logic.
+- **Memory Management:** When modifying Three.js objects, dispose of geometries, materials, and textures that are being replaced to avoid WebGL memory leaks.
+- **Particle Performance:** The app relies on object pooling and `InstancedMesh` for clouds. Do not repeatedly `new` and `dispose` particle objects in the render loop.
+- **Shadows:** New 3D objects should `castShadow = true` / `receiveShadow = true` where appropriate.
+- **DOM/CSS:** Vanilla DOM and CSS only. No React, Vue, or other UI frameworks.
+
+---
+
+## Testing Instructions
+
+1. **Unit Tests**
+   - Run `npm test` before committing.
+   - Tests are in `src/tests/` and use Vitest with mocked `fetch` and `navigator.geolocation`.
+
+2. **Visual Verification**
+   - Start the dev server: `npm run dev`
+   - Run the Python verification scripts in `verification/`.
+   - Inspect generated screenshots for regressions in sky color, weather effects, and UI layout.
+
+3. **Interactive Debug Mode**
+   - Open the browser console on `http://localhost:5173` and use:
+     ```javascript
+     window.setDebugWeather(65);   // Force Heavy Rain (0 = Clear, 71 = Snow, 95 = Thunderstorm)
+     window.setDebugTime(14.5);    // Jump to 2:30 PM
+     window.aetherDebug.getSimulationTime();
+     window.aetherDebug.getWeatherData();
+     window.aetherDebug.getSunPosition();
+     ```
+
+---
+
+## Security Considerations
+
+- **`deploy.py` contains hardcoded SFTP credentials.** Do not run this script blindly, and do not commit modified versions that expose secrets.
+- The app fetches data from external APIs (Open-Meteo, Nominatim) over HTTPS. No API keys are required.
+- User location and unit preferences are stored in `localStorage` under the keys:
+  - `weatherclock_lat`
+  - `weatherclock_lon`
+  - `weatherclock_location`
+  - `weatherclock_unit`
+  - `weatherclock_wind_unit`
+
+---
+
+## Architecture Notes for Agents
+
+### Time Decoupling
+`state.simulationTime` (a `Date` object) is independent of the system clock. In normal mode it advances 1:1 with real time. In time-warp mode it accelerates by `1440x` (24 hours in 60 seconds). Weather interpolation in `weather-simulation.js` ensures smooth transitions as `simulationTime` moves through the hourly timeline.
+
+### Weather State Pipeline
+1. `WeatherService.fetchWeather()` retrieves forecast + archive data and builds an hourly `timeline` array.
+2. `getActiveWeatherData(simulationTime, weatherData)` interpolates past, current, and forecast points from the timeline.
+3. `AnimationController.update()` passes the active weather to `updateWeatherLighting()` and `weatherEffects.update()`.
+4. `weatherLighting.js` computes severity, cloud weighting, and smoothly transitions colors/intensities over ~5 seconds.
+
+### Cloud System
+`CloudSystem` uses `THREE.InstancedMesh` with procedurally generated canvas textures (`cumulus`, `stratus`, `cirrus`). Each cloud is composed of multiple puffs arranged in dome, sheet, or streak formations. Clouds billboard toward the camera and drift horizontally with wind.
+
+### Precipitation & Collision
+- **Rain:** `LineSegments` with a custom shader. Drops reset when they fall below the ground or collide with the sundial geometry (face, base top, or base slope).
+- **Snow:** `Points` with curl-noise turbulence.
+- **Splashes:** Small particle bursts spawn on the sundial surface when raindrops hit.
+
+### Mode Switching
+`ModeController` transitions the camera between Clock mode (close-up of the sundial) and Timeline mode (elevated overview of 21-day columns). It updates browser history so `?mode=timeline` is shareable. Press `T` to toggle, `Esc` to return to Clock mode.
