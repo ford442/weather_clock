@@ -1,0 +1,40 @@
+# Copilot Cloud Agent Setup Configuration
+# This file configures the Copilot cloud agent environment for the weather_clock project
+
+settings:
+  timeout: 600
+
+tools:
+  # Essential development tools
+  nodejs:
+    version: "lts"
+  python:
+    version: "3.11"
+
+preinstall:
+  # NPM dependencies for the project
+  npm:
+    - dependencies:
+        - name: three
+          version: "^0.181.2"
+        - name: suncalc
+          version: "^1.9.0"
+      devDependencies:
+        - name: vite
+          version: "^7.2.4"
+        - name: vitest
+          version: "^3.2.4"
+
+  # Python packages for visual testing and Playwright
+  pip:
+    - packages:
+        - name: playwright
+          version: ">=1.40.0"
+
+# MCP Servers for enhanced capabilities
+mcp_servers:
+  - name: playwright
+    description: "Browser automation for visual testing and verification"
+    enabled: true
+    config:
+      headless: true
