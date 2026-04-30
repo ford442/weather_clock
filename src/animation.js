@@ -9,7 +9,8 @@ import {
     updateSunriseSunset,
     updateWindCompass,
     updatePanelTheme,
-    drawSparkline
+    drawSparkline,
+    updateTimelineScrubber
 } from './ui.js';
 
 const ANIMATION_CONFIG = {
@@ -63,12 +64,12 @@ export class AnimationController {
             scene, composer, sky,
             sundial, moonGroup, weatherEffects,
             sunLight, moonLight, ambientLight,
-            controls
+            controls, renderer
         } = scene3d;
 
         // ── Advance simulation time ──
         const timeScale = state.isTimeWarping
-            ? ANIMATION_CONFIG.warpTimeScale
+            ? state.timeSpeed
             : ANIMATION_CONFIG.realTimeScale;
         state.simulationTime = new Date(state.simulationTime.getTime() + delta * 1000 * timeScale);
 
@@ -94,6 +95,7 @@ export class AnimationController {
 
         // ── Time display ──
         updateTimeDisplay(state.simulationTime, state.isTimeWarping);
+        updateTimelineScrubber(state.simulationTime, state.isTimeWarping, state.timeSpeed);
 
         // Update sunrise/sunset only when the day changes (not every frame)
         const simDay = state.simulationTime.getDate();
@@ -193,6 +195,11 @@ export class AnimationController {
         // ── Timeline update (if in timeline mode) ──
         if (this.modeController?.isTimelineMode() && this.modeController.timelineController) {
             this.modeController.timelineController.update(delta);
+        }
+
+        // ── Atmosphere theme (drives CSS custom properties) ──
+        if (state.weatherData) {
+            updateAtmosphereTheme(renderer, scene, state.weatherData);
         }
 
         composer.render();

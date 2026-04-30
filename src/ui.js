@@ -15,8 +15,8 @@ function compassDir(deg) {
 const UI_CONFIG = {
     timeWarpColorActive: 'rgba(255, 100, 100, 0.8)',
     timeWarpColorInactive: 'rgba(100, 255, 100, 0.4)',
-    timeWarpSymbolActive: '⏸️',
-    timeWarpSymbolInactive: '⏩',
+    timeWarpSymbolActive: 'pause',
+    timeWarpSymbolInactive: 'play',
     timeWarningColor: '#ffaa44',
     timeWarningGlow: '0 0 10px #ffaa44',
     timeNormalColor: '#ffffff',
@@ -36,6 +36,12 @@ export function countTo(el, newVal, suffix = '') {
     }
 
     if (_countState.has(el)) cancelAnimationFrame(_countState.get(el));
+
+    // Flash animation for stat-value elements
+    if (el.classList.contains('stat-value')) {
+        el.classList.add('value-updating');
+        setTimeout(() => el.classList.remove('value-updating'), 150);
+    }
 
     const duration = 800;
     const startTime = performance.now();
@@ -132,7 +138,11 @@ export function updateWeatherDisplay(data, weatherService) {
         setNum('current-wind', data.current.windSpeed, ' km/h');
         const pastWindConverted = weatherService.convertWind(data.past.windSpeed);
         const wind = document.getElementById('past-wind');
-        if (wind) wind.textContent = `${pastWindConverted.value} ${pastWindConverted.unit}`;
+        if (wind) {
+            wind.classList.add('value-updating');
+            setTimeout(() => wind.classList.remove('value-updating'), 150);
+            wind.textContent = `${pastWindConverted.value} ${pastWindConverted.unit}`;
+        }
 
         // Wind compass
         if (data.current.windDirection != null) {
@@ -221,7 +231,7 @@ export function updateUnitButton(weatherService) {
 }
 
 // ── setupEventListeners ──────────────────────────────────────────────────────
-export function setupEventListeners(callbacks) {
+export function setupEventListeners(callbacks, modeController) {
     const retryBtn = document.getElementById('retry-location');
     if (retryBtn) retryBtn.addEventListener('click', callbacks.onRetryLocation);
 
@@ -238,32 +248,137 @@ export function setupEventListeners(callbacks) {
 
     const searchInput = document.getElementById('location-search');
     const searchBtn = document.getElementById('search-btn');
+    const searchContainer = searchInput?.closest('.search-container');
 
     if (searchBtn) {
-        searchBtn.addEventListener('click', () => callbacks.onSearch(searchInput?.value || ''));
+        searchBtn.addEventListener('click', () => {
+            if (!searchContainer?.classList.contains('expanded')) {
+                searchContainer?.classList.add('expanded');
+                searchInput?.focus();
+            } else {
+                callbacks.onSearch(searchInput?.value || '');
+            }
+        });
     }
     if (searchInput) {
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') callbacks.onSearch(searchInput.value);
         });
+        searchInput.addEventListener('focus', () => {
+            searchContainer?.classList.add('expanded');
+        });
+        searchInput.addEventListener('blur', () => {
+            if (!searchInput.value) searchContainer?.classList.remove('expanded');
+        });
     }
 
-    const warpBtn = document.getElementById('time-warp-btn');
-    if (warpBtn) warpBtn.addEventListener('click', callbacks.onToggleTimeWarp);
+    // Scrubber play button
+    const playBtn = document.getElementById('scrubber-play-btn');
+    if (playBtn && callbacks.onToggleTimeWarp) {
+        playBtn.addEventListener('click', callbacks.onToggleTimeWarp);
+    }
+
+    // Scrubber speed chip
+    const speedChip = document.getElementById('scrubber-speed-chip');
+    if (speedChip && callbacks.onCycleSpeed) {
+        speedChip.addEventListener('click', callbacks.onCycleSpeed);
+    }
+
+    // Scrubber drag handling
+    const playhead = document.getElementById('scrubber-playhead');
+    const track = document.getElementById('scrubber-track');
+    if (playhead && track && callbacks.onScrub) {
+        playhead.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            playhead.classList.add('dragging');
+
+            const onMove = (ev) => {
+                const rect = track.getBoundingClientRect();
+                const x = ev.clientX - rect.left;
+                const pct = Math.max(0, Math.min(1, x / rect.width));
+                callbacks.onScrub(pct);
+            };
+
+            const onUp = () => {
+                playhead.classList.remove('dragging');
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        track.addEventListener('click', (e) => {
+            if (e.target === playhead || playhead.contains(e.target)) return;
+            const rect = track.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            callbacks.onScrub(pct);
+        });
+    }
+
+    // Drawer handle click handlers
+    document.querySelectorAll('.drawer-handle').forEach(handle => {
+        handle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const drawer = handle.closest('.drawer');
+            if (!drawer || !modeController) return;
+            if (drawer.id === 'panel-left') {
+                if (drawer.classList.contains('expanded')) {
+                    modeController.hideDrawers();
+                } else {
+                    modeController.showLeftDrawer();
+                }
+            } else if (drawer.id === 'panel-right') {
+                if (drawer.classList.contains('expanded')) {
+                    modeController.hideDrawers();
+                } else {
+                    modeController.showRightDrawer();
+                }
+            }
+        });
+    });
 }
 
-// ── updateTimeWarpButton ─────────────────────────────────────────────────────
-export function updateTimeWarpButton(isActive) {
-    const warpBtn = document.getElementById('time-warp-btn');
-    if (!warpBtn) return;
-    warpBtn.style.background = isActive ? UI_CONFIG.timeWarpColorActive : UI_CONFIG.timeWarpColorInactive;
-    warpBtn.textContent = isActive ? UI_CONFIG.timeWarpSymbolActive : UI_CONFIG.timeWarpSymbolInactive;
+const PLAY_ICON_SVG = `<polygon points="5,3 13,8 5,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>`;
+const PAUSE_ICON_SVG = `<line x1="6" y1="3" x2="6" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="3" x2="10" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`;
+const SEARCH_SVG = `<svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="7" cy="7" r="5" stroke="currentColor" fill="none" stroke-width="1.5"/><line x1="11" y1="11" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+
+// ── updateTimelineScrubber ───────────────────────────────────────────────────
+export function updateTimelineScrubber(simulationTime, isPlaying, speed) {
+    const playIcon = document.getElementById('scrubber-play-icon');
+    const timeChip = document.getElementById('scrubber-time-chip');
+    const speedChip = document.getElementById('scrubber-speed-chip');
+    const playhead = document.getElementById('scrubber-playhead');
+
+    if (!playhead) return;
+
+    // Playhead position: ((simulationTime - startOfDay) / 86400000) * 100%
+    const startOfDay = new Date(simulationTime);
+    startOfDay.setHours(0, 0, 0, 0);
+    const msIntoDay = simulationTime.getTime() - startOfDay.getTime();
+    const pct = (msIntoDay / 86400000) * 100;
+    playhead.style.left = `${Math.max(0, Math.min(100, pct))}%`;
+
+    if (timeChip) {
+        timeChip.textContent = formatTime12(simulationTime);
+    }
+
+    if (speedChip) {
+        speedChip.textContent = `${speed}×`;
+        speedChip.dataset.speed = String(speed);
+    }
+
+    if (playIcon) {
+        playIcon.innerHTML = isPlaying ? PAUSE_ICON_SVG : PLAY_ICON_SVG;
+    }
 }
 
 // ── setSearchLoading ──────────────────────────────────────────────────────────
 export function setSearchLoading(isLoading) {
     const searchBtn = document.getElementById('search-btn');
-    if (searchBtn) searchBtn.textContent = isLoading ? '...' : 'Go';
+    if (searchBtn) searchBtn.innerHTML = isLoading ? '...' : SEARCH_SVG;
 }
 
 // ── updateWindCompass ────────────────────────────────────────────────────────
@@ -612,14 +727,17 @@ export function setupKeyboardShortcuts(callbacks) {
 
         switch (e.key.toLowerCase()) {
             case 'w':
-                callbacks.onToggleTimeWarp();
+                callbacks.onToggleTimeWarp?.();
                 break;
             case 'f':
-                callbacks.onToggleUnit();
+                callbacks.onCycleSpeed?.();
                 break;
             case '/':
                 e.preventDefault();
-                document.getElementById('location-search')?.focus();
+                callbacks.onPause?.();
+                break;
+            case 'u':
+                callbacks.onToggleUnit?.();
                 break;
         }
     });

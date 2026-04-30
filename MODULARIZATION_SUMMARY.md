@@ -64,7 +64,7 @@ All DOM manipulation and event handling.
 - `updateWeatherDisplay(data, weatherService)` - Update all weather panels
 - `updateUnitButton(weatherService)` - Update button text
 - `setupEventListeners(callbacks)` - Attach all event handlers
-- `updateTimeWarpButton(isActive)` - Toggle warp button appearance
+- `updateTimelineScrubber(simulationTime, isPlaying, speed)` - Update timeline scrubber playhead, chips, and play/pause icon
 - `setSearchLoading(isLoading)` - Loading state for search
 
 ### 6. **animation.js** - Render Loop

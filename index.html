@@ -2,16 +2,23 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>3D Weather Clock</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;700&display=swap" rel="stylesheet">
     <style>
-        /* ── CSS Custom Properties (updated per-frame by updatePanelTheme) ── */
+        /* ── Atmospheric Design System ── */
         :root {
-            --panel-bg: rgba(0, 0, 0, 0.6);
-            --panel-border: rgba(255, 255, 255, 0.1);
+            --panel-bg: rgba(10, 12, 18, 0.45);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text-primary: rgba(255, 255, 255, 0.92);
+            --text-secondary: rgba(255, 255, 255, 0.55);
+            --accent-warm: #E8A838;
+            --accent-cool: #5AACB8;
+            --accent: 232, 168, 56;
+            --glow: rgba(232, 168, 56, 0.4);
+            --transition-base: cubic-bezier(0.16, 1, 0.3, 1);
             --header-color: #88d8f9;
             --trend-glow: transparent;
         }
@@ -21,7 +28,7 @@
             padding: 0;
             overflow: hidden;
             font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #000;
+            background: #050608;
         }
 
         #canvas-container {
@@ -33,102 +40,679 @@
             z-index: 1;
         }
 
-        #ui-layer {
+        /* ── Top Bar ── */
+        #top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 56px;
+            backdrop-filter: blur(20px);
+            background: linear-gradient(to bottom, rgba(0,0,0,0.4), transparent);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            box-sizing: border-box;
+            z-index: 10;
+            pointer-events: auto;
+            color: var(--text-primary);
+        }
+
+        .top-bar-left, .top-bar-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        #top-bar .location-display {
+            font-size: 13px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #top-bar .search-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            height: 32px;
+            width: 0;
+            overflow: hidden;
+            transition: width 0.4s var(--transition-base);
+        }
+
+        #top-bar .search-container.expanded {
+            width: 200px;
+        }
+
+        #top-bar .search-input {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 16px;
+            padding: 0 14px;
+            color: white;
+            outline: none;
+            width: 140px;
+            font-family: inherit;
+            font-size: 13px;
+            height: 28px;
+            transition: width 0.3s var(--transition-base), border-color 0.2s;
+        }
+
+        #top-bar .search-input:focus {
+            width: 200px;
+            border-color: rgba(255,255,255,0.4);
+        }
+
+        #top-bar .search-btn {
+            background: rgba(255,255,255,0.12);
+            border: none;
+            border-radius: 16px;
+            padding: 0 10px;
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            height: 28px;
+            width: 28px;
+            transition: background 0.2s;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #top-bar .search-btn:hover { background: rgba(255,255,255,0.22); }
+
+        /* Mode toggle inside top bar */
+        #top-bar .mode-toggle-btn {
+            position: static;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(10px);
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            flex-shrink: 0;
+        }
+
+        #top-bar .mode-toggle-btn:hover {
+            transform: scale(1.1);
+            background: rgba(255,255,255,0.15);
+            border-color: rgba(255,255,255,0.4);
+        }
+
+        #top-bar .mode-toggle-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ── Unit Segmented Control ── */
+        .unit-segmented {
+            display: inline-flex;
+            height: 32px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.1);
+            overflow: hidden;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .unit-segmented .segment {
+            padding: 0 12px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            height: 100%;
+            font-family: inherit;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .unit-segmented[data-unit='metric'] .segment[data-segment='celsius'],
+        .unit-segmented[data-unit='metric'] .segment[data-segment='kmh'],
+        .unit-segmented[data-unit='imperial'] .segment[data-segment='fahrenheit'],
+        .unit-segmented[data-unit='imperial'] .segment[data-segment='mph'] {
+            background: rgba(var(--accent), 0.2);
+            color: white;
+        }
+
+        /* ── Center Overlay ── */
+        #center-overlay {
+            position: absolute;
+            left: 50%;
+            bottom: 35vh;
+            transform: translateX(-50%);
+            z-index: 5;
+            pointer-events: none;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: opacity 0.5s ease, transform 0.5s var(--transition-base);
+        }
+
+        body.drawers-open #center-overlay {
+            opacity: 0.6;
+            transform: translateX(-50%) scale(0.98);
+        }
+
+        #center-overlay > * {
+            pointer-events: auto;
+        }
+
+        #center-overlay .time-display {
+            font-size: 48px;
+            font-weight: 300;
+            letter-spacing: 0;
+            color: var(--text-primary);
+            line-height: 1;
+            text-shadow: 0 0 40px var(--glow), 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        #center-overlay #date-display {
+            font-size: 13px;
+            font-weight: 400;
+            letter-spacing: 1px;
+            opacity: 0.7;
+            margin-top: 4px;
+            color: var(--text-secondary);
+        }
+
+        #center-overlay #current-temp {
+            font-size: 40px;
+            font-weight: 500;
+            line-height: 1;
+            margin: 6px 0;
+            color: var(--text-primary);
+        }
+
+        #center-overlay #current-description {
+            font-size: 18px;
+            font-weight: 400;
+            opacity: 0.85;
+            margin-top: 4px;
+            color: var(--text-secondary);
+        }
+
+        /* ── Timeline Scrubber ── */
+        #timeline-scrubber {
+            position: fixed;
+            bottom: 20px;
+            left: 10%;
+            width: 80%;
+            height: 40px;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        #timeline-scrubber > * {
+            pointer-events: auto;
+        }
+
+        .scrubber-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.08);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+            padding: 0;
+        }
+
+        .scrubber-btn:hover {
+            background: rgba(255,255,255,0.15);
+            transform: scale(1.1);
+        }
+
+        .scrubber-btn svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .scrubber-main {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .scrubber-chips {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .scrubber-chip {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: rgba(0,0,0,0.3);
+            padding: 2px 8px;
+            border-radius: 8px;
+            backdrop-filter: blur(4px);
+            font-family: inherit;
+            letter-spacing: 0.5px;
+        }
+
+        .speed-chip {
+            font-size: 11px;
+            font-weight: 600;
+            color: rgb(var(--accent));
+            background: rgba(var(--accent), 0.1);
+            border: 1px solid rgba(var(--accent), 0.3);
+            padding: 2px 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .speed-chip:hover {
+            background: rgba(var(--accent), 0.2);
+        }
+
+        .scrubber-track {
+            position: relative;
+            width: 100%;
+            height: 2px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 1px;
+            cursor: pointer;
+        }
+
+        .scrubber-playhead {
+            position: absolute;
+            top: 50%;
+            left: 0%;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgb(var(--accent));
+            box-shadow: 0 0 10px rgb(var(--accent));
+            transform: translate(-50%, -50%);
+            cursor: grab;
+            transition: transform 0.15s ease, box-shadow 0.2s;
+        }
+
+        .scrubber-playhead:active {
+            cursor: grabbing;
+            transform: translate(-50%, -50%) scale(1.3);
+            box-shadow: 0 0 16px rgb(var(--accent));
+        }
+
+        /* Time warping state */
+        body.time-warping .time-display {
+            color: #ffcc88;
+            text-shadow: 0 0 20px rgba(255, 170, 68, 0.5), 0 0 40px rgba(255, 100, 100, 0.2);
+        }
+
+        /* ── Edge Drawers ── */
+        #panel-left, #panel-right {
+            position: fixed;
+            top: 56px;
+            height: calc(100vh - 56px);
+            width: 280px;
+            background: rgba(8, 10, 14, 0.6);
+            backdrop-filter: blur(16px);
+            transition: transform 0.4s var(--transition-base);
+            z-index: 8;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #panel-left {
+            left: 0;
+            transform: translateX(-276px);
+        }
+
+        #panel-right {
+            right: 0;
+            transform: translateX(276px);
+        }
+
+        #panel-left:hover, #panel-left.expanded {
+            transform: translateX(0);
+        }
+
+        #panel-right:hover, #panel-right.expanded {
+            transform: translateX(0);
+        }
+
+        .drawer-content {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .drawer-handle {
+            position: absolute;
+            top: 0;
+            width: 4px;
+            height: 100%;
+            background: rgba(255,255,255,0.08);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, width 0.2s;
+        }
+
+        .drawer-handle:hover {
+            background: rgba(255,255,255,0.15);
+            width: 6px;
+        }
+
+        #panel-left .drawer-handle {
+            right: 0;
+        }
+
+        #panel-right .drawer-handle {
+            left: 0;
+        }
+
+        /* ── Icon SVGs ── */
+        .icon-svg {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            stroke: currentColor;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* ── Bottom Mini Bar ── */
+        #bottom-mini-bar {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 24px;
+            padding: 10px 24px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            pointer-events: auto;
+            white-space: nowrap;
+        }
+
+        #bottom-mini-bar .cs-item {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        #bottom-mini-bar svg {
+            width: 16px;
+            height: 16px;
+            stroke-width: 1.5;
+            color: currentColor;
+            flex-shrink: 0;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+
+        .day-progress-arc {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .day-progress-arc svg {
+            width: 40px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .day-arc-track {
+            stroke: rgba(255,255,255,0.2);
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+        }
+
+        .day-arc-active {
+            stroke: rgb(var(--accent));
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+        }
+
+        .day-arc-dot {
+            fill: white;
+        }
+
+        .uv-badge {
+            background: rgba(255, 200, 50, 0.15);
+            border: 1px solid rgba(255, 200, 50, 0.3);
+            border-radius: 8px;
+            padding: 1px 7px;
+            font-size: 11px;
+            color: #ffd060;
+            font-weight: 600;
+        }
+
+        /* ── Advanced Drawer ── */
+        #panel-advanced {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 8px;
+            background: rgba(8, 10, 14, 0.7);
+            backdrop-filter: blur(20px);
+            z-index: 5;
+            transition: height 0.5s var(--transition-base);
+            overflow: hidden;
+            pointer-events: auto;
+            border-top: 1px solid var(--panel-border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #panel-advanced.expanded {
+            height: 200px;
+        }
+
+        .drawer-handle-grip {
+            width: 40px;
+            height: 3px;
+            border-radius: 2px;
+            background: rgba(255,255,255,0.2);
+            margin: 3px auto;
+            cursor: ns-resize;
+            flex-shrink: 0;
+        }
+
+        .drawer-tabs {
+            display: flex;
+            gap: 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding: 12px 24px;
+            flex-shrink: 0;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: color 0.2s, border-color 0.2s;
+            padding: 0 0 8px 0;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .tab-btn.active {
+            color: rgb(var(--accent));
+            border-bottom-color: rgb(var(--accent));
+        }
+
+        .tab-panels {
+            position: relative;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .tab-content {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 2;
-            pointer-events: none;
-            display: grid;
-            grid-template-columns: 300px 1fr 300px;
             padding: 20px;
             box-sizing: border-box;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+            overflow-y: auto;
         }
 
-        /* ── Panels ── */
+        .tab-content.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* ── Panel base styles ── */
         .panel {
             background: var(--panel-bg);
             backdrop-filter: blur(10px);
-            border-radius: 15px;
+            border-radius: 12px;
             padding: 20px;
-            color: white;
+            color: var(--text-primary);
             pointer-events: auto;
             display: flex;
             flex-direction: column;
             border: 1px solid var(--panel-border);
             box-shadow: 0 0 30px var(--trend-glow);
-            height: fit-content;
-            margin-top: 15vh;
-            transition: background 0.8s ease, border-color 0.8s ease, box-shadow 0.6s ease;
+            transition: background 0.8s ease, border-color 0.8s ease, box-shadow 0.6s ease, transform 0.3s ease;
         }
 
         .panel:hover {
-            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            border-color: rgba(255,255,255,0.15);
         }
 
-        #panel-center {
-            background: none;
-            border: none;
-            backdrop-filter: none;
-            box-shadow: none;
-            align-items: center;
-            margin-top: 50px;
-            pointer-events: none;
-        }
-
-        #panel-center > * {
-            pointer-events: auto;
-        }
-
-        /* ── Typography ── */
-        .time-display {
-            font-size: 72px;
-            font-weight: 200;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
-            letter-spacing: -2px;
-        }
-
-        .location-display {
-            font-size: 18px;
-            opacity: 0.9;
-            margin-bottom: 5px;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        h3 {
-            margin: 0 0 15px 0;
-            font-size: 13px;
+        .panel h3 {
+            font-size: 11px;
+            font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 2px;
-            color: var(--header-color);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding-bottom: 10px;
+            color: rgb(var(--accent));
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            margin: 0 0 16px 0;
             transition: color 0.8s ease;
         }
 
         .stat-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
             font-size: 14px;
         }
 
+        .panel .stat-row {
+            opacity: 0;
+            transform: translateY(4px);
+            animation: staggerIn 0.4s var(--transition-base) forwards;
+        }
+
+        .panel .stat-row:nth-child(1) { animation-delay: 0.05s; }
+        .panel .stat-row:nth-child(2) { animation-delay: 0.10s; }
+        .panel .stat-row:nth-child(3) { animation-delay: 0.15s; }
+        .panel .stat-row:nth-child(4) { animation-delay: 0.20s; }
+        .panel .stat-row:nth-child(5) { animation-delay: 0.25s; }
+        .panel .stat-row:nth-child(6) { animation-delay: 0.30s; }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
         .stat-value {
+            color: var(--text-primary);
             font-weight: 600;
-            color: #eee;
+            font-variant-numeric: tabular-nums;
+            transition: color 0.3s ease;
+        }
+
+        .stat-value.value-updating {
+            filter: blur(2px);
+            opacity: 0.7;
         }
 
         .description {
-            font-size: 19px;
-            margin-bottom: 16px;
+            font-size: 16px;
+            margin-bottom: 14px;
             font-weight: 500;
-            min-height: 28px;
+            min-height: 24px;
+            color: var(--text-primary);
+        }
+
+        .adv-section { text-align: center; }
+        .adv-val-big { font-size: 24px; font-weight: bold; color: #fff; margin: 5px 0; }
+        .adv-sub { font-size: 13px; opacity: 0.8; color: var(--text-secondary); }
+        .regional-list {
+            font-size: 13px;
+            text-align: left;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px 15px;
         }
 
         /* ── Retry button ── */
@@ -145,116 +729,11 @@
             justify-content: center;
             font-size: 14px;
             transition: background 0.2s;
+            flex-shrink: 0;
         }
         .retry-btn:hover { background: rgba(255,255,255,0.4); }
 
-        /* ── Unit toggle switch ── */
-        .unit-switch {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            margin-top: 8px;
-            font-size: 14px;
-            user-select: none;
-            color: white;
-        }
-        .unit-sw-label {
-            opacity: 0.5;
-            font-weight: 500;
-            transition: opacity 0.2s;
-            min-width: 18px;
-            text-align: center;
-        }
-        .unit-switch[data-unit='metric']   .unit-sw-label:first-child { opacity: 1; font-weight: 700; }
-        .unit-switch[data-unit='imperial'] .unit-sw-label:last-child  { opacity: 1; font-weight: 700; }
-        .unit-switch-track {
-            width: 40px;
-            height: 22px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 11px;
-            position: relative;
-            border: 1px solid rgba(255,255,255,0.25);
-            transition: background 0.25s;
-        }
-        .unit-switch-thumb {
-            position: absolute;
-            top: 3px;
-            left: 3px;
-            width: 14px;
-            height: 14px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.25s;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-        }
-        .unit-switch[data-unit='imperial'] .unit-switch-thumb { transform: translateX(18px); }
-        .unit-switch[data-unit='imperial'] .unit-switch-track { background: rgba(100,200,255,0.4); }
-
-        /* ── Search ── */
-        .search-container {
-            margin-top: 10px;
-            display: flex;
-            gap: 5px;
-            height: 30px;
-        }
-        .search-input {
-            background: rgba(0,0,0,0.5);
-            border: 1px solid rgba(255,255,255,0.3);
-            border-radius: 15px;
-            padding: 0 15px;
-            color: white;
-            outline: none;
-            width: 150px;
-            font-family: inherit;
-        }
-        .search-btn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            border-radius: 15px;
-            padding: 0 15px;
-            color: white;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .search-btn:hover { background: rgba(255,255,255,0.3); }
-
-        /* ── Center panel large displays ── */
-        .current-temp-large {
-            font-size: 56px;
-            font-weight: 700;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
-            margin: 8px 0 2px;
-            line-height: 1;
-        }
-        .current-weather-large {
-            font-size: 22px;
-            margin-top: 4px;
-            text-align: center;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
-            opacity: 0.9;
-        }
-
-        /* ── Feels-like + UV badge ── */
-        .feels-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 13px;
-            opacity: 0.8;
-            margin-bottom: 6px;
-        }
-        .uv-badge {
-            background: rgba(255, 200, 50, 0.2);
-            border: 1px solid rgba(255, 200, 50, 0.4);
-            border-radius: 8px;
-            padding: 1px 7px;
-            font-size: 11px;
-            color: #ffd060;
-            font-weight: 600;
-        }
-
-        /* ── Sparkline canvas ── */
+        /* ── Sparkline & Pressure Gauge ── */
         #sparkline {
             display: block;
             margin: 4px auto 0;
@@ -264,7 +743,6 @@
             opacity: 0.85;
         }
 
-        /* ── Pressure gauge canvas ── */
         #pressure-gauge {
             display: block;
             margin: 10px auto 0;
@@ -273,106 +751,7 @@
             opacity: 0.9;
         }
 
-        /* ── Center stats pill ── */
-        .center-stats {
-            margin-top: 18px;
-            background: rgba(0,0,0,0.5);
-            padding: 12px 20px;
-            border-radius: 20px;
-            backdrop-filter: blur(5px);
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px 18px;
-            border: 1px solid rgba(255,255,255,0.1);
-            justify-content: center;
-            max-width: 320px;
-        }
-        .cs-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 14px;
-            white-space: nowrap;
-        }
-        .wind-svg {
-            width: 18px;
-            height: 18px;
-            vertical-align: middle;
-            flex-shrink: 0;
-        }
-        /* SVG wind arrow transform — JS sets inline transform on the group */
-
-        /* ── Time warp button ── */
-        #time-warp-btn {
-            background: rgba(100, 255, 100, 0.4);
-            border: 1px solid rgba(255,255,255,0.5);
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            color: white;
-            cursor: pointer;
-            font-size: 24px;
-            transition: all 0.2s;
-            box-shadow: 0 0 10px rgba(0,0,0,0.3);
-        }
-        #time-warp-btn:hover { transform: scale(1.1); }
-
-        /* ── Advanced panel ── */
-        #panel-advanced {
-            position: absolute;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: auto;
-            min-width: 600px;
-            flex-direction: row;
-            justify-content: space-around;
-            gap: 30px;
-            margin-top: 0;
-            background: rgba(0, 0, 0, 0.75);
-        }
-        .adv-section { text-align: center; }
-        .adv-val-big { font-size: 24px; font-weight: bold; color: #fff; margin: 5px 0; }
-        .adv-sub { font-size: 13px; opacity: 0.8; }
-        .regional-list {
-            font-size: 13px;
-            text-align: left;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px 15px;
-        }
-
-        /* ── DEV hint ── */
-        #dev-hint {
-            position: fixed;
-            bottom: 8px;
-            right: 8px;
-            font-size: 10px;
-            color: rgba(255,255,255,0.25);
-            pointer-events: none;
-            z-index: 10;
-            font-family: monospace;
-        }
-
-        #time-warp-btn:hover {
-            transform: scale(1.1);
-            background: rgba(100, 255, 100, 0.6);
-        }
-
-        .feels-like {
-            font-size: 16px;
-            opacity: 0.75;
-            margin-top: -8px;
-            margin-bottom: 6px;
-        }
-
-        .kb-hint {
-            font-size: 11px;
-            opacity: 0.45;
-            margin-top: 6px;
-            letter-spacing: 1px;
-        }
-
+        /* ── Toasts ── */
         #toast-container {
             position: fixed;
             bottom: 24px;
@@ -386,7 +765,31 @@
             pointer-events: none;
         }
 
-        /* Timeline UI Container */
+        .toast {
+            background: rgba(30, 30, 40, 0.92);
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-size: 14px;
+            color: #fff;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            max-width: 360px;
+            text-align: center;
+        }
+
+        .toast.toast-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast-error { border-color: rgba(255, 80, 80, 0.5); }
+        .toast-success { border-color: rgba(80, 255, 120, 0.5); }
+        .toast-info { border-color: rgba(80, 180, 255, 0.5); }
+
+        /* ── Timeline UI Container ── */
         #timeline-ui-container {
             position: fixed;
             top: 0;
@@ -405,42 +808,6 @@
             visibility: visible;
         }
 
-        /* Mode Toggle Button */
-        .mode-toggle-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(10px);
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            z-index: 100;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-            pointer-events: auto;
-        }
-
-        .mode-toggle-btn:hover {
-            transform: scale(1.1);
-            background: rgba(0, 0, 0, 0.8);
-            border-color: rgba(255, 255, 255, 0.5);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-        }
-
-        .mode-toggle-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
         /* Clock UI elements transition */
         .panel {
             transition: opacity 0.5s ease, background 0.8s ease, border-color 0.8s ease, box-shadow 0.6s ease;
@@ -451,182 +818,407 @@
             pointer-events: none;
         }
 
-        .toast {
-            background: rgba(30, 30, 40, 0.92);
-            border-radius: 10px;
-            padding: 10px 20px;
-            font-size: 14px;
-            color: #fff;
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            opacity: 0;
-            transform: translateY(12px);
-            transition: opacity 0.3s ease, transform 0.3s ease;
-            max-width: 360px;
-            text-align: center;
+        /* ── DEV hint ── */
+        #dev-hint {
+            position: fixed;
+            bottom: 8px;
+            right: 8px;
+            font-size: 10px;
+            color: rgba(255,255,255,0.25);
+            pointer-events: none;
+            z-index: 10;
+            font-family: monospace;
         }
 
-        .toast.toast-visible {
-            opacity: 1;
-            transform: translateY(0);
+        /* ── Responsive ── */
+
+        /* Tablet */
+        @media (max-width: 1024px) {
+            #top-bar {
+                padding: 0 16px;
+            }
+
+            #center-overlay {
+                bottom: 30vh;
+            }
+
+            #center-overlay .time-display {
+                font-size: 40px;
+            }
+
+            #center-overlay #current-temp {
+                font-size: 32px;
+            }
+
+            /* Unit segmented: show only active segments */
+            .unit-segmented .segment {
+                padding: 0;
+                width: 0;
+                opacity: 0;
+                overflow: hidden;
+                pointer-events: none;
+            }
+
+            .unit-segmented[data-unit='metric'] .segment[data-segment='celsius'],
+            .unit-segmented[data-unit='metric'] .segment[data-segment='kmh'],
+            .unit-segmented[data-unit='imperial'] .segment[data-segment='fahrenheit'],
+            .unit-segmented[data-unit='imperial'] .segment[data-segment='mph'] {
+                padding: 0 12px;
+                width: auto;
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            /* Drawers as bottom sheets */
+            #panel-left, #panel-right {
+                top: auto;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                height: 50vh;
+                transform: translateY(calc(50vh - 8px));
+                border-radius: 12px 12px 0 0;
+            }
+
+            #panel-left {
+                transform: translateY(calc(50vh - 8px));
+            }
+
+            #panel-right {
+                transform: translateY(calc(50vh - 8px));
+            }
+
+            #panel-left:hover, #panel-right:hover {
+                transform: translateY(calc(50vh - 8px));
+            }
+
+            #panel-left.expanded, #panel-right.expanded,
+            #panel-left.expanded:hover, #panel-right.expanded:hover {
+                transform: translateY(0);
+            }
+
+            .drawer-handle {
+                position: relative;
+                top: auto;
+                left: auto;
+                right: auto;
+                width: 40px;
+                height: 4px;
+                margin: 8px auto;
+                background: rgba(255,255,255,0.2);
+                border-radius: 2px;
+            }
+
+            .drawer-handle svg {
+                display: none;
+            }
+
+            .drawer-content {
+                padding: 12px 20px 20px;
+            }
         }
 
-        .toast-error { border-color: rgba(255, 80, 80, 0.5); }
-        .toast-success { border-color: rgba(80, 255, 120, 0.5); }
-        .toast-info { border-color: rgba(80, 180, 255, 0.5); }
+        /* Mobile */
+        @media (max-width: 768px) {
+            #top-bar {
+                top: 16px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: auto;
+                min-width: 280px;
+                max-width: 90vw;
+                height: 48px;
+                border-radius: 28px;
+                padding: 0 20px;
+                background: rgba(0,0,0,0.5);
+                border-bottom: none;
+                overflow: hidden;
+            }
 
+            #center-overlay {
+                bottom: 25vh;
+            }
+
+            #center-overlay .time-display {
+                font-size: 36px;
+            }
+
+            #bottom-mini-bar {
+                bottom: 24px;
+                padding: 8px 16px;
+                gap: 16px;
+                font-size: 12px;
+            }
+
+            #timeline-scrubber {
+                bottom: 64px;
+                left: 5%;
+                width: 90%;
+            }
+
+            /* Advanced drawer */
+            #panel-advanced {
+                height: 6px;
+            }
+
+            #panel-advanced.expanded {
+                height: 180px;
+            }
+
+            /* Drawers */
+            #panel-left, #panel-right {
+                height: 45vh;
+                transform: translateY(calc(45vh - 8px));
+            }
+
+            #panel-left:hover, #panel-right:hover {
+                transform: translateY(calc(45vh - 8px));
+            }
+
+            #panel-left.expanded, #panel-right.expanded,
+            #panel-left.expanded:hover, #panel-right.expanded:hover {
+                transform: translateY(0);
+            }
+
+            /* Backdrop-filter reduction for performance */
+            #top-bar { backdrop-filter: blur(16px); }
+            #panel-left, #panel-right { backdrop-filter: blur(12px); }
+            #bottom-mini-bar { backdrop-filter: blur(8px); }
+            #panel-advanced { backdrop-filter: blur(16px); }
+            .toast { backdrop-filter: blur(4px); }
+            .scrubber-chip { backdrop-filter: none; }
+
+            #dev-hint {
+                display: none;
+            }
+        }
+
+        /* ── Animations ── */
+        @keyframes staggerIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes crossfadeOverlay {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        #center-overlay.mode-crossfade {
+            animation: crossfadeOverlay 0.6s ease forwards;
+        }
     </style>
 </head>
 <body>
     <div id="canvas-container"></div>
 
-    <div id="ui-layer">
-        <!-- LEFT: Previous Data -->
-        <div id="panel-left" class="panel">
-            <h3>⏮️ Previous <span id="past-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
+    <!-- Top Bar -->
+    <div id="top-bar">
+        <div class="top-bar-left">
+            <div class="location-display">
+                <span id="location">Detecting Location...</span>
+                <button id="retry-location" class="retry-btn" title="Retry Location">
+                    <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                        <path d="M2,8 A6,6 0 1,0 8,2" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/>
+                        <polyline points="2,4 2,8 6,8" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="search-container">
+                <input type="text" id="location-search" class="search-input" placeholder="City name…" />
+            </div>
+            <button id="search-btn" class="search-btn">
+                <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <circle cx="7" cy="7" r="5" stroke="currentColor" fill="none" stroke-width="1.5"/>
+                    <line x1="11" y1="11" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </button>
+        </div>
+        <div class="top-bar-right">
+            <button id="mode-toggle" class="mode-toggle-btn" title="Switch to Timeline View (T)">
+                <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/>
+                    <line x1="8" y1="8" x2="8" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="8" y1="8" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <div id="unit-toggle" class="unit-segmented" data-unit="metric" role="button" tabindex="0" aria-label="Toggle temperature unit">
+                <button class="segment" data-segment="celsius">°C</button>
+                <button class="segment" data-segment="fahrenheit">°F</button>
+                <button class="segment" data-segment="kmh">km/h</button>
+                <button class="segment" data-segment="mph">mph</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Center Overlay -->
+    <div id="center-overlay">
+        <div id="time-display" class="time-display">--:--</div>
+        <div id="date-display">--</div>
+        <div id="current-temp">--°</div>
+        <div id="current-description">Loading...</div>
+    </div>
+
+    <!-- Left Drawer -->
+    <div id="panel-left" class="panel drawer">
+        <div class="drawer-handle">
+            <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <polyline points="6,3 11,8 6,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <div class="drawer-content">
+            <h3>Previous <span id="past-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
             <div id="past-description" class="description">--</div>
             <div class="stat-row">
-                <span>Temp</span>
+                <span class="stat-label">Temp</span>
                 <span id="past-temp" class="stat-value">--°</span>
             </div>
             <div class="stat-row">
-                <span>Feels Like</span>
+                <span class="stat-label">Feels Like</span>
                 <span id="past-feels-like" class="stat-value">--°</span>
             </div>
             <div class="stat-row">
-                <span>Wind</span>
+                <span class="stat-label">Wind</span>
                 <span id="past-wind" class="stat-value">-- km/h</span>
             </div>
             <div class="stat-row">
-                <span>Humidity</span>
+                <span class="stat-label">Humidity</span>
                 <span id="past-humidity" class="stat-value">--%</span>
             </div>
             <div class="stat-row">
-                <span>Cloud Cover</span>
+                <span class="stat-label">Cloud Cover</span>
                 <span id="past-cloud" class="stat-value">--%</span>
             </div>
             <div class="stat-row">
-                <span>Precip. Prob.</span>
+                <span class="stat-label">Precip. Prob.</span>
                 <span id="past-precip-prob" class="stat-value">--%</span>
             </div>
-        </div>
-
-        <!-- CENTER: Current & Time -->
-        <div id="panel-center" class="panel">
-            <div class="location-display">
-                <span id="location">Detecting Location...</span>
-                <button id="retry-location" class="retry-btn" title="Retry Location">↻</button>
-            </div>
-
-            <div class="search-container">
-                <input type="text" id="location-search" class="search-input" placeholder="City name…" />
-                <button id="search-btn" class="search-btn">Go</button>
-            </div>
-
-            <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
-                <div id="time-display" class="time-display">--:--</div>
-                <div style="display:flex;flex-direction:column;align-items:center;">
-                    <button id="time-warp-btn" title="Fast Forward (24h in 60s)">⏩</button>
-                    <div class="kb-hint">W · F · /</div>
-                </div>
-            </div>
-            <div id="date-display" style="font-size:22px;opacity:0.8;margin-top:-8px;margin-bottom:8px;font-weight:300;">--</div>
-
-            <div id="current-temp" class="current-temp-large">--°</div>
-            <div id="feels-like-temp" class="feels-like">--</div>
-            <button id="unit-toggle" class="unit-toggle">Switch to °C</button>
-            <div id="current-description" class="current-weather-large">Loading...</div>
-
-            <!-- Feels-like + UV badge -->
-            <div class="feels-row">
-                <span>Feels like <span id="current-feels-like" class="stat-value">--°</span></span>
-                <span id="current-uv" class="uv-badge">UV --</span>
-            </div>
-
-            <!-- Unit toggle switch -->
-            <div id="unit-toggle" class="unit-switch" data-unit="imperial" role="button" tabindex="0" aria-label="Toggle temperature unit">
-                <span class="unit-sw-label">°C</span>
-                <span class="unit-switch-track"><span class="unit-switch-thumb"></span></span>
-                <span class="unit-sw-label">°F</span>
-            </div>
-
-            <div id="current-description" class="current-weather-large">Loading…</div>
-
-            <!-- 12-hour sparkline -->
             <canvas id="sparkline" width="280" height="60"></canvas>
-
-            <!-- Pressure gauge -->
-            <canvas id="pressure-gauge" width="140" height="140"></canvas>
-
-            <!-- Stats pill -->
-            <div class="center-stats">
-                <span class="cs-item">
-                    <!-- Wind direction compass SVG -->
-                    <svg id="wind-compass" class="wind-svg" viewBox="0 0 20 20" aria-hidden="true">
-                        <circle cx="10" cy="10" r="8" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/>
-                        <g id="wind-arrow" style="transform-origin:10px 10px;transform:rotate(0deg);transition:transform 0.5s ease;">
-                            <polygon points="10,2 8,9 10,7 12,9" fill="white"/>
-                        </g>
-                    </svg>
-                    <span id="current-wind" class="stat-value">--</span> km/h
-                </span>
-                          <span>💧 <span id="current-humidity" class="stat-value">--%</span></span>
-
-                <span class="cs-item">🌙 <span id="moon-phase" class="stat-value">--</span></span>
-                <span class="cs-item">🌅 <span id="sunrise-time" class="stat-value">--:--</span></span>
-                <span class="cs-item">🌇 <span id="sunset-time" class="stat-value">--:--</span></span>
-            </div>
-            <div class="center-stats" style="margin-top:8px;">
-                <span>🌅 <span id="sunrise-time" class="stat-value">--:--</span></span>
-                <span>🌇 <span id="sunset-time" class="stat-value">--:--</span></span>
-            </div>
         </div>
+    </div>
 
-        <!-- RIGHT: Forecast Data -->
-        <div id="panel-right" class="panel">
-            <h3>⏭️ Forecast <span id="forecast-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
+    <!-- Right Drawer -->
+    <div id="panel-right" class="panel drawer">
+        <div class="drawer-handle">
+            <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <polyline points="10,3 5,8 10,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <div class="drawer-content">
+            <h3>Forecast <span id="forecast-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
             <div id="forecast-description" class="description">--</div>
             <div class="stat-row">
-                <span>Temp</span>
+                <span class="stat-label">Temp</span>
                 <span id="forecast-temp" class="stat-value">--°</span>
             </div>
             <div class="stat-row">
-                <span>Feels Like</span>
+                <span class="stat-label">Feels Like</span>
                 <span id="forecast-feels-like" class="stat-value">--°</span>
             </div>
             <div class="stat-row">
-                <span>Wind</span>
+                <span class="stat-label">Wind</span>
                 <span id="forecast-wind" class="stat-value">-- km/h</span>
             </div>
             <div class="stat-row">
-                <span>Humidity</span>
+                <span class="stat-label">Humidity</span>
                 <span id="forecast-humidity" class="stat-value">--%</span>
             </div>
             <div class="stat-row">
-                <span>Cloud Cover</span>
+                <span class="stat-label">Cloud Cover</span>
                 <span id="forecast-cloud" class="stat-value">--%</span>
             </div>
             <div class="stat-row">
-                <span>Precip. Prob.</span>
+                <span class="stat-label">Precip. Prob.</span>
                 <span id="forecast-precip-prob" class="stat-value">--%</span>
             </div>
+            <canvas id="pressure-gauge" width="140" height="140"></canvas>
         </div>
+    </div>
 
-        <!-- BOTTOM: Advanced Analysis -->
-        <div id="panel-advanced" class="panel">
-            <div class="adv-section">
-                <h3>📅 1 Year Ago</h3>
-                <div id="history-temp" class="adv-val-big">--°</div>
-                <div id="history-desc" class="adv-sub">--</div>
+    <!-- Bottom Mini Bar -->
+    <div id="bottom-mini-bar" class="center-stats">
+        <span class="cs-item">
+            <svg id="wind-compass" class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/>
+                <g id="wind-arrow" style="transform-origin:8px 8px;transform:rotate(0deg);transition:transform 0.5s ease;">
+                    <path d="M8,2 L5,10 L8,8 L11,10 Z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>
+                </g>
+            </svg>
+            <span id="current-wind" class="stat-value">--</span> km/h
+        </span>
+        <span class="cs-item">
+            <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <path d="M8,2 C8,2 4,7 4,10 A4,4 0 0,0 12,10 C12,7 8,2 8,2Z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <span id="current-humidity" class="stat-value">--%</span>
+        </span>
+        <span class="cs-item">
+            <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <path d="M10,2 A6,6 0 1,1 6,14 A5,5 0 1,0 10,2Z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <span id="moon-phase" class="stat-value">--</span>
+        </span>
+        <span class="cs-item day-progress-arc">
+            <svg width="40" height="20" viewBox="0 0 40 20" aria-hidden="true">
+                <path class="day-arc-track" d="M 2,20 A 18,18 0 0,1 38,20" stroke-width="1.5"/>
+                <path class="day-arc-active" d="M 2,20 A 18,18 0 0,1 38,20" stroke-width="1.5" stroke-dasharray="28.27 56.55"/>
+                <circle class="day-arc-dot" cx="20" cy="2" r="2"/>
+            </svg>
+            <span id="sunrise-time" class="stat-value">--:--</span> – <span id="sunset-time" class="stat-value">--:--</span>
+        </span>
+        <span id="current-uv" class="uv-badge">UV --</span>
+    </div>
+
+    <!-- Advanced Drawer -->
+    <div id="panel-advanced" class="advanced-drawer">
+        <div class="drawer-handle-grip"></div>
+        <div class="drawer-tabs">
+            <button class="tab-btn active" data-tab="history">History</button>
+            <button class="tab-btn" data-tab="accuracy">Accuracy</button>
+            <button class="tab-btn" data-tab="nearby">Nearby</button>
+        </div>
+        <div class="tab-panels">
+            <div class="tab-content active" id="tab-history">
+                <div class="adv-section">
+                    <h3>1 Year Ago</h3>
+                    <div id="history-temp" class="adv-val-big">--°</div>
+                    <div id="history-desc" class="adv-sub">--</div>
+                </div>
             </div>
-            <div class="adv-section">
-                <h3>🎯 Forecast Accuracy</h3>
-                <div id="accuracy-delta" class="adv-val-big">--</div>
-                <div id="accuracy-score" class="adv-sub">Score: --%</div>
+            <div class="tab-content" id="tab-accuracy">
+                <div class="adv-section">
+                    <h3>Forecast Accuracy</h3>
+                    <div id="accuracy-delta" class="adv-val-big">--</div>
+                    <div id="accuracy-score" class="adv-sub">Score: --%</div>
+                </div>
             </div>
-            <div class="adv-section">
-                <h3>📍 Nearby Regions</h3>
-                <div id="regional-list" class="regional-list"></div>
+            <div class="tab-content" id="tab-nearby">
+                <div class="adv-section">
+                    <h3>Nearby Regions</h3>
+                    <div id="regional-list" class="regional-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Timeline Scrubber -->
+    <div id="timeline-scrubber">
+        <button id="scrubber-play-btn" class="scrubber-btn" title="Play/Pause (W)">
+            <svg id="scrubber-play-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <polygon points="5,3 13,8 5,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+        </button>
+        <div class="scrubber-main">
+            <div class="scrubber-chips">
+                <span class="scrubber-chip" id="scrubber-time-chip">--:--</span>
+                <button class="speed-chip" id="scrubber-speed-chip" data-speed="60">60×</button>
+            </div>
+            <div class="scrubber-track" id="scrubber-track">
+                <div class="scrubber-playhead" id="scrubber-playhead"></div>
             </div>
         </div>
     </div>
@@ -648,5 +1240,34 @@
         }
     </script>
     <script type="module" src="/src/main.js"></script>
+    <script>
+        // Minimal delegation for mode-toggle since ModeController skips attaching when element already exists
+        document.addEventListener('click', function (e) {
+            if (e.target.closest('#mode-toggle') && window.modeController) {
+                window.modeController.toggleMode();
+            }
+        });
+
+        // Tab switching for advanced drawer
+        document.querySelectorAll('#panel-advanced .tab-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var tab = btn.dataset.tab;
+                document.querySelectorAll('#panel-advanced .tab-btn').forEach(function (b) { b.classList.remove('active'); });
+                document.querySelectorAll('#panel-advanced .tab-content').forEach(function (c) { c.classList.remove('active'); });
+                btn.classList.add('active');
+                document.getElementById('tab-' + tab).classList.add('active');
+            });
+        });
+
+        // Expand/collapse advanced drawer via drag handle click
+        var advDrawer = document.getElementById('panel-advanced');
+        var dragHandle = advDrawer.querySelector('.drawer-handle-grip');
+        if (dragHandle) {
+            dragHandle.addEventListener('click', function () {
+                advDrawer.classList.toggle('expanded');
+            });
+        }
+    </script>
+    <span id="current-feels-like" style="display:none;">--</span>
 </body>
 </html>

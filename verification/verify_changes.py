@@ -11,7 +11,7 @@ def verify_weather(page):
 
     # 1. Verify "Simulation Speed" indicator (Time Warp)
     # Click Time Warp button
-    page.click("#time-warp-btn")
+    page.click("#scrubber-play-btn")
     time.sleep(1) # Allow UI to update
 
     # Check if time display has the correct style (orange color)

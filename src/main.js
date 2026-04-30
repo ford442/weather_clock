@@ -11,7 +11,7 @@ import {
     updateWeatherDisplay,
     updateUnitButton,
     setupEventListeners,
-    updateTimeWarpButton,
+    updateTimelineScrubber,
     setSearchLoading,
     drawSparkline,
     updateSunriseSunset,
@@ -21,13 +21,15 @@ import {
 import { AnimationController } from './animation.js';
 import { setupDebugAPI } from './debug.js';
 import { ModeController } from './ModeController.js';
+import { updateAtmosphereTheme } from './atmosphereTheme.js';
 
 // ── Application State ────────────────────────────────────────────────────────
 const state = {
     weatherData: null,
     simulationTime: new Date(),
     isTimeWarping: false,
-    isDebugMode: false
+    isDebugMode: false,
+    timeSpeed: 60
 };
 
 // ── Mode Controller (Clock/Timeline) ─────────────────────────────────────────
@@ -106,7 +108,7 @@ window.addEventListener('keydown', (e) => {
 const animationController = new AnimationController(
     state,
     { weatherService, astronomyService },
-    { scene, camera, composer, sky, sundial, moonGroup, weatherEffects, sunLight, moonLight, ambientLight, controls }
+    { scene, camera, renderer, composer, sky, sundial, moonGroup, weatherEffects, sunLight, moonLight, ambientLight, controls }
 );
 
 // ── UI Event Callbacks ────────────────────────────────────────────────────────
@@ -176,7 +178,26 @@ function setupUICallbacks() {
 
         onToggleTimeWarp: () => {
             state.isTimeWarping = !state.isTimeWarping;
-            updateTimeWarpButton(state.isTimeWarping);
+            document.body.classList.toggle('time-warping', state.isTimeWarping);
+        },
+
+        onScrub: (dayFraction) => {
+            const startOfDay = new Date(state.simulationTime);
+            startOfDay.setHours(0, 0, 0, 0);
+            state.simulationTime = new Date(startOfDay.getTime() + dayFraction * 86400000);
+        },
+
+        onCycleSpeed: () => {
+            const speeds = [1, 10, 60];
+            const idx = speeds.indexOf(state.timeSpeed);
+            state.timeSpeed = speeds[(idx + 1) % speeds.length];
+        },
+
+        onPause: () => {
+            if (state.isTimeWarping) {
+                state.isTimeWarping = false;
+                document.body.classList.toggle('time-warping', false);
+            }
         }
     };
 }
@@ -217,16 +238,8 @@ async function init() {
     updateTimeDisplay(state.simulationTime, state.isTimeWarping);
     updateUnitButton(weatherService);
 
-    // Setup event listeners and keyboard shortcuts
-    const callbacks = setupUICallbacks();
-    setupEventListeners(callbacks);
-    setupKeyboardShortcuts(callbacks);
-
-    setupDebugAPI(state, { weatherService, astronomyService }, {
-        scene, sky, weatherEffects, sunLight, moonLight, ambientLight
-    });
-
     // Initialize Mode Controller for Clock/Timeline switching
+    // Must happen after DOM is ready so drawer handles exist
     modeController = new ModeController(
         scene,
         camera,
@@ -240,6 +253,20 @@ async function init() {
     
     // Expose mode controller to window for debugging
     window.modeController = modeController;
+
+    // Setup event listeners and keyboard shortcuts
+    const callbacks = setupUICallbacks();
+    setupEventListeners(callbacks, modeController);
+    setupKeyboardShortcuts(callbacks);
+
+    setupDebugAPI(state, { weatherService, astronomyService }, {
+        scene, sky, weatherEffects, sunLight, moonLight, ambientLight
+    });
+
+    // Prime atmosphere theme before first frame
+    if (state.weatherData) {
+        updateAtmosphereTheme(renderer, scene, state.weatherData);
+    }
 
     animationController.start(clock, stats);
 

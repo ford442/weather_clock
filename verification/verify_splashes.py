@@ -22,7 +22,7 @@ def verify_splashes():
 
         print("Clicking Time Warp button to verify it exists and works...")
         # Check button visibility
-        btn = page.locator("#time-warp-btn")
+        btn = page.locator("#scrubber-play-btn")
         if btn.is_visible():
             print("Time Warp button visible.")
             btn.click()
