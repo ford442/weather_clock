@@ -12,6 +12,7 @@ import {
     drawSparkline,
     updateTimelineScrubber
 } from './ui.js';
+import { updateAtmosphereTheme } from './atmosphereTheme.js';
 
 const ANIMATION_CONFIG = {
     realTimeScale: 1.0,
