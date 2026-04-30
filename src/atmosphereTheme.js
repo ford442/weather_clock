@@ -106,6 +106,8 @@ function deriveSkyColor(scene, weatherData) {
  * @param {Object} weatherData
  */
 export function updateAtmosphereTheme(renderer, scene, weatherData) {
+    if (!document.documentElement) return;
+
     const skyColor = deriveSkyColor(scene, weatherData);
 
     let tempC = 20;

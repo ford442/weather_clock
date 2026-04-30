@@ -54,7 +54,10 @@ export function setupRendering() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.getElementById('canvas-container').appendChild(renderer.domElement);
+    const canvasContainer = document.getElementById('canvas-container');
+    if (canvasContainer) {
+        canvasContainer.appendChild(renderer.domElement);
+    }
 
     // Post-processing setup
     const composer = new EffectComposer(renderer);

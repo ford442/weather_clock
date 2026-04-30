@@ -96,7 +96,9 @@ const astronomyService = new AstronomyService();
 // ── Stats (hidden by default; backtick ` toggles) ────────────────────────────
 const stats = new Stats();
 stats.dom.style.display = 'none';
-document.body.appendChild(stats.dom);
+if (document.body) {
+    document.body.appendChild(stats.dom);
+}
 
 window.addEventListener('keydown', (e) => {
     if (e.key === '`') {
