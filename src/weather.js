@@ -62,8 +62,16 @@ export class WeatherService {
                 return;
             }
 
+            // 5-second timeout for geolocation
+            const timeoutId = setTimeout(() => {
+                console.warn('Geolocation timeout (5s), using fallback location');
+                this.setDefaultLocation();
+                resolve();
+            }, 5000);
+
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
+                    clearTimeout(timeoutId);
                     this.latitude = position.coords.latitude;
                     this.longitude = position.coords.longitude;
 
@@ -77,12 +85,29 @@ export class WeatherService {
                     resolve();
                 },
                 (error) => {
-                    console.warn('Geolocation failed, using default location:', error.message);
-                    this.setDefaultLocation();
+                    clearTimeout(timeoutId);
+                    console.warn('Geolocation failed, using fallback location:', error.message);
+                    this.setFallbackLocation();
                     resolve();
                 }
             );
         });
+    }
+
+    setFallbackLocation() {
+        const fallbackLocations = [
+            { lat: 40.7128, lon: -74.0060, name: 'New York, USA' },
+            { lat: 51.5074, lon: -0.1278, name: 'London, UK' },
+            { lat: 48.8566, lon: 2.3522, name: 'Paris, France' },
+            { lat: 35.6762, lon: 139.6503, name: 'Tokyo, Japan' },
+            { lat: -33.8688, lon: 151.2093, name: 'Sydney, Australia' }
+        ];
+
+        const randomLocation = fallbackLocations[Math.floor(Math.random() * fallbackLocations.length)];
+        this.latitude = randomLocation.lat;
+        this.longitude = randomLocation.lon;
+        this.location = randomLocation.name;
+        this.windUnit = randomLocation.name.includes('USA') ? 'imperial' : 'metric';
     }
 
     setDefaultLocation() {

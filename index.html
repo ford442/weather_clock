@@ -198,7 +198,7 @@
         #center-overlay {
             position: absolute;
             left: 50%;
-            bottom: 35vh;
+            top: 12vh;
             transform: translateX(-50%);
             z-index: 5;
             pointer-events: none;
@@ -255,11 +255,11 @@
         /* ── Timeline Scrubber ── */
         #timeline-scrubber {
             position: fixed;
-            bottom: 20px;
+            bottom: 60px;
             left: 10%;
             width: 80%;
             height: 40px;
-            z-index: 20;
+            z-index: 7;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -428,27 +428,54 @@
         .drawer-handle {
             position: absolute;
             top: 0;
-            width: 4px;
+            width: 32px;
             height: 100%;
             background: rgba(255,255,255,0.08);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: background 0.2s, width 0.2s;
+            flex-direction: column;
+            gap: 8px;
+            transition: background 0.2s;
+            padding: 12px 0;
+            box-sizing: border-box;
         }
 
         .drawer-handle:hover {
             background: rgba(255,255,255,0.15);
-            width: 6px;
+        }
+
+        .drawer-handle svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
+        .drawer-handle-label {
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: rgba(255,255,255,0.6);
+            text-align: center;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            white-space: nowrap;
+            transition: color 0.2s;
+        }
+
+        .drawer-handle:hover .drawer-handle-label {
+            color: rgba(255,255,255,0.9);
         }
 
         #panel-left .drawer-handle {
             right: 0;
+            border-right: 1px solid rgba(255,255,255,0.06);
         }
 
         #panel-right .drawer-handle {
             left: 0;
+            border-left: 1px solid rgba(255,255,255,0.06);
         }
 
         /* ── Icon SVGs ── */
@@ -546,10 +573,10 @@
             bottom: 0;
             left: 0;
             width: 100%;
-            height: 8px;
+            height: 28px;
             background: rgba(8, 10, 14, 0.7);
             backdrop-filter: blur(20px);
-            z-index: 5;
+            z-index: 7;
             transition: height 0.5s var(--transition-base);
             overflow: hidden;
             pointer-events: auto;
@@ -563,13 +590,50 @@
         }
 
         .drawer-handle-grip {
-            width: 40px;
-            height: 3px;
-            border-radius: 2px;
-            background: rgba(255,255,255,0.2);
-            margin: 3px auto;
+            width: 100%;
+            height: 28px;
+            background: rgba(8, 10, 14, 0.7);
             cursor: ns-resize;
             flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 0 24px;
+            box-sizing: border-box;
+            transition: background 0.2s;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .drawer-handle-grip:hover {
+            background: rgba(8, 10, 14, 0.9);
+        }
+
+        .drawer-handle-grip::before {
+            content: '';
+            width: 24px;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255,255,255,0.2);
+            transition: background 0.2s;
+        }
+
+        .drawer-handle-grip:hover::before {
+            background: rgba(255,255,255,0.4);
+        }
+
+        .drawer-handle-grip-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: rgba(255,255,255,0.5);
+            text-transform: uppercase;
+            white-space: nowrap;
+            transition: color 0.2s;
+        }
+
+        .drawer-handle-grip:hover .drawer-handle-grip-label {
+            color: rgba(255,255,255,0.8);
         }
 
         .drawer-tabs {
@@ -903,15 +967,33 @@
                 top: auto;
                 left: auto;
                 right: auto;
-                width: 40px;
-                height: 4px;
-                margin: 8px auto;
-                background: rgba(255,255,255,0.2);
-                border-radius: 2px;
+                width: 100%;
+                height: auto;
+                margin: 0;
+                background: rgba(255,255,255,0.08);
+                border-radius: 0;
+                flex-direction: row;
+                gap: 12px;
+                padding: 8px 24px;
+                border: none;
             }
 
             .drawer-handle svg {
-                display: none;
+                display: block;
+                width: 14px;
+                height: 14px;
+            }
+
+            .drawer-handle-label {
+                writing-mode: horizontal-tb;
+                text-orientation: auto;
+                font-size: 11px;
+            }
+
+            #panel-left .drawer-handle,
+            #panel-right .drawer-handle {
+                border-right: none;
+                border-left: none;
             }
 
             .drawer-content {
@@ -937,7 +1019,7 @@
             }
 
             #center-overlay {
-                bottom: 25vh;
+                top: 10vh;
             }
 
             #center-overlay .time-display {
@@ -1069,6 +1151,7 @@
             <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                 <polyline points="6,3 11,8 6,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
+            <span class="drawer-handle-label">PREVIOUS</span>
         </div>
         <div class="drawer-content">
             <h3>Previous <span id="past-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
@@ -1107,6 +1190,7 @@
             <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                 <polyline points="10,3 5,8 10,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
+            <span class="drawer-handle-label">FORECAST</span>
         </div>
         <div class="drawer-content">
             <h3>Forecast <span id="forecast-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
@@ -1175,7 +1259,9 @@
 
     <!-- Advanced Drawer -->
     <div id="panel-advanced" class="advanced-drawer">
-        <div class="drawer-handle-grip"></div>
+        <div class="drawer-handle-grip">
+            <span class="drawer-handle-grip-label">History • Accuracy • Nearby</span>
+        </div>
         <div class="drawer-tabs">
             <button class="tab-btn active" data-tab="history">History</button>
             <button class="tab-btn" data-tab="accuracy">Accuracy</button>
@@ -1267,6 +1353,87 @@
                 advDrawer.classList.toggle('expanded');
             });
         }
+
+        // Drawer interaction listeners
+        document.getElementById('panel-left')?.addEventListener('click', function (e) {
+            if (e.target.closest('.drawer-handle')) {
+                this.classList.toggle('expanded');
+            }
+        });
+
+        document.getElementById('panel-right')?.addEventListener('click', function (e) {
+            if (e.target.closest('.drawer-handle')) {
+                this.classList.toggle('expanded');
+            }
+        });
+
+        // DOM Binding Validator
+        window.DOMBindingValidator = {
+            validate: function () {
+                var results = {
+                    elements: {},
+                    issues: []
+                };
+                var requiredElements = ['panel-left', 'panel-right', 'panel-advanced', 'center-overlay', 'timeline-scrubber', 'canvas-container', 'top-bar'];
+                requiredElements.forEach(function (id) {
+                    var el = document.getElementById(id);
+                    results.elements[id] = !!el;
+                    if (!el) results.issues.push('Missing element: #' + id);
+                });
+                console.log('DOM Binding Validation:', results);
+                return results;
+            }
+        };
+
+        // Z-Index Manager
+        window.ZIndexManager = {
+            verify: function () {
+                var elements = {
+                    'canvas-container': document.getElementById('canvas-container'),
+                    'center-overlay': document.getElementById('center-overlay'),
+                    'bottom-mini-bar': document.getElementById('bottom-mini-bar'),
+                    'panel-advanced': document.getElementById('panel-advanced'),
+                    'panel-left': document.getElementById('panel-left'),
+                    'panel-right': document.getElementById('panel-right'),
+                    'timeline-scrubber': document.getElementById('timeline-scrubber'),
+                    'top-bar': document.getElementById('top-bar')
+                };
+                var zIndices = {};
+                for (var key in elements) {
+                    if (elements[key]) {
+                        zIndices[key] = window.getComputedStyle(elements[key]).zIndex || 'auto';
+                    }
+                }
+                console.log('Z-Index Stacking:', zIndices);
+                return zIndices;
+            }
+        };
+
+        // Debug API
+        window.aetherDebug = {
+            getLocation: function () {
+                if (window.weatherService) {
+                    return {
+                        latitude: window.weatherService.latitude,
+                        longitude: window.weatherService.longitude,
+                        location: window.weatherService.location
+                    };
+                }
+                return null;
+            },
+            toggleDrawer: function (side) {
+                var panel = document.getElementById('panel-' + side);
+                if (panel) {
+                    panel.classList.toggle('expanded');
+                }
+            },
+            validateAll: function () {
+                console.log('=== Aether Clock Debug Report ===');
+                DOMBindingValidator.validate();
+                ZIndexManager.verify();
+                console.log('Location:', this.getLocation());
+            }
+        };
     </script>
     <span id="current-feels-like" style="display:none;">--</span>
 </body>
