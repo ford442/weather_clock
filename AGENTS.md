@@ -1,3 +1,4 @@
+<!-- From: /root/weather_clock/AGENTS.md -->
 # AGENTS.md
 
 ## Scope
@@ -45,7 +46,7 @@ The app has two viewing modes:
 ### Source (`src/`)
 | File | Responsibility |
 |------|----------------|
-| `main.js` | Application orchestrator. Sets up state, rendering, lights, scene objects, services, animation loop, UI callbacks, and debug API. |
+| `main.js` | Application orchestrator. Sets up state, rendering, lights, scene objects, services, animation loop, UI callbacks, mode controller, and debug API. |
 | `rendering.js` | Scene, WebGL renderer, perspective camera, `EffectComposer` + `UnrealBloomPass`, `OrbitControls`, window resize handling. |
 | `lights.js` | Ambient light, directional sun light, directional moon light; shadow map configuration. |
 | `scene-objects.js` | Factory functions for the `Sky` object, sundial, moon group, and weather effects. |
@@ -59,21 +60,27 @@ The app has two viewing modes:
 | `shaders.js` | GLSL shader strings used by rain and cloud materials. |
 | `sundial.js` | 3D sundial geometry (base, clock face, hour markers, gnomon, analog hands) with an `update(time)` method. |
 | `moonPhase.js` | Moon phase math and visual moon mesh creation. |
+| `atmosphereTheme.js` | Updates CSS custom properties (`--accent`, `--glow`, `--trend-glow`, etc.) based on time of day and weather severity. |
 | `debug.js` | Exposes `window.setDebugWeather(code)`, `window.setDebugTime(hour)`, and `window.aetherDebug` for runtime inspection. |
-| `ModeController.js` | Manages switching between Clock and Timeline modes, camera animations, UI visibility toggles, and browser history (`?mode=timeline`). |
+| `ModeController.js` | Manages switching between Clock and Timeline modes, camera animations, UI visibility toggles, drawer management, and browser history (`?mode=timeline`). |
+| `vendor/suncalc.js` | Vendored SunCalc library patched for ES module compatibility. |
 
 ### Timeline Subsystem (`src/timeline/`)
 - `TimelineController.js` — Manages 21-day 3D column visualization, raycasting, hover/selection states.
 - `TimelineUI.js` — DOM overlay for timeline details.
-- `DayColumn.js` — Individual 3D column representing one day.
-- `TimelineData.js` — Fetches and caches timeline weather data.
-- `AnomalyCalculator.js` — Computes weather anomalies for the timeline.
+- `DayColumn.js` — Individual 3D column representing one day, with custom GLSL temperature-gradient shaders.
+- `TimelineData.js` — Fetches and caches timeline weather data from Open-Meteo.
+- `AnomalyCalculator.js` — Computes weather anomalies (z-scores) for the timeline.
 - `index.js` — Re-exports.
 - `timeline.css` — Styles for timeline UI.
 
 ### Tests (`src/tests/`)
 - `astronomy.test.js` — Validates sun/moon position calculations.
 - `weather.test.js` — Validates `WeatherService` initialization, unit conversion, and description mapping.
+
+### Shaders (`shaders/`)
+- WGSL compute shaders for future WebGPU support: `rain-compute.wgsl`, `snow-compute.wgsl`, `splash-compute.wgsl`, `cloud-post.wgsl`, `star-field.wgsl`.
+- These are secondary to the primary GLSL/WebGL render path in `src/shaders.js`. Do not modify them unless explicitly working on WebGPU migration.
 
 ### Visual Verification (`verification/`)
 Python + Playwright scripts for screenshot-based regression testing:
@@ -120,7 +127,7 @@ Screenshots are saved into `verification/` for manual comparison.
 
 - **ES Modules:** All source code uses native `import`/`export`. Do not use CommonJS.
 - **Module Boundaries:** Each module has a single responsibility. `main.js` is the orchestrator; implementation details live in feature modules.
-- **Configuration Constants:** Magic numbers are centralized in module-level config objects (e.g., `RENDERING_CONFIG`, `LIGHTS_CONFIG`, `SKY_CONFIG`, `ANIMATION_CONFIG`, `UI_CONFIG`).
+- **Configuration Constants:** Magic numbers are centralized in module-level config objects (e.g., `RENDERING_CONFIG`, `LIGHTS_CONFIG`, `SKY_CONFIG`, `ANIMATION_CONFIG`, `UI_CONFIG`, `TIMELINE_CONFIG`).
 - **Animation:** Use `requestAnimationFrame` only. Never use `setInterval` for render-related logic.
 - **Memory Management:** When modifying Three.js objects, dispose of geometries, materials, and textures that are being replaced to avoid WebGL memory leaks.
 - **Particle Performance:** The app relies on object pooling and `InstancedMesh` for clouds. Do not repeatedly `new` and `dispose` particle objects in the render loop.
@@ -148,6 +155,7 @@ Screenshots are saved into `verification/` for manual comparison.
      window.aetherDebug.getSimulationTime();
      window.aetherDebug.getWeatherData();
      window.aetherDebug.getSunPosition();
+     window.aetherDebug.getMoonPosition();
      ```
 
 ---
@@ -176,6 +184,19 @@ Screenshots are saved into `verification/` for manual comparison.
 3. `AnimationController.update()` passes the active weather to `updateWeatherLighting()` and `weatherEffects.update()`.
 4. `weatherLighting.js` computes severity, cloud weighting, and smoothly transitions colors/intensities over ~5 seconds.
 
+### Three Temporal Zones
+The scene is visually divided into three time-offset zones:
+- **Past (Left):** `x: -8` — weather from ~3 hours ago
+- **Present (Center):** `x: 0` — current weather
+- **Future (Right):** `x: 8` — weather from ~3 hours ahead
+
+Particle systems (rain, snow) are constrained to zone boundaries. When modifying particle physics, ensure position wrapping uses the zone's `minX`/`maxX` bounds, not global bounds, or weather will "leak" between time periods.
+
+Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Forecast (30%). Do not set `sunLight.position` in `weatherLighting.js`; position is handled exclusively by `astronomy.js`.
+
+### Coordinate Systems
+`SunCalc` uses spherical coordinates (azimuth/altitude). These are converted to Three.js Cartesian in `astronomy.js`. Azimuth 0° (South) maps to Z-, meaning North is Z+.
+
 ### Cloud System
 `CloudSystem` uses `THREE.InstancedMesh` with procedurally generated canvas textures (`cumulus`, `stratus`, `cirrus`). Each cloud is composed of multiple puffs arranged in dome, sheet, or streak formations. Clouds billboard toward the camera and drift horizontally with wind.
 
@@ -185,4 +206,8 @@ Screenshots are saved into `verification/` for manual comparison.
 - **Splashes:** Small particle bursts spawn on the sundial surface when raindrops hit.
 
 ### Mode Switching
-`ModeController` transitions the camera between Clock mode (close-up of the sundial) and Timeline mode (elevated overview of 21-day columns). It updates browser history so `?mode=timeline` is shareable. Press `T` to toggle, `Esc` to return to Clock mode.
+`ModeController` transitions the camera between Clock mode (close-up of the sundial) and Timeline mode (elevated overview of 21-day columns). It updates browser history so `?mode=timeline` is shareable. Press `T` to toggle, `Esc` to return to Clock mode, `ArrowLeft`/`ArrowRight` to toggle edge drawers.
+
+### Known Limitations
+- **Mocked accuracy:** `WeatherService.getPredictionAccuracy()` returns random mock data; it does not verify against real past predictions.
+- **Hardcoded zone offsets:** The visual separation of temporal zones relies on hardcoded X offsets (e.g., `-8`, `0`, `8`) in multiple files. Changing scene scale requires updating these values consistently.
