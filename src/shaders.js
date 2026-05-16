@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 // src/shaders.js
 // Aether Architect: Verified
 
@@ -170,4 +172,41 @@ export const cloudShaderInjection = {
     }
 };
 
-import * as THREE from 'three';
+export const starFieldVertexShader = `
+uniform float uTime;
+uniform float uOpacity;
+attribute float size;
+varying float vOpacity;
+
+void main() {
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+
+    // Twinkle logic: Random offset based on position
+    float random = sin(position.x * 12.9898 + position.y * 78.233 + position.z * 45.164);
+
+    // Twinkle speed and intensity
+    float twinkle = 0.7 + 0.3 * sin(uTime * 2.0 + random * 100.0);
+
+    vOpacity = uOpacity * twinkle;
+    gl_PointSize = size;
+}
+`;
+
+export const starFieldFragmentShader = `
+varying float vOpacity;
+void main() {
+    if (vOpacity <= 0.01) discard;
+
+    // Circular soft point
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float dist = length(coord);
+    if (dist > 0.5) discard;
+
+    // Soft core
+    float strength = 1.0 - (dist * 2.0);
+    strength = pow(strength, 1.5);
+
+    gl_FragColor = vec4(1.0, 1.0, 1.0, vOpacity * strength);
+}
+`;

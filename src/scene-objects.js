@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { createSundial } from './sundial.js';
 import { calculateMoonPhase, createMoon } from './moonPhase.js';
-import { WeatherEffects } from './weatherEffects.js';
+import { WeatherEffects } from './effects/weather-effects.js';
 
 const SKY_CONFIG = {
     scale: 450000,

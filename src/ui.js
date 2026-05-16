@@ -136,13 +136,6 @@ export function updateWeatherDisplay(data, weatherService) {
         if (uvEl) uvEl.textContent = `UV ${Math.round(data.current.uvIndex ?? 0)}`;
 
         setNum('current-wind', data.current.windSpeed, ' km/h');
-        const pastWindConverted = weatherService.convertWind(data.past.windSpeed);
-        const wind = document.getElementById('past-wind');
-        if (wind) {
-            wind.classList.add('value-updating');
-            setTimeout(() => wind.classList.remove('value-updating'), 150);
-            wind.textContent = `${pastWindConverted.value} ${pastWindConverted.unit}`;
-        }
 
         // Wind compass
         if (data.current.windDirection != null) {
@@ -155,7 +148,13 @@ export function updateWeatherDisplay(data, weatherService) {
         setText('past-description', data.past.description);
         setTemp('past-temp', data.past.temp);
         setTemp('past-feels-like', data.past.apparentTemp ?? data.past.temp);
-        setNum('past-wind', data.past.windSpeed, ' km/h');
+        const pastWindConverted = weatherService.convertWind(data.past.windSpeed);
+        const wind = document.getElementById('past-wind');
+        if (wind) {
+            wind.classList.add('value-updating');
+            setTimeout(() => wind.classList.remove('value-updating'), 150);
+            wind.textContent = `${pastWindConverted.value} ${pastWindConverted.unit}`;
+        }
         setNum('past-humidity', data.past.humidity ?? 0, '%');
         setNum('past-cloud', data.past.cloudCover, '%');
         setNum('past-precip-prob', data.past.precipProb ?? 0, '%');

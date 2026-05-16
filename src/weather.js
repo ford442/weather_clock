@@ -167,16 +167,6 @@ export class WeatherService {
         try {
             const now = new Date();
 
-            // Forecast API — extended with apparent temp, humidity, UV, precip probability
-            const forecastUrl = [
-                'https://api.open-meteo.com/v1/forecast',
-                `?latitude=${encodeURIComponent(this.latitude)}`,
-                `&longitude=${encodeURIComponent(this.longitude)}`,
-                '&current=temperature_2m,apparent_temperature,relative_humidity_2m,uv_index,precipitation_probability,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall',
-                '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,uv_index,precipitation_probability,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall',
-                '&timezone=auto&past_days=1'
-            ].join('');
-
             // Using Open-Meteo API (free, no key required)
             // Get current and forecast weather
             // Added 'visibility' to current params
