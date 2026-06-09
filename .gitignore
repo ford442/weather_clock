@@ -5,3 +5,6 @@ dist
 .vite
 .cache
 package-lock.json
+.env
+.env.*
+!.env.example
