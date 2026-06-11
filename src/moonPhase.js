@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createMoonMaterial, createMoonMaterialWebGPU } from './webgpu/materials/MoonMaterial.js';
 
 export function calculateMoonPhase(date = new Date()) {
     // Moon phase calculation using astronomical algorithm
@@ -41,7 +42,7 @@ export function calculateMoonPhase(date = new Date()) {
     };
 }
 
-const moonVertexShader = `
+export const moonVertexShader = `
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
 
@@ -58,7 +59,7 @@ void main() {
 }
 `;
 
-const moonFragmentShader = `
+export const moonFragmentShader = `
 uniform vec3 uSunPosition;
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
@@ -96,13 +97,7 @@ export function createMoon(phase = 0) {
     // Create moon sphere
     const moonGeometry = new THREE.SphereGeometry(0.4, 64, 64); // Increased segment count for smooth shader
 
-    const moonMaterial = new THREE.ShaderMaterial({
-        uniforms: {
-            uSunPosition: { value: new THREE.Vector3(0, 0, 100) } // Default sun pos
-        },
-        vertexShader: moonVertexShader,
-        fragmentShader: moonFragmentShader
-    });
+    const moonMaterial = createMoonMaterial();
 
     const moon = new THREE.Mesh(moonGeometry, moonMaterial);
     moon.name = 'MoonMesh';
@@ -117,6 +112,13 @@ export function updateMoonVisuals(moonGroup, sunPosition) {
     const moon = moonGroup.getObjectByName('MoonMesh');
     if (moon && moon.material.uniforms) {
         moon.material.uniforms.uSunPosition.value.copy(sunPosition);
+    }
+}
+
+export async function initMoonWebGPU(moonGroup) {
+    const moon = moonGroup.getObjectByName('MoonMesh');
+    if (moon) {
+        moon.material = await createMoonMaterialWebGPU();
     }
 }
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { starFieldVertexShader, starFieldFragmentShader } from '../shaders.js';
+import { createStarFieldMaterial, createStarFieldMaterialWebGPU } from '../webgpu/materials/StarFieldMaterial.js';
 
 export class StarField {
     constructor(scene) {
@@ -30,21 +30,15 @@ export class StarField {
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-        const material = new THREE.ShaderMaterial({
-            uniforms: {
-                uTime: { value: 0 },
-                uOpacity: { value: 0.0 }
-            },
-            vertexShader: starFieldVertexShader,
-            fragmentShader: starFieldFragmentShader,
-            transparent: true,
-            depthWrite: false,
-            fog: false
-        });
+        const material = createStarFieldMaterial();
 
         this.mesh = new THREE.Points(geometry, material);
         this.mesh.renderOrder = -1; // Render with background
         this.scene.add(this.mesh);
+    }
+
+    async initWebGPU() {
+        this.mesh.material = await createStarFieldMaterialWebGPU();
     }
 
     update(sunPos) {

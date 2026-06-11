@@ -43,8 +43,12 @@ export function setupMoon() {
     return { moonGroup, moonPhaseData };
 }
 
-export function setupWeatherEffects(scene, sundial, camera) {
-    return new WeatherEffects(scene, sundial.group, camera);
+export async function setupWeatherEffects(scene, sundial, camera, isWebGPU = false) {
+    const effects = new WeatherEffects(scene, sundial.group, camera);
+    if (isWebGPU) {
+        await effects.initWebGPU();
+    }
+    return effects;
 }
 
 export function addToScene(scene, { sky, sundial, moonGroup }) {

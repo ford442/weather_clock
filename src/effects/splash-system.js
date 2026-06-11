@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { splashVertexShader, splashFragmentShader } from '../shaders.js';
+import { createSplashMaterial, createSplashMaterialWebGPU } from '../webgpu/materials/SplashMaterial.js';
 
 export class SplashSystem {
     constructor(scene) {
@@ -19,19 +19,15 @@ export class SplashSystem {
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('life', new THREE.BufferAttribute(life, 1));
 
-        const material = new THREE.ShaderMaterial({
-            uniforms: {
-                uColor: { value: new THREE.Color(0xffffff) }
-            },
-            vertexShader: splashVertexShader,
-            fragmentShader: splashFragmentShader,
-            transparent: true,
-            depthWrite: false
-        });
+        const material = createSplashMaterial();
 
         this.mesh = new THREE.Points(geometry, material);
         this.mesh.frustumCulled = false;
         this.scene.add(this.mesh);
+    }
+
+    async initWebGPU() {
+        this.mesh.material = await createSplashMaterialWebGPU();
     }
 
     spawnSplash(pos) {

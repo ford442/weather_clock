@@ -156,6 +156,27 @@ Output is in `dist/` folder - ready for deployment to any static host.
 - **No Framework:** Vanilla Three.js for minimal overhead
 - **Open-Meteo API:** Free, no-auth weather data source
 
+### Forecast Accuracy — Architectural Decision (Option B)
+
+**Status:** Honest placeholder implemented. Real verification is future work.
+
+**Problem:** Both the Advanced drawer and Timeline mode previously displayed fabricated forecast accuracy metrics generated with `Math.random()`.
+
+**Decision:** Removed all simulated accuracy data. The UI now shows "Forecast accuracy tracking coming soon." and hides the Accuracy tab button. Timeline accuracy rings are not rendered.
+
+**Why not Option A (real accuracy)?**
+Real forecast verification requires:
+1. Open-Meteo **Previous Runs API** (`previous-runs-api.open-meteo.com`) for archived forecast issuance data
+2. Reliable ground-truth observations for recent dates (ERA5 archive has 2–3 month delay)
+3. Date alignment, MAE/RMSE/skill computation, and graceful handling of partial API coverage
+
+This is non-trivial plumbing that the codebase has never attempted. When implemented, reuse the existing `calculateAccuracy()` helper in `TimelineData.js` and `findClosestHourIndex()` in `weather.js`.
+
+**Files affected:**
+- `src/weather.js` — `getPredictionAccuracy()` now returns `null`
+- `src/ui.js` — accuracy panel shows placeholder copy
+- `src/timeline/TimelineData.js` — `enrichWithAccuracy()` is now a no-op
+
 ## Notes for Contributors
 
 - Keep shader code modular in `shaders.js`

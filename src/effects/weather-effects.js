@@ -13,6 +13,7 @@ export class WeatherEffects {
         this.sundialGroup = sundialGroup;
         this.starField = new StarField(scene);
         this.camera = camera;
+        this._webgpuInitialized = false;
 
         const pastZone = { minX: -12, maxX: -4 };
         const currZone = { minX: -4, maxX: 4 };
@@ -52,6 +53,28 @@ export class WeatherEffects {
         this.scene.add(this.lightningLight);
 
         this.splashSystem = new SplashSystem(scene);
+    }
+
+    /**
+     * Swap all custom-shader materials to WebGPU-compatible equivalents.
+     * Called once after renderer detection confirms WebGPU is active.
+     */
+    async initWebGPU() {
+        if (this._webgpuInitialized) return;
+        this._webgpuInitialized = true;
+
+        const systems = [
+            this.starField,
+            this.pastRain, this.currRain, this.futureRain,
+            this.pastCumulus, this.pastStratus, this.pastCirrus,
+            this.currCumulus, this.currStratus, this.currCirrus,
+            this.futureCumulus, this.futureStratus, this.futureCirrus,
+            this.splashSystem
+        ];
+
+        await Promise.all(
+            systems.map(sys => sys.initWebGPU?.()).filter(Boolean)
+        );
     }
 
     /**

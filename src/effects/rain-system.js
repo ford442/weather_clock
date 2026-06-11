@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { rainVertexShader, rainFragmentShader } from '../shaders.js';
+import { createRainMaterial, createRainMaterialWebGPU } from '../webgpu/materials/RainMaterial.js';
 import { SUNDIAL_DIMENSIONS } from '../sundial.js';
 import { ParticleSystemBase } from './particle-base.js';
 
@@ -17,17 +17,7 @@ export class RainSystem extends ParticleSystemBase {
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-        const material = new THREE.ShaderMaterial({
-            uniforms: {
-                uColor: { value: new THREE.Color(0x88ccff) },
-                uOpacity: { value: 0.0 }
-            },
-            vertexShader: rainVertexShader,
-            fragmentShader: rainFragmentShader,
-            transparent: true,
-            depthWrite: false,
-            side: THREE.DoubleSide
-        });
+        const material = createRainMaterial();
 
         this.mesh = new THREE.LineSegments(geometry, material);
         this.scene.add(this.mesh);
@@ -39,6 +29,10 @@ export class RainSystem extends ParticleSystemBase {
             this.resetParticle(i, true);
         }
         this.mesh.visible = true;
+    }
+
+    async initWebGPU() {
+        this.mesh.material = await createRainMaterialWebGPU();
     }
 
     resetParticle(i, randomY = false) {

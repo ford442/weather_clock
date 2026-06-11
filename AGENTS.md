@@ -209,5 +209,5 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 `ModeController` transitions the camera between Clock mode (close-up of the sundial) and Timeline mode (elevated overview of 21-day columns). It updates browser history so `?mode=timeline` is shareable. Press `T` to toggle, `Esc` to return to Clock mode, `ArrowLeft`/`ArrowRight` to toggle edge drawers.
 
 ### Known Limitations
-- **Mocked accuracy:** `WeatherService.getPredictionAccuracy()` returns random mock data; it does not verify against real past predictions.
+- **Forecast accuracy placeholder:** `WeatherService.getPredictionAccuracy()` and `TimelineData.enrichWithAccuracy()` return no data. Real forecast verification via the Open-Meteo Previous Runs API is planned but not yet implemented.
 - **Hardcoded zone offsets:** The visual separation of temporal zones relies on hardcoded X offsets (e.g., `-8`, `0`, `8`) in multiple files. Changing scene scale requires updating these values consistently.

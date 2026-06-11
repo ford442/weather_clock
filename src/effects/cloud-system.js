@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ResourceManager } from './cloud-resources.js';
 import { cloudShaderInjection } from '../shaders.js';
+import { createCloudMaterial, createCloudMaterialWebGPU } from '../webgpu/materials/CloudMaterial.js';
 import { ParticleSystemBase } from './particle-base.js';
 
 export class CloudSystem extends ParticleSystemBase {
@@ -30,16 +31,8 @@ export class CloudSystem extends ParticleSystemBase {
         this.totalInstances = maxClouds * this.puffsPerCloud;
 
         const map = ResourceManager.getCloudTexture(cloudType);
-        this.material = new THREE.MeshBasicMaterial({
-            map: map,
-            transparent: true,
-            opacity: 0.0,
-            depthWrite: false,
-            side: THREE.DoubleSide
-        });
-
-        // Inject Volumetric Shader Logic
-        this.material.onBeforeCompile = cloudShaderInjection.onBeforeCompile;
+        this.map = map;
+        this.material = createCloudMaterial(map);
 
         const geometry = new THREE.PlaneGeometry(1, 1);
         this.mesh = new THREE.InstancedMesh(geometry, this.material, this.totalInstances);
@@ -74,6 +67,15 @@ export class CloudSystem extends ParticleSystemBase {
         }
         this.mesh.instanceMatrix.needsUpdate = true;
         this.mesh.visible = true;
+    }
+
+    async initWebGPU() {
+        const newMaterial = await createCloudMaterialWebGPU(this.map);
+        if (this.material && this.material.dispose) {
+            this.material.dispose();
+        }
+        this.material = newMaterial;
+        this.mesh.material = newMaterial;
     }
 
     addCloud() {

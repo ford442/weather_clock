@@ -4,6 +4,7 @@ import Stats from 'three/addons/libs/stats.module.js';
 import { setupRendering } from './rendering.js';
 import { setupLights } from './lights.js';
 import { setupSky, setupSundial, setupMoon, setupWeatherEffects, addToScene } from './scene-objects.js';
+import { initMoonWebGPU } from './moonPhase.js';
 import { WeatherService } from './weather.js';
 import { AstronomyService } from './astronomy.js';
 import {
@@ -37,9 +38,7 @@ let modeController = null;
 
 const WEATHER_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
 
-// ── Rendering ────────────────────────────────────────────────────────────────
-const { scene, camera, renderer, composer, clock, controls } = setupRendering();
-// ============= Preferences (localStorage) =============
+// ── Preferences (localStorage) ───────────────────────────────────────────────
 const PREF_KEYS = {
     lat: 'weatherclock_lat',
     lon: 'weatherclock_lon',
@@ -48,245 +47,247 @@ const PREF_KEYS = {
     windUnit: 'weatherclock_wind_unit'
 };
 
-function loadPreferences() {
-    const lat = localStorage.getItem(PREF_KEYS.lat);
-    const lon = localStorage.getItem(PREF_KEYS.lon);
-    const location = localStorage.getItem(PREF_KEYS.location);
-    const unit = localStorage.getItem(PREF_KEYS.unit);
-    const windUnit = localStorage.getItem(PREF_KEYS.windUnit);
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+async function bootstrap() {
+    // Rendering — async because WebGPU path requires async init
+    const { scene, camera, renderer, pipeline, clock, controls, isWebGPU } = await setupRendering();
 
-    if (lat && lon && location) {
-        weatherService.setManualLocation(lat, lon, location);
+    // Expose WebGPU status for debug / material factories
+    window.__IS_WEBGPU__ = isWebGPU;
+
+    // Lighting
+    const { ambientLight, sunLight, moonLight } = setupLights(scene);
+
+    // Scene Objects
+    const sky = setupSky();
+    const sundial = setupSundial();
+    const { moonGroup } = setupMoon();
+    const weatherEffects = await setupWeatherEffects(scene, sundial, camera, isWebGPU);
+    if (isWebGPU) {
+        await initMoonWebGPU(moonGroup);
     }
-    if (unit) {
-        weatherService.unit = unit;
+    addToScene(scene, { sky, sundial, moonGroup });
+
+    // Services
+    const weatherService = new WeatherService();
+    const astronomyService = new AstronomyService();
+
+    function loadPreferences() {
+        const lat = localStorage.getItem(PREF_KEYS.lat);
+        const lon = localStorage.getItem(PREF_KEYS.lon);
+        const location = localStorage.getItem(PREF_KEYS.location);
+        const unit = localStorage.getItem(PREF_KEYS.unit);
+        const windUnit = localStorage.getItem(PREF_KEYS.windUnit);
+
+        if (lat && lon && location) {
+            weatherService.setManualLocation(lat, lon, location);
+        }
+        if (unit) {
+            weatherService.unit = unit;
+        }
+        if (windUnit) {
+            weatherService.windUnit = windUnit;
+        }
+        return !!(lat && lon);
     }
-    if (windUnit) {
-        weatherService.windUnit = windUnit;
+
+    function savePreferences() {
+        if (weatherService.latitude) {
+            localStorage.setItem(PREF_KEYS.lat, weatherService.latitude);
+            localStorage.setItem(PREF_KEYS.lon, weatherService.longitude);
+            localStorage.setItem(PREF_KEYS.location, weatherService.location);
+        }
+        localStorage.setItem(PREF_KEYS.unit, weatherService.unit);
+        localStorage.setItem(PREF_KEYS.windUnit, weatherService.windUnit);
     }
-    return !!(lat && lon);
-}
 
-function savePreferences() {
-    if (weatherService.latitude) {
-        localStorage.setItem(PREF_KEYS.lat, weatherService.latitude);
-        localStorage.setItem(PREF_KEYS.lon, weatherService.longitude);
-        localStorage.setItem(PREF_KEYS.location, weatherService.location);
+    // Stats (hidden by default; backtick ` toggles)
+    const stats = new Stats();
+    stats.dom.style.display = 'none';
+    if (document.body) {
+        document.body.appendChild(stats.dom);
     }
-    localStorage.setItem(PREF_KEYS.unit, weatherService.unit);
-    localStorage.setItem(PREF_KEYS.windUnit, weatherService.windUnit);
-}
 
-// ============= Initialize 3D Rendering =============
+    window.addEventListener('keydown', (e) => {
+        if (e.key === '`') {
+            stats.dom.style.display = stats.dom.style.display === 'none' ? 'block' : 'none';
+        }
+    });
 
-// ── Lighting ─────────────────────────────────────────────────────────────────
-const { ambientLight, sunLight, moonLight } = setupLights(scene);
+    // Animation loop
+    const animationController = new AnimationController(
+        state,
+        { weatherService, astronomyService },
+        { scene, camera, renderer, pipeline, sky, sundial, moonGroup, weatherEffects, sunLight, moonLight, ambientLight, controls }
+    );
 
-// ── Scene Objects ────────────────────────────────────────────────────────────
-const sky = setupSky();
-const sundial = setupSundial();
-const { moonGroup } = setupMoon();
-const weatherEffects = setupWeatherEffects(scene, sundial, camera);
-addToScene(scene, { sky, sundial, moonGroup });
-
-// ── Services ─────────────────────────────────────────────────────────────────
-const weatherService = new WeatherService();
-const astronomyService = new AstronomyService();
-
-// ── Stats (hidden by default; backtick ` toggles) ────────────────────────────
-const stats = new Stats();
-stats.dom.style.display = 'none';
-if (document.body) {
-    document.body.appendChild(stats.dom);
-}
-
-window.addEventListener('keydown', (e) => {
-    if (e.key === '`') {
-        stats.dom.style.display = stats.dom.style.display === 'none' ? 'block' : 'none';
-    }
-});
-
-// ── Animation loop ────────────────────────────────────────────────────────────
-const animationController = new AnimationController(
-    state,
-    { weatherService, astronomyService },
-    { scene, camera, renderer, composer, sky, sundial, moonGroup, weatherEffects, sunLight, moonLight, ambientLight, controls }
-);
-
-// ── UI Event Callbacks ────────────────────────────────────────────────────────
-function setupUICallbacks() {
-    return {
-        onRetryLocation: async () => {
-            document.getElementById('location').textContent = 'Retrying…';
-            try {
-                await weatherService.getLocation();
-                const data = await weatherService.fetchWeather();
-                state.weatherData = data;
-                updateWeatherDisplay(data, weatherService);
-                drawSparkline(state.simulationTime, data, weatherService);
-                savePreferences();
-            } catch (error) {
-                console.error('Location retry failed:', error);
-                document.getElementById('location').textContent = 'Location unavailable';
-                showToast('Could not detect location. Try searching for a city.', 'error');
-            }
-        },
-
-        onToggleUnit: () => {
-            weatherService.toggleUnit();
-            updateUnitButton(weatherService);
-            if (state.weatherData) {
-                updateWeatherDisplay(state.weatherData, weatherService);
-                drawSparkline(state.simulationTime, state.weatherData, weatherService);
-            }
-            savePreferences();
-        },
-
-        onSearch: async (query) => {
-            if (!query) return;
-            setSearchLoading(true);
-            try {
-                const results = await weatherService.searchLocation(query);
-                if (results && results.length > 0) {
-                    const best = results[0];
-                    // Detect wind unit from country code
-                    const isUS = best.address?.country_code === 'us';
-                    weatherService.setWindUnit(isUS ? 'imperial' : 'metric');
-                    weatherService.setManualLocation(
-                        best.lat,
-                        best.lon,
-                        best.display_name.split(',')[0]
-                    );
-
-                    document.getElementById('location').textContent = 'Updating…';
+    // UI Event Callbacks
+    function setupUICallbacks() {
+        return {
+            onRetryLocation: async () => {
+                document.getElementById('location').textContent = 'Retrying…';
+                try {
+                    await weatherService.getLocation();
                     const data = await weatherService.fetchWeather();
                     state.weatherData = data;
                     updateWeatherDisplay(data, weatherService);
                     drawSparkline(state.simulationTime, data, weatherService);
                     savePreferences();
-
-                    const searchInput = document.getElementById('location-search');
-                    if (searchInput) searchInput.value = '';
-                } else {
-                    showToast(`No results found for "${query}"`, 'error');
+                } catch (error) {
+                    console.error('Location retry failed:', error);
+                    document.getElementById('location').textContent = 'Location unavailable';
+                    showToast('Could not detect location. Try searching for a city.', 'error');
                 }
-            } catch (error) {
-                console.error('Search failed:', error);
-                showToast('Search failed. Check your connection and try again.', 'error');
-            } finally {
-                setSearchLoading(false);
+            },
+
+            onToggleUnit: () => {
+                weatherService.toggleUnit();
+                updateUnitButton(weatherService);
+                if (state.weatherData) {
+                    updateWeatherDisplay(state.weatherData, weatherService);
+                    drawSparkline(state.simulationTime, state.weatherData, weatherService);
+                }
+                savePreferences();
+            },
+
+            onSearch: async (query) => {
+                if (!query) return;
+                setSearchLoading(true);
+                try {
+                    const results = await weatherService.searchLocation(query);
+                    if (results && results.length > 0) {
+                        const best = results[0];
+                        const isUS = best.address?.country_code === 'us';
+                        weatherService.setWindUnit(isUS ? 'imperial' : 'metric');
+                        weatherService.setManualLocation(
+                            best.lat,
+                            best.lon,
+                            best.display_name.split(',')[0]
+                        );
+
+                        document.getElementById('location').textContent = 'Updating…';
+                        const data = await weatherService.fetchWeather();
+                        state.weatherData = data;
+                        updateWeatherDisplay(data, weatherService);
+                        drawSparkline(state.simulationTime, data, weatherService);
+                        savePreferences();
+
+                        const searchInput = document.getElementById('location-search');
+                        if (searchInput) searchInput.value = '';
+                    } else {
+                        showToast(`No results found for "${query}"`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Search failed:', error);
+                    showToast('Search failed. Check your connection and try again.', 'error');
+                } finally {
+                    setSearchLoading(false);
+                }
+            },
+
+            onToggleTimeWarp: () => {
+                state.isTimeWarping = !state.isTimeWarping;
+                document.body.classList.toggle('time-warping', state.isTimeWarping);
+            },
+
+            onScrub: (dayFraction) => {
+                const startOfDay = new Date(state.simulationTime);
+                startOfDay.setHours(0, 0, 0, 0);
+                state.simulationTime = new Date(startOfDay.getTime() + dayFraction * 86400000);
+            },
+
+            onCycleSpeed: () => {
+                const speeds = [1, 10, 60];
+                const idx = speeds.indexOf(state.timeSpeed);
+                state.timeSpeed = speeds[(idx + 1) % speeds.length];
+            },
+
+            onPause: () => {
+                if (state.isTimeWarping) {
+                    state.isTimeWarping = false;
+                    document.body.classList.toggle('time-warping', false);
+                }
             }
-        },
-
-        onToggleTimeWarp: () => {
-            state.isTimeWarping = !state.isTimeWarping;
-            document.body.classList.toggle('time-warping', state.isTimeWarping);
-        },
-
-        onScrub: (dayFraction) => {
-            const startOfDay = new Date(state.simulationTime);
-            startOfDay.setHours(0, 0, 0, 0);
-            state.simulationTime = new Date(startOfDay.getTime() + dayFraction * 86400000);
-        },
-
-        onCycleSpeed: () => {
-            const speeds = [1, 10, 60];
-            const idx = speeds.indexOf(state.timeSpeed);
-            state.timeSpeed = speeds[(idx + 1) % speeds.length];
-        },
-
-        onPause: () => {
-            if (state.isTimeWarping) {
-                state.isTimeWarping = false;
-                document.body.classList.toggle('time-warping', false);
-            }
-        }
-    };
-}
-
-// ── Weather fetch ─────────────────────────────────────────────────────────────
-async function fetchAndDisplayWeather() {
-    if (state.isDebugMode) return;
-    if (state.isDebugMode) return;
-
-    document.getElementById('location').textContent = 'Loading…';
-    try {
-        // Try to restore saved location; fall back to geolocation if none saved
-        const hadSavedLocation = loadPreferences();
-        updateUnitButton(weatherService);
-
-        let data;
-        if (hadSavedLocation) {
-            data = await weatherService.fetchWeather();
-        } else {
-            data = await weatherService.initialize();
-            savePreferences();
-        }
-
-        if (state.isDebugMode) return;
-        state.weatherData = data;
-        updateWeatherDisplay(data, weatherService);
-        drawSparkline(state.simulationTime, data, weatherService);
-    } catch (error) {
-        console.error('Weather initialization failed:', error);
-        document.getElementById('location').textContent = 'Weather data unavailable';
-        document.getElementById('current-description').textContent = 'Unable to fetch';
-        showToast('Failed to load weather data. Check your connection.', 'error');
-    }
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-async function init() {
-    updateTimeDisplay(state.simulationTime, state.isTimeWarping);
-    updateUnitButton(weatherService);
-
-    // Initialize Mode Controller for Clock/Timeline switching
-    // Must happen after DOM is ready so drawer handles exist
-    modeController = new ModeController(
-        scene,
-        camera,
-        controls,
-        renderer,
-        weatherService
-    );
-    
-    // Connect mode controller to animation controller for timeline updates
-    animationController.setModeController(modeController);
-    
-    // Expose mode controller to window for debugging
-    window.modeController = modeController;
-
-    // Setup event listeners and keyboard shortcuts
-    const callbacks = setupUICallbacks();
-    setupEventListeners(callbacks, modeController);
-    setupKeyboardShortcuts(callbacks);
-
-    setupDebugAPI(state, { weatherService, astronomyService }, {
-        scene, sky, weatherEffects, sunLight, moonLight, ambientLight
-    });
-
-    // Prime atmosphere theme before first frame
-    if (state.weatherData) {
-        updateAtmosphereTheme(renderer, scene, state.weatherData);
+        };
     }
 
-    animationController.start(clock, stats);
-
-    await fetchAndDisplayWeather();
-
-    // Weather refresh interval
-    setInterval(async () => {
+    // Weather fetch
+    async function fetchAndDisplayWeather() {
         if (state.isDebugMode) return;
+        if (state.isDebugMode) return;
+
+        document.getElementById('location').textContent = 'Loading…';
         try {
-            const data = await weatherService.fetchWeather();
+            const hadSavedLocation = loadPreferences();
+            updateUnitButton(weatherService);
+
+            let data;
+            if (hadSavedLocation) {
+                data = await weatherService.fetchWeather();
+            } else {
+                data = await weatherService.initialize();
+                savePreferences();
+            }
+
             if (state.isDebugMode) return;
             state.weatherData = data;
             updateWeatherDisplay(data, weatherService);
             drawSparkline(state.simulationTime, data, weatherService);
         } catch (error) {
-            console.error('Weather update failed:', error);
+            console.error('Weather initialization failed:', error);
+            document.getElementById('location').textContent = 'Weather data unavailable';
+            document.getElementById('current-description').textContent = 'Unable to fetch';
+            showToast('Failed to load weather data. Check your connection.', 'error');
         }
-    }, WEATHER_REFRESH_INTERVAL);
+    }
+
+    // Init
+    async function init() {
+        updateTimeDisplay(state.simulationTime, state.isTimeWarping);
+        updateUnitButton(weatherService);
+
+        modeController = new ModeController(
+            scene,
+            camera,
+            controls,
+            renderer,
+            weatherService
+        );
+        
+        animationController.setModeController(modeController);
+        window.modeController = modeController;
+
+        const callbacks = setupUICallbacks();
+        setupEventListeners(callbacks, modeController);
+        setupKeyboardShortcuts(callbacks);
+
+        setupDebugAPI(state, { weatherService, astronomyService }, {
+            scene, sky, weatherEffects, sunLight, moonLight, ambientLight
+        });
+
+        if (state.weatherData) {
+            updateAtmosphereTheme(renderer, scene, state.weatherData);
+        }
+
+        animationController.start(clock, stats);
+
+        await fetchAndDisplayWeather();
+
+        setInterval(async () => {
+            if (state.isDebugMode) return;
+            try {
+                const data = await weatherService.fetchWeather();
+                if (state.isDebugMode) return;
+                state.weatherData = data;
+                updateWeatherDisplay(data, weatherService);
+                drawSparkline(state.simulationTime, state.weatherData, weatherService);
+            } catch (error) {
+                console.error('Weather update failed:', error);
+            }
+        }, WEATHER_REFRESH_INTERVAL);
+    }
+
+    await init();
 }
 
-init();
+bootstrap();

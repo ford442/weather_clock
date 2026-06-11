@@ -95,19 +95,7 @@ export class WeatherService {
     }
 
     setFallbackLocation() {
-        const fallbackLocations = [
-            { lat: 40.7128, lon: -74.0060, name: 'New York, USA' },
-            { lat: 51.5074, lon: -0.1278, name: 'London, UK' },
-            { lat: 48.8566, lon: 2.3522, name: 'Paris, France' },
-            { lat: 35.6762, lon: 139.6503, name: 'Tokyo, Japan' },
-            { lat: -33.8688, lon: 151.2093, name: 'Sydney, Australia' }
-        ];
-
-        const randomLocation = fallbackLocations[Math.floor(Math.random() * fallbackLocations.length)];
-        this.latitude = randomLocation.lat;
-        this.longitude = randomLocation.lon;
-        this.location = randomLocation.name;
-        this.windUnit = randomLocation.name.includes('USA') ? 'imperial' : 'metric';
+        this.setDefaultLocation();
     }
 
     setDefaultLocation() {
@@ -344,13 +332,9 @@ export class WeatherService {
     }
 
     getPredictionAccuracy(current) {
-        const delta = (Math.random() * 4) - 2;
-        return {
-            predictedTemp: parseFloat((current.temp + delta).toFixed(1)),
-            actualTemp: current.temp,
-            delta: parseFloat(delta.toFixed(1)),
-            accuracy: Math.max(0, 100 - Math.abs(delta) * 10).toFixed(0)
-        };
+        // Forecast accuracy requires archived forecast runs (Previous Runs API).
+        // This is not yet implemented. Returning null signals "no data" to the UI.
+        return null;
     }
 
     findClosestHourIndex(timeArray, targetDate) {

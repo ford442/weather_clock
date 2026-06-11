@@ -440,7 +440,7 @@ export class TimelineData {
             weatherCode,
             condition: this.simplifyWeatherCondition(weatherCode),
             hourly,
-            // Prediction and accuracy will be added by enrichWithAccuracy()
+            // Prediction and accuracy may be added by enrichWithAccuracy() when real archived forecast data is available
         };
     }
 
@@ -481,56 +481,9 @@ export class TimelineData {
      * @param {DayData[]} days - Array of day data
      */
     enrichWithAccuracy(days) {
-        // For each historical day, find if we have a prediction in the forecast data
-        // This simulates what the forecast said X days ago
-        
-        const historicalDays = days.filter(d => d.type === 'historical');
-        
-        for (const day of historicalDays) {
-            // In a real implementation, we'd fetch the archived forecast
-            // For now, simulate with reasonable accuracy degradation
-            const dayDate = new Date(day.date);
-            const today = new Date();
-            const daysAgo = Math.floor((today - dayDate) / (1000 * 60 * 60 * 24));
-            
-            // Simulate prediction accuracy based on forecast horizon
-            // 1-day forecast: ~95% accurate, 5-day: ~90%, 10-day: ~50%
-            const accuracyBase = daysAgo <= 1 ? 0.95 : 
-                                daysAgo <= 5 ? 0.90 - (daysAgo - 1) * 0.02 :
-                                0.80 - (daysAgo - 5) * 0.06;
-            
-            const accuracy = Math.max(0.3, Math.min(0.98, accuracyBase));
-            const errorMargin = (1 - accuracy) * 10; // °C error
-            
-            // Simulate predicted values
-            const predictedMax = day.tempMax + (Math.random() - 0.5) * errorMargin * 2;
-            const predictedMin = day.tempMin + (Math.random() - 0.5) * errorMargin * 2;
-            
-            // Calculate accuracy metrics
-            const mae = (Math.abs(predictedMax - day.tempMax) + Math.abs(predictedMin - day.tempMin)) / 2;
-            const rmse = Math.sqrt(
-                (Math.pow(predictedMax - day.tempMax, 2) + Math.pow(predictedMin - day.tempMin, 2)) / 2
-            );
-            
-            // Skill score vs persistence (yesterday's weather continues)
-            // Simplified: compare forecast error to persistence error
-            const persistenceError = errorMargin * 1.5; // Persistence typically worse
-            const skill = (persistenceError - mae) / persistenceError;
-            
-            day.prediction = {
-                tempMax: parseFloat(predictedMax.toFixed(1)),
-                tempMin: parseFloat(predictedMin.toFixed(1)),
-                weatherCode: day.weatherCode, // Simplified: assume same condition
-                issuedDate: this.getIssuedDate(day.date, daysAgo)
-            };
-            
-            day.accuracy = {
-                mae: parseFloat(mae.toFixed(2)),
-                rmse: parseFloat(rmse.toFixed(2)),
-                skill: parseFloat(Math.max(-1, skill).toFixed(2)),
-                tempScore: parseFloat(accuracy.toFixed(2))
-            };
-        }
+        // Forecast accuracy requires archived forecast runs (Previous Runs API).
+        // This is not yet implemented. Accuracy rings and detail panels will
+        // naturally be hidden when day.accuracy is undefined.
     }
 
     /**

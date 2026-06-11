@@ -186,16 +186,23 @@ export function updateWeatherDisplay(data, weatherService) {
     }
 
     // ── Advanced: accuracy ──
-    if (data.accuracy) {
-        let delta = data.accuracy.delta;
-        if (weatherService.unit === 'imperial') delta *= 1.8;
-        const sign = delta > 0 ? '+' : (delta < 0 ? '-' : '');
-        const deltaEl = document.getElementById('accuracy-delta');
-        if (deltaEl) {
-            deltaEl.textContent = `${sign}${Math.abs(delta).toFixed(1)}${deg}`;
-            deltaEl.style.color = Math.abs(data.accuracy.delta) < 2 ? '#44ff44' : '#ff4444';
+    const accuracyDeltaEl = document.getElementById('accuracy-delta');
+    if (accuracyDeltaEl) {
+        accuracyDeltaEl.textContent = 'Forecast accuracy tracking coming soon.';
+        accuracyDeltaEl.style.color = '';
+        accuracyDeltaEl.style.fontSize = '14px';
+    }
+    setText('accuracy-score', '');
+
+    const accuracyTabBtn = document.querySelector('.tab-btn[data-tab="accuracy"]');
+    if (accuracyTabBtn) {
+        accuracyTabBtn.style.display = 'none';
+        if (accuracyTabBtn.classList.contains('active')) {
+            accuracyTabBtn.classList.remove('active');
+            document.querySelector('.tab-btn[data-tab="history"]')?.classList.add('active');
+            document.getElementById('tab-accuracy').classList.remove('active');
+            document.getElementById('tab-history').classList.add('active');
         }
-        setText('accuracy-score', `Score: ${data.accuracy.accuracy}%`);
     }
 
     // ── Advanced: regional ──

@@ -62,7 +62,7 @@ export class AnimationController {
         const { state, services, scene3d } = this;
         const { weatherService, astronomyService } = services;
         const {
-            scene, composer, sky,
+            scene, pipeline, sky,
             sundial, moonGroup, weatherEffects,
             sunLight, moonLight, ambientLight,
             controls, renderer
@@ -203,7 +203,7 @@ export class AnimationController {
             updateAtmosphereTheme(renderer, scene, state.weatherData);
         }
 
-        composer.render();
+        pipeline.render();
     }
 
     stop() {
