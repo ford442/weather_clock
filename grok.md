@@ -107,7 +107,7 @@ npm run build
 npm run preview
 ```
 
-Output in `dist/`. Note: `deploy.py` has hardcoded credentials — use cautiously.
+Output in `dist/`. Set `DEPLOY_TOKEN` in the environment before running `python3 deploy.py`, or use `python3 deploy.py --dry-run` to build the zip without uploading.
 
 ## Code Style & Best Practices
 

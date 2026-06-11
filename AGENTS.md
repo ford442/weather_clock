@@ -41,7 +41,7 @@ The app has two viewing modes:
 ### Root
 - `index.html` — Entry point. Loads Three.js via an import map and mounts `src/main.js`.
 - `package.json` — NPM manifest with Vite/Vitest scripts.
-- `deploy.py` — **Security note:** Paramiko SFTP deployment script containing hardcoded server credentials.
+- `deploy.py` — Deployment bundle uploader. Requires `DEPLOY_TOKEN` from the environment for uploads.
 
 ### Source (`src/`)
 | File | Responsibility |
@@ -162,7 +162,7 @@ Screenshots are saved into `verification/` for manual comparison.
 
 ## Security Considerations
 
-- **`deploy.py` contains hardcoded SFTP credentials.** Do not run this script blindly, and do not commit modified versions that expose secrets.
+- **Deployment credentials must stay out of source.** Set `DEPLOY_TOKEN` in the environment before running `deploy.py`, and do not commit `.env` files or real tokens.
 - The app fetches data from external APIs (Open-Meteo, Nominatim) over HTTPS. No API keys are required.
 - User location and unit preferences are stored in `localStorage` under the keys:
   - `weatherclock_lat`

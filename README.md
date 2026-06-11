@@ -69,6 +69,22 @@ The goal: make time *visible* and *tactile*—a living, breathing environment in
    ```
    Output lands in `dist/` folder—ready to deploy.
 
+4. **Deploy:**
+   ```bash
+   export DEPLOY_TOKEN="your_deploy_token"
+   python3 deploy.py
+   ```
+   Copy `.env.example` to `.env` if you prefer local environment files, then source it before deploying:
+   ```bash
+   set -a
+   source .env
+   set +a
+   ```
+   Keep real tokens out of git. To verify the deployment zip without uploading, run:
+   ```bash
+   python3 deploy.py --dry-run
+   ```
+
 ### For Developers
 
 See **[claude.md](./claude.md)** for:

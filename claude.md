@@ -140,6 +140,15 @@ npm run preview
 
 Output is in `dist/` folder - ready for deployment to any static host.
 
+For the bundled deploy script, set the token through the environment before uploading:
+
+```bash
+export DEPLOY_TOKEN="your_deploy_token"
+python3 deploy.py
+```
+
+Use `python3 deploy.py --dry-run` to build the zip without uploading or requiring a token. Do not commit `.env` files or real deploy tokens.
+
 ## Dependencies
 
 - **Three.js** ^0.181.2 - 3D rendering
