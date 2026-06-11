@@ -32,6 +32,23 @@ export async function createPostProcessingPipeline(
     const strength = bloomOptions.strength ?? 0.5;
     const radius = bloomOptions.radius ?? 0.4;
     const threshold = bloomOptions.threshold ?? 0.85;
+    const disableBloom = bloomOptions.disableBloom ?? false;
+
+    if (disableBloom) {
+        return {
+            render: () => {
+                if (isWebGPU) {
+                    renderer.render(scene, camera);
+                } else {
+                    renderer.render(scene, camera);
+                }
+            },
+            setSize: (w, h) => {
+                renderer.setSize(w, h);
+            },
+            dispose: () => {}
+        };
+    }
 
     if (isWebGPU) {
         const { PostProcessing } = await import('three/webgpu');

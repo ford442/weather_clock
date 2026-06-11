@@ -28,12 +28,13 @@ const CAMERA_CONFIG = {
 };
 
 export class ModeController {
-    constructor(scene, camera, controls, renderer, weatherService) {
+    constructor(scene, camera, controls, renderer, weatherService, state = null) {
         this.scene = scene;
         this.camera = camera;
         this.controls = controls;  // OrbitControls
         this.renderer = renderer;
         this.weatherService = weatherService;
+        this.state = state;
         
         this.currentMode = 'clock'; // 'clock' or 'timeline'
         this.timelineController = null;
@@ -50,6 +51,12 @@ export class ModeController {
         this.animationId = null;
         
         this.init();
+    }
+
+    setReducedMotion(reducedMotion) {
+        if (this.state) {
+            this.state.reducedMotion = reducedMotion;
+        }
     }
     
     init() {
@@ -129,6 +136,7 @@ export class ModeController {
      * Cross-fade center overlay during mode switch
      */
     _crossFadeCenterOverlay() {
+        if (this.state?.reducedMotion) return;
         const overlay = document.getElementById('center-overlay');
         if (!overlay) return;
         overlay.style.willChange = 'transform, opacity';
@@ -467,7 +475,17 @@ export class ModeController {
     animateCamera(fromPos, fromTarget, toPos, toTarget) {
         return new Promise((resolve) => {
             const startTime = performance.now();
-            const duration = CAMERA_CONFIG.transitionDuration * 1000;
+            const duration = this.state?.reducedMotion
+                ? 150
+                : CAMERA_CONFIG.transitionDuration * 1000;
+
+            if (duration <= 0) {
+                this.camera.position.copy(toPos);
+                this.controls.target.copy(toTarget);
+                this.camera.lookAt(toTarget);
+                resolve();
+                return;
+            }
             
             const animate = (currentTime) => {
                 const elapsed = currentTime - startTime;

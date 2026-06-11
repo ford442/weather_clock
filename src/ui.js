@@ -23,6 +23,12 @@ const UI_CONFIG = {
     timeNormalGlow: '0 0 5px #000000',
 };
 
+let prefersReducedMotion = false;
+
+export function setReducedMotionPreference(reducedMotion) {
+    prefersReducedMotion = reducedMotion;
+}
+
 // ── countTo: rAF-driven number animation (800 ms, ease-out cubic) ──────────
 const _countState = new Map();
 
@@ -36,6 +42,13 @@ export function countTo(el, newVal, suffix = '') {
     }
 
     if (_countState.has(el)) cancelAnimationFrame(_countState.get(el));
+
+    if (prefersReducedMotion) {
+        el.textContent = newVal + suffix;
+        el.dataset.animVal = String(newVal);
+        _countState.delete(el);
+        return;
+    }
 
     // Flash animation for stat-value elements
     if (el.classList.contains('stat-value')) {
@@ -151,8 +164,10 @@ export function updateWeatherDisplay(data, weatherService) {
         const pastWindConverted = weatherService.convertWind(data.past.windSpeed);
         const wind = document.getElementById('past-wind');
         if (wind) {
-            wind.classList.add('value-updating');
-            setTimeout(() => wind.classList.remove('value-updating'), 150);
+            if (!prefersReducedMotion) {
+                wind.classList.add('value-updating');
+                setTimeout(() => wind.classList.remove('value-updating'), 150);
+            }
             wind.textContent = `${pastWindConverted.value} ${pastWindConverted.unit}`;
         }
         setNum('past-humidity', data.past.humidity ?? 0, '%');
@@ -236,6 +251,27 @@ export function updateUnitButton(weatherService) {
     toggle.setAttribute('aria-label', `Toggle unit — currently ${weatherService.unit === 'metric' ? 'Celsius' : 'Fahrenheit'}`);
 }
 
+// ── updateQualityButton ──────────────────────────────────────────────────────
+export function updateQualityButton(tier) {
+    const btns = document.querySelectorAll('.quality-btn');
+    btns.forEach(btn => {
+        if (btn.dataset.quality === tier) {
+            btn.classList.add('active');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            btn.classList.remove('active');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    });
+
+    const badge = document.getElementById('quality-stats-badge');
+    if (badge) {
+        badge.textContent = `TIER: ${tier.toUpperCase()}`;
+    }
+}
+
+window.updateQualityButton = updateQualityButton;
+
 // ── setupEventListeners ──────────────────────────────────────────────────────
 export function setupEventListeners(callbacks, modeController) {
     const retryBtn = document.getElementById('retry-location');
@@ -251,6 +287,16 @@ export function setupEventListeners(callbacks, modeController) {
             }
         });
     }
+
+    const qualityBtns = document.querySelectorAll('.quality-btn');
+    qualityBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tier = btn.dataset.quality;
+            if (callbacks.onSetQuality) {
+                callbacks.onSetQuality(tier);
+            }
+        });
+    });
 
     const searchInput = document.getElementById('location-search');
     const searchBtn = document.getElementById('search-btn');
@@ -345,6 +391,14 @@ export function setupEventListeners(callbacks, modeController) {
             }
         });
     });
+
+    // Nearby tab button lazy-loading callback
+    const nearbyTabBtn = document.querySelector('.tab-btn[data-tab="nearby"]');
+    if (nearbyTabBtn && callbacks.onLoadNearby) {
+        nearbyTabBtn.addEventListener('click', () => {
+            callbacks.onLoadNearby();
+        });
+    }
 }
 
 const PLAY_ICON_SVG = `<polygon points="5,3 13,8 5,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>`;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import Stats from 'three/addons/libs/stats.module.js';
 
-import { setupRendering } from './rendering.js';
+import { setupRendering, getQualityTier, setQualityTier } from './rendering.js';
 import { setupLights } from './lights.js';
 import { setupSky, setupSundial, setupMoon, setupWeatherEffects, addToScene } from './scene-objects.js';
 import { initMoonWebGPU } from './moonPhase.js';
@@ -11,13 +11,15 @@ import {
     updateTimeDisplay,
     updateWeatherDisplay,
     updateUnitButton,
+    updateQualityButton,
     setupEventListeners,
     updateTimelineScrubber,
     setSearchLoading,
     drawSparkline,
     updateSunriseSunset,
     showToast,
-    setupKeyboardShortcuts
+    setupKeyboardShortcuts,
+    setReducedMotionPreference
 } from './ui.js';
 import { AnimationController } from './animation.js';
 import { setupDebugAPI } from './debug.js';
@@ -30,7 +32,8 @@ const state = {
     simulationTime: new Date(),
     isTimeWarping: false,
     isDebugMode: false,
-    timeSpeed: 60
+    timeSpeed: 60,
+    reducedMotion: false
 };
 
 // ── Mode Controller (Clock/Timeline) ─────────────────────────────────────────
@@ -49,6 +52,9 @@ const PREF_KEYS = {
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 async function bootstrap() {
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    state.reducedMotion = reducedMotionQuery.matches;
+
     // Rendering — async because WebGPU path requires async init
     const { scene, camera, renderer, pipeline, clock, controls, isWebGPU } = await setupRendering();
 
@@ -56,7 +62,8 @@ async function bootstrap() {
     window.__IS_WEBGPU__ = isWebGPU;
 
     // Lighting
-    const { ambientLight, sunLight, moonLight } = setupLights(scene);
+    const quality = getQualityTier();
+    const { ambientLight, sunLight, moonLight } = setupLights(scene, quality);
 
     // Scene Objects
     const sky = setupSky();
@@ -108,9 +115,30 @@ async function bootstrap() {
         document.body.appendChild(stats.dom);
     }
 
+    const qualityLabel = document.createElement('div');
+    qualityLabel.id = 'quality-stats-badge';
+    qualityLabel.style.position = 'absolute';
+    qualityLabel.style.left = '80px';
+    qualityLabel.style.top = '0px';
+    qualityLabel.style.background = 'rgba(0, 0, 0, 0.7)';
+    qualityLabel.style.color = '#00ffcc';
+    qualityLabel.style.fontFamily = 'monospace';
+    qualityLabel.style.fontSize = '9px';
+    qualityLabel.style.padding = '4px 8px';
+    qualityLabel.style.borderRadius = '3px';
+    qualityLabel.style.zIndex = '10001';
+    qualityLabel.style.display = 'none';
+    qualityLabel.style.pointerEvents = 'none';
+    qualityLabel.textContent = `TIER: ${quality.toUpperCase()}`;
+    if (document.body) {
+        document.body.appendChild(qualityLabel);
+    }
+
     window.addEventListener('keydown', (e) => {
         if (e.key === '`') {
-            stats.dom.style.display = stats.dom.style.display === 'none' ? 'block' : 'none';
+            const isHidden = stats.dom.style.display === 'none';
+            stats.dom.style.display = isHidden ? 'block' : 'none';
+            qualityLabel.style.display = isHidden ? 'block' : 'none';
         }
     });
 
@@ -133,6 +161,11 @@ async function bootstrap() {
                     updateWeatherDisplay(data, weatherService);
                     drawSparkline(state.simulationTime, data, weatherService);
                     savePreferences();
+
+                    if (data && data.isCached) {
+                        const timeStr = new Date(data.cachedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                        showToast(`Showing cached weather from ${timeStr}`, 'info');
+                    }
                 } catch (error) {
                     console.error('Location retry failed:', error);
                     document.getElementById('location').textContent = 'Location unavailable';
@@ -148,6 +181,17 @@ async function bootstrap() {
                     drawSparkline(state.simulationTime, state.weatherData, weatherService);
                 }
                 savePreferences();
+            },
+
+            onSetQuality: (tier) => {
+                const current = getQualityTier();
+                if (current === tier) return;
+                setQualityTier(tier);
+                updateQualityButton(tier);
+                showToast(`Quality set to ${tier.toUpperCase()}. Reloading scene...`, 'info');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
             },
 
             onSearch: async (query) => {
@@ -174,6 +218,11 @@ async function bootstrap() {
 
                         const searchInput = document.getElementById('location-search');
                         if (searchInput) searchInput.value = '';
+
+                        if (data && data.isCached) {
+                            const timeStr = new Date(data.cachedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                            showToast(`Showing cached weather from ${timeStr}`, 'info');
+                        }
                     } else {
                         showToast(`No results found for "${query}"`, 'error');
                     }
@@ -186,6 +235,10 @@ async function bootstrap() {
             },
 
             onToggleTimeWarp: () => {
+                if (state.reducedMotion && !state.isTimeWarping) {
+                    showToast('Time warp is disabled while reduced motion is enabled.', 'info', 2500);
+                    return;
+                }
                 state.isTimeWarping = !state.isTimeWarping;
                 document.body.classList.toggle('time-warping', state.isTimeWarping);
             },
@@ -207,13 +260,49 @@ async function bootstrap() {
                     state.isTimeWarping = false;
                     document.body.classList.toggle('time-warping', false);
                 }
+            },
+
+            onLoadNearby: async () => {
+                const list = document.getElementById('regional-list');
+                if (!list) return;
+
+                if (state.weatherData && !state.weatherData.regional) {
+                    list.innerHTML = '<div class="loading" style="padding: 10px 0; color: rgba(255,255,255,0.6); font-size: 13px;">Loading nearby regions…</div>';
+                    try {
+                        const regional = await weatherService.fetchRegionalWeather();
+                        state.weatherData.regional = regional;
+
+                        list.innerHTML = '';
+                        const deg = weatherService.unit === 'metric' ? 'C' : 'F';
+                        if (regional && regional.length > 0) {
+                            regional.forEach(reg => {
+                                const div = document.createElement('div');
+                                const tempVal = weatherService.convertTemp(reg.temp);
+                                div.innerHTML = `<b>${reg.name}:</b> ${tempVal.toFixed(1)}°${deg}`;
+                                list.appendChild(div);
+                            });
+                        } else {
+                            list.textContent = 'No regional data available';
+                        }
+                    } catch (e) {
+                        console.error('Failed to load regional weather:', e);
+                        list.textContent = 'Failed to load regional data';
+                    }
+                }
+            },
+
+            onSetQuality: (tier) => {
+                setQualityTier(tier);
+                showToast(`Quality set to ${tier.toUpperCase()}. Reloading page...`, 'success', 3000);
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
             }
         };
     }
 
     // Weather fetch
     async function fetchAndDisplayWeather() {
-        if (state.isDebugMode) return;
         if (state.isDebugMode) return;
 
         document.getElementById('location').textContent = 'Loading…';
@@ -233,6 +322,11 @@ async function bootstrap() {
             state.weatherData = data;
             updateWeatherDisplay(data, weatherService);
             drawSparkline(state.simulationTime, data, weatherService);
+
+            if (data && data.isCached) {
+                const timeStr = new Date(data.cachedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                showToast(`Showing cached weather from ${timeStr}`, 'info');
+            }
         } catch (error) {
             console.error('Weather initialization failed:', error);
             document.getElementById('location').textContent = 'Weather data unavailable';
@@ -243,19 +337,38 @@ async function bootstrap() {
 
     // Init
     async function init() {
+        const applyReducedMotionPreference = (isReduced) => {
+            state.reducedMotion = isReduced;
+            document.body.classList.toggle('reduced-motion', isReduced);
+            setReducedMotionPreference(isReduced);
+            if (isReduced && state.isTimeWarping) {
+                state.isTimeWarping = false;
+                document.body.classList.toggle('time-warping', false);
+            }
+            weatherEffects.setReducedMotion?.(isReduced);
+            modeController?.setReducedMotion?.(isReduced);
+        };
+
         updateTimeDisplay(state.simulationTime, state.isTimeWarping);
         updateUnitButton(weatherService);
+        updateQualityButton(getQualityTier());
 
         modeController = new ModeController(
             scene,
             camera,
             controls,
             renderer,
-            weatherService
+            weatherService,
+            state
         );
         
         animationController.setModeController(modeController);
         window.modeController = modeController;
+        applyReducedMotionPreference(state.reducedMotion);
+
+        reducedMotionQuery.addEventListener('change', (event) => {
+            applyReducedMotionPreference(event.matches);
+        });
 
         const callbacks = setupUICallbacks();
         setupEventListeners(callbacks, modeController);
@@ -273,7 +386,7 @@ async function bootstrap() {
 
         await fetchAndDisplayWeather();
 
-        setInterval(async () => {
+        async function refreshWeatherWithBackoff(retryCount = 0, delay = 2000) {
             if (state.isDebugMode) return;
             try {
                 const data = await weatherService.fetchWeather();
@@ -281,9 +394,31 @@ async function bootstrap() {
                 state.weatherData = data;
                 updateWeatherDisplay(data, weatherService);
                 drawSparkline(state.simulationTime, state.weatherData, weatherService);
+
+                if (data && data.isCached) {
+                    const timeStr = new Date(data.cachedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                    showToast(`Showing cached weather from ${timeStr}`, 'info');
+
+                    if (retryCount < 3) {
+                        console.warn(`Fetch returned cached data. Retrying network fetch in ${delay}ms (attempt ${retryCount + 1}/3)...`);
+                        setTimeout(() => {
+                            refreshWeatherWithBackoff(retryCount + 1, delay * 2);
+                        }, delay);
+                    }
+                }
             } catch (error) {
                 console.error('Weather update failed:', error);
+                if (retryCount < 3) {
+                    console.warn(`Weather update failed. Retrying network fetch in ${delay}ms (attempt ${retryCount + 1}/3)...`);
+                    setTimeout(() => {
+                        refreshWeatherWithBackoff(retryCount + 1, delay * 2);
+                    }, delay);
+                }
             }
+        }
+
+        setInterval(async () => {
+            await refreshWeatherWithBackoff();
         }, WEATHER_REFRESH_INTERVAL);
     }
 

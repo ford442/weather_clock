@@ -521,7 +521,42 @@
     100% { opacity: 1; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    #panel-left,
+    #panel-right,
+    #panel-advanced,
+    .panel,
+    .tab-content,
+    .toast,
+    #timeline-ui-container,
+    .clock-ui,
+    .drawer-handle-grip,
+    .tab-btn,
+    .stat-value {
+        transition-duration: 0.01ms !important;
+        transition-delay: 0ms !important;
+    }
+
+    .panel:hover {
+        transform: none;
+    }
+
+    .panel .stat-row {
+        opacity: 1;
+        transform: none;
+        animation: none;
+    }
+
+    .stat-value.value-updating {
+        filter: none;
+        opacity: 1;
+    }
+
+    .mode-crossfade {
+        animation: none !important;
+    }
+}
+
 #center-overlay.mode-crossfade {
     animation: crossfadeOverlay 0.6s ease forwards;
 }
-

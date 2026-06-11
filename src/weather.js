@@ -1,5 +1,14 @@
 import SunCalc from 'suncalc';
 
+export class WeatherServiceError extends Error {
+    constructor(message, status, endpoint) {
+        super(message);
+        this.name = 'WeatherServiceError';
+        this.status = status;
+        this.endpoint = endpoint;
+    }
+}
+
 export class WeatherService {
     constructor() {
         this.latitude = null;
@@ -7,6 +16,7 @@ export class WeatherService {
         this.location = null;
         this.unit = 'imperial'; // Default to Fahrenheit
         this.windUnit = 'metric'; // 'metric' = km/h, 'imperial' = mph
+        this.cache = new Map();
     }
 
     async initialize() {
@@ -40,6 +50,13 @@ export class WeatherService {
             const response = await fetch(
                 `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(query)}`
             );
+            if (response.ok === false) {
+                throw new WeatherServiceError(
+                    `Search failed with status ${response.status}`,
+                    response.status,
+                    'nominatim_search'
+                );
+            }
             const data = await response.json();
             return data;
         } catch (error) {
@@ -110,6 +127,13 @@ export class WeatherService {
             const response = await fetch(
                 `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`
             );
+            if (response.ok === false) {
+                throw new WeatherServiceError(
+                    `Reverse geocoding failed with status ${response.status}`,
+                    response.status,
+                    'nominatim_reverse'
+                );
+            }
             const data = await response.json();
 
             if (data.address) {
@@ -152,6 +176,8 @@ export class WeatherService {
             throw new Error('Location not available');
         }
 
+        const cacheKey = this.getCacheKey(this.latitude, this.longitude);
+
         try {
             const now = new Date();
 
@@ -163,6 +189,13 @@ export class WeatherService {
             const currentResponse = await fetch(
                 `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&timezone=auto&past_days=1`
             );
+            if (currentResponse.ok === false) {
+                throw new WeatherServiceError(
+                    `Forecast API error: ${currentResponse.status} ${currentResponse.statusText}`,
+                    currentResponse.status,
+                    'open_meteo_forecast'
+                );
+            }
             const currentData = await currentResponse.json();
 
             // Archive API — no UV/precipProb in archive, use apparent_temp + humidity
@@ -173,6 +206,13 @@ export class WeatherService {
             const historicalResponse = await fetch(
                 `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,rain,showers,snowfall,pressure_msl&timezone=auto`
             );
+            if (historicalResponse.ok === false) {
+                throw new WeatherServiceError(
+                    `Archive API error: ${historicalResponse.status} ${historicalResponse.statusText}`,
+                    historicalResponse.status,
+                    'open_meteo_archive'
+                );
+            }
             const historicalData = await historicalResponse.json();
 
             // Build hourly timeline
@@ -256,10 +296,10 @@ export class WeatherService {
 
             // Advanced data
             const historicalYearAgo = await this.fetchHistoricalYearAgo(now);
-            const regional = await this.fetchRegionalWeather();
+            const regional = null; // Lazy loaded on Nearby tab open
             const accuracy = this.getPredictionAccuracy(current);
 
-            return {
+            const result = {
                 location: this.location,
                 current,
                 past,
@@ -271,8 +311,21 @@ export class WeatherService {
                 regional,
                 accuracy
             };
+
+            this.setCache(cacheKey, result);
+
+            return result;
         } catch (error) {
-            console.error('Weather fetch failed:', error);
+            console.error('Weather fetch failed, attempting cache fallback:', error);
+            const cached = this.getFromCache(this.getCacheKey(this.latitude, this.longitude), true);
+            if (cached) {
+                console.warn('Serving cached weather data due to fetch error');
+                return {
+                    ...cached.data,
+                    isCached: true,
+                    cachedAt: cached.timestamp
+                };
+            }
             throw error;
         }
     }
@@ -286,6 +339,13 @@ export class WeatherService {
             const response = await fetch(
                 `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
             );
+            if (response.ok === false) {
+                throw new WeatherServiceError(
+                    `Historical year-ago fetch failed with status ${response.status}`,
+                    response.status,
+                    'open_meteo_archive_year_ago'
+                );
+            }
             const data = await response.json();
             const index = this.findClosestHourIndex(data.hourly.time, lastYear);
             return {
@@ -315,6 +375,13 @@ export class WeatherService {
                 const response = await fetch(
                     `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(rLat)}&longitude=${encodeURIComponent(rLon)}&current=temperature_2m,weather_code&timezone=auto`
                 );
+                if (response.ok === false) {
+                    throw new WeatherServiceError(
+                        `Regional fetch failed for ${offset.name} with status ${response.status}`,
+                        response.status,
+                        `open_meteo_regional_${offset.name.toLowerCase()}`
+                    );
+                }
                 const data = await response.json();
                 return {
                     name: offset.name,
@@ -323,12 +390,89 @@ export class WeatherService {
                     description: this.getWeatherDescription(data.current.weather_code)
                 };
             } catch (e) {
+                console.error(`Failed to fetch regional weather for ${offset.name}:`, e);
                 return null;
             }
         });
 
         const results = await Promise.all(promises);
         return results.filter(r => r !== null);
+    }
+
+    getCacheKey(lat, lon, type = 'weather') {
+        const roundedLat = Math.round(lat * 100) / 100;
+        const roundedLon = Math.round(lon * 100) / 100;
+        return `weatherclock_${roundedLat}_${roundedLon}_${type}`;
+    }
+
+    getFromCache(key, allowExpired = false) {
+        // Try memory first
+        let cached = this.cache.get(key);
+        
+        if (!cached && typeof localStorage !== 'undefined') {
+            // Try localStorage
+            try {
+                const storageStr = localStorage.getItem('weatherclock_cache_v1');
+                if (storageStr) {
+                    const parsed = JSON.parse(storageStr);
+                    if (parsed && parsed.lat !== undefined && parsed.lon !== undefined) {
+                        // Check if coordinates match within ~1km precision (2 decimal places)
+                        const roundedLat = Math.round(this.latitude * 100) / 100;
+                        const roundedLon = Math.round(this.longitude * 100) / 100;
+                        const cachedRoundedLat = Math.round(parsed.lat * 100) / 100;
+                        const cachedRoundedLon = Math.round(parsed.lon * 100) / 100;
+                        
+                        if (roundedLat === cachedRoundedLat && roundedLon === cachedRoundedLon) {
+                            cached = parsed;
+                            this.cache.set(key, cached);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to read from localStorage cache:', e);
+            }
+        }
+        
+        if (!cached) return null;
+        
+        const now = Date.now();
+        const isExpired = now - cached.timestamp > 60 * 60 * 1000; // 1 hour TTL
+        
+        if (isExpired && !allowExpired) {
+            this.deleteFromCache(key);
+            return null;
+        }
+        
+        return cached;
+    }
+
+    setCache(key, data) {
+        const cacheEntry = {
+            data,
+            timestamp: Date.now(),
+            lat: this.latitude,
+            lon: this.longitude
+        };
+        this.cache.set(key, cacheEntry);
+        
+        if (typeof localStorage !== 'undefined') {
+            try {
+                localStorage.setItem('weatherclock_cache_v1', JSON.stringify(cacheEntry));
+            } catch (e) {
+                console.error('Failed to write to localStorage cache:', e);
+            }
+        }
+    }
+
+    deleteFromCache(key) {
+        this.cache.delete(key);
+        if (typeof localStorage !== 'undefined') {
+            try {
+                localStorage.removeItem('weatherclock_cache_v1');
+            } catch (e) {
+                console.error('Failed to delete from localStorage cache:', e);
+            }
+        }
     }
 
     getPredictionAccuracy(current) {

@@ -10,15 +10,18 @@ import {
     updateWindCompass,
     updatePanelTheme,
     drawSparkline,
-    updateTimelineScrubber
+    updateTimelineScrubber,
+    showToast
 } from './ui.js';
 import { updateAtmosphereTheme } from './atmosphereTheme.js';
+import { getQualityTier, setQualityTier } from './rendering.js';
 
 const ANIMATION_CONFIG = {
     realTimeScale: 1.0,
     warpTimeScale: 1440.0,        // 24 h in 60 s
     weatherUpdateThrottle: 0.1,   // 10 % chance per frame during time warp
     themeUpdateInterval: 500,     // ms between panel-theme updates
+    reducedMotionParticleFrameInterval: 3,
 };
 
 export class AnimationController {
@@ -28,11 +31,21 @@ export class AnimationController {
         this.scene3d = scene3d;
         this.isRunning = false;
         this.modeController = null; // Set by main.js after initialization
+        this.rafId = null;
+        this.clock = null;
+        this.stats = null;
+        this._visibilityBound = false;
+        this._reducedMotionFrameCount = 0;
+        this._reducedMotionDelta = 0;
 
         // Throttle trackers
         this._lastThemeMs = 0;
         this._lastSparklineHour = -1;
         this._lastSunriseDay = -1; // track day to avoid per-frame DOM updates
+
+        // FPS tracking for auto-downgrade
+        this.fpsSamples = [];
+        this.lastFpsCheckTime = performance.now();
     }
     
     /**
@@ -46,15 +59,36 @@ export class AnimationController {
     /** Start the rAF loop */
     start(clock, stats) {
         if (this.isRunning) return;
+        this.clock = clock;
+        this.stats = stats;
         this.isRunning = true;
+        this._ensureVisibilityHandler();
+        this.clock?.start?.();
+        this.clock?.getDelta?.();
 
         const animate = () => {
-            requestAnimationFrame(animate);
-            stats.update();
-            this.update(clock.getDelta());
+            if (!this.isRunning) return;
+            this.rafId = requestAnimationFrame(animate);
+            this.stats?.update();
+            this.update(this.clock.getDelta());
         };
 
         animate();
+    }
+
+    _ensureVisibilityHandler() {
+        if (this._visibilityBound || typeof document === 'undefined') return;
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.stop();
+                this.clock?.stop?.();
+                return;
+            }
+            if (this.clock && this.stats) {
+                this.start(this.clock, this.stats);
+            }
+        });
+        this._visibilityBound = true;
     }
 
     /** Per-frame update */
@@ -68,11 +102,53 @@ export class AnimationController {
             controls, renderer
         } = scene3d;
 
+        // ── FPS tracking & auto-downgrade ──
+        if (typeof window !== 'undefined') {
+            const now = performance.now();
+            const fps = delta > 0 ? 1 / delta : 60;
+            this.fpsSamples.push(fps);
+            if (this.fpsSamples.length > 300) {
+                this.fpsSamples.shift();
+            }
+
+            if (now - this.lastFpsCheckTime >= 5000) {
+                this.lastFpsCheckTime = now;
+                if (this.fpsSamples.length >= 150) {
+                    const avgFps = this.fpsSamples.reduce((a, b) => a + b, 0) / this.fpsSamples.length;
+                    const currentTier = getQualityTier();
+                    
+                    if (avgFps < 30) {
+                        let nextTier = null;
+                        if (currentTier === 'high') {
+                            nextTier = 'medium';
+                        } else if (currentTier === 'medium') {
+                            nextTier = 'low';
+                        }
+                        
+                        if (nextTier) {
+                            setQualityTier(nextTier);
+                            if (window.updateQualityButton) {
+                                window.updateQualityButton(nextTier);
+                            }
+                            showToast(`Performance low (${Math.round(avgFps)} FPS). Automatically switching to ${nextTier.toUpperCase()} quality... Reloading to apply.`, 'warning');
+                            this.fpsSamples = [];
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 2000);
+                        }
+                    }
+                }
+            }
+        }
+
         // ── Advance simulation time ──
         const timeScale = state.isTimeWarping
             ? state.timeSpeed
             : ANIMATION_CONFIG.realTimeScale;
         state.simulationTime = new Date(state.simulationTime.getTime() + delta * 1000 * timeScale);
+
+        const shouldUpdateReducedMotionEffects = !state.reducedMotion
+            || this._shouldUpdateReducedMotionEffects(delta);
 
         // ── Orbit controls damping ──
         if (controls) controls.update();
@@ -120,20 +196,21 @@ export class AnimationController {
 
             // Weather effects
             const empty = { weatherCode: 0, windSpeed: 0, windDirection: 0 };
-            weatherEffects.update(
-                activeWeatherData.past     || empty,
-                activeWeatherData.current  || empty,
-                activeWeatherData.forecast || empty,
-                delta,
-                ambientLight.color,
-                sunLight.position,
-                moonLight.position,
-                sunLight.color,
-                moonLight.color
-            );
+            if (shouldUpdateReducedMotionEffects) {
+                weatherEffects.update(
+                    activeWeatherData.past     || empty,
+                    activeWeatherData.current  || empty,
+                    activeWeatherData.forecast || empty,
+                    state.reducedMotion ? this._consumeReducedMotionDelta() : delta,
+                    ambientLight.color,
+                    sunLight.position,
+                    moonLight.position,
+                    sunLight.color,
+                    moonLight.color
+                );
+            }
 
-            // Wind compass (per-frame, lightweight DOM update)
-            if (activeWeatherData.current?.windDirection != null) {
+            if (shouldUpdateReducedMotionEffects && activeWeatherData.current?.windDirection != null) {
                 updateWindCompass(activeWeatherData.current.windDirection);
             }
 
@@ -177,7 +254,15 @@ export class AnimationController {
         } else {
             // No data — still run effects at idle
             const empty = { weatherCode: 0, windSpeed: 0, windDirection: 0 };
-            weatherEffects.update(empty, empty, empty, delta, ambientLight.color);
+            if (shouldUpdateReducedMotionEffects) {
+                weatherEffects.update(
+                    empty,
+                    empty,
+                    empty,
+                    state.reducedMotion ? this._consumeReducedMotionDelta() : delta,
+                    ambientLight.color
+                );
+            }
         }
 
         // ── Lightning flash ──
@@ -206,8 +291,25 @@ export class AnimationController {
         pipeline.render();
     }
 
+    _shouldUpdateReducedMotionEffects(delta) {
+        this._reducedMotionFrameCount += 1;
+        this._reducedMotionDelta += delta;
+        return this._reducedMotionFrameCount >= ANIMATION_CONFIG.reducedMotionParticleFrameInterval;
+    }
+
+    _consumeReducedMotionDelta() {
+        const accumulatedDelta = this._reducedMotionDelta || 0;
+        this._reducedMotionFrameCount = 0;
+        this._reducedMotionDelta = 0;
+        return accumulatedDelta || 0.016;
+    }
+
     stop() {
         this.isRunning = false;
+        if (this.rafId != null) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+        }
     }
 }
 

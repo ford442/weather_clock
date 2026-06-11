@@ -3,6 +3,67 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createRenderer, createPostProcessingPipeline } from './webgpu/index.js';
 
+// Quality configuration
+export const QUALITY_CONFIG = {
+    low: {
+        pixelRatioCap: 1.0,
+        disableBloom: true,
+        bloomStrengthMultiplier: 0.0,
+        shadowMapSize: 1024,
+        particleDivisor: 3
+    },
+    medium: {
+        pixelRatioCap: 1.5,
+        disableBloom: false,
+        bloomStrengthMultiplier: 0.5,
+        shadowMapSize: 2048,
+        particleDivisor: 2
+    },
+    high: {
+        pixelRatioCap: 999.0, // Uncapped
+        disableBloom: false,
+        bloomStrengthMultiplier: 1.0,
+        shadowMapSize: 2048,
+        particleDivisor: 1
+    }
+};
+
+export function getQualityTier() {
+    if (typeof localStorage !== 'undefined') {
+        const saved = localStorage.getItem('weatherclock_quality');
+        if (saved && ['high', 'medium', 'low'].includes(saved)) {
+            return saved;
+        }
+    }
+
+    // Auto-detect based on hardware specs and touch
+    let cores = 4;
+    let memory = 4;
+    let hasTouch = false;
+
+    if (typeof navigator !== 'undefined') {
+        cores = navigator.hardwareConcurrency || 4;
+        memory = navigator.deviceMemory || 4;
+        hasTouch = navigator.maxTouchPoints > 0 || ('ontouchstart' in window);
+    }
+
+    // If it's a mobile device/touch or lower hardware:
+    if (hasTouch || cores < 4 || memory < 4) {
+        if (cores <= 4 || memory < 3) {
+            return 'low';
+        }
+        return 'medium';
+    }
+
+    return 'high';
+}
+
+export function setQualityTier(tier) {
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('weatherclock_quality', tier);
+    }
+}
+
 // Configuration constants
 const RENDERING_CONFIG = {
     fogColor: 0xaaaaaa,
@@ -21,6 +82,9 @@ const RENDERING_CONFIG = {
 };
 
 export async function setupRendering() {
+    const quality = getQualityTier();
+    const config = QUALITY_CONFIG[quality];
+
     // Scene setup
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(RENDERING_CONFIG.fogColor, RENDERING_CONFIG.fogDensity);
@@ -51,6 +115,11 @@ export async function setupRendering() {
         shadowMapType: THREE.PCFSoftShadowMap
     });
 
+    // Set pixel ratio capped by config
+    const dpr = window.devicePixelRatio || 1;
+    const cappedDpr = Math.min(dpr, config.pixelRatioCap);
+    renderer.setPixelRatio(cappedDpr);
+
     // Post-processing setup — abstracts EffectComposer vs TSL PostProcessing
     const pipeline = await createPostProcessingPipeline(
         renderer,
@@ -59,8 +128,9 @@ export async function setupRendering() {
         isWebGPU,
         {
             threshold: RENDERING_CONFIG.bloomThreshold,
-            strength: RENDERING_CONFIG.bloomStrength,
-            radius: RENDERING_CONFIG.bloomRadius
+            strength: config.disableBloom ? 0 : RENDERING_CONFIG.bloomStrength * config.bloomStrengthMultiplier,
+            radius: RENDERING_CONFIG.bloomRadius,
+            disableBloom: config.disableBloom
         }
     );
 

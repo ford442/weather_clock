@@ -88,32 +88,33 @@ npm test
 
 Tests cover sun/moon position calculations, weather state transitions, and atmospheric physics.
 
-### Visual Verification
+### Visual Regression Testing
 
-This project uses **Playwright** and **Python** for visual regression testing.
+This project uses **Playwright**, **Python**, and **Pillow** to perform automated visual regression testing. The test suite renders deterministic test scenarios (various times of day and weather codes), takes screenshots, and compares them against committed baselines pixel-by-pixel.
 
 **Prerequisites:**
 ```bash
-pip install playwright
-playwright install
+pip install playwright Pillow
+playwright install chromium
 ```
 
-**Running Verification Scripts:**
+**Running Visual Verification:**
 
-Ensure the dev server is running (`npm run dev`), then:
+Ensure the dev server is running (`npm run dev`), then run the consolidated verification suite:
 
 ```bash
-# Verify Weather Effects (Rain, Snow, Clear transitions)
-python3 verification/verify_weather.py
-
-# Verify Time Display and Date Rendering
-python3 verification/verify_date_display.py
-
-# Verify Full Scene Composition
-python3 verification/verify_scene.py
+# Run all visual tests and compare against baselines
+python3 verification/run_all.py
 ```
 
-Generated screenshots are saved to `verification/` folder for comparison and regression tracking.
+If visual regressions are expected or intended (e.g., after updating shaders or lighting), you can update the committed baseline images locally using the `VISUAL_UPDATE` environment flag:
+
+```bash
+# Update committed baseline screenshots
+VISUAL_UPDATE=1 python3 verification/run_all.py
+```
+
+On CI, if the visual regression job fails, PR diffs showing highlighted mismatches are automatically saved and uploaded as a workflow run artifact (`visual-regression-diffs`).
 
 ## 🐞 Debugging Tools
 

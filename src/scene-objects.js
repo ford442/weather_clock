@@ -4,6 +4,7 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { createSundial } from './sundial.js';
 import { calculateMoonPhase, createMoon } from './moonPhase.js';
 import { WeatherEffects } from './effects/weather-effects.js';
+import { getQualityTier } from './rendering.js';
 
 const SKY_CONFIG = {
     scale: 450000,
@@ -44,7 +45,8 @@ export function setupMoon() {
 }
 
 export async function setupWeatherEffects(scene, sundial, camera, isWebGPU = false) {
-    const effects = new WeatherEffects(scene, sundial.group, camera);
+    const quality = getQualityTier();
+    const effects = new WeatherEffects(scene, sundial.group, camera, quality);
     if (isWebGPU) {
         await effects.initWebGPU();
     }

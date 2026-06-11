@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { WeatherService } from '../weather.js';
+import { getWeatherAtTime } from '../weather-simulation.js';
 
 // Mock fetch
 global.fetch = vi.fn();
@@ -95,5 +96,123 @@ describe('WeatherService', () => {
         expect(service.getWeatherDescription(0)).toBe('Clear sky');
         expect(service.getWeatherDescription(95)).toBe('Thunderstorm');
         expect(service.getWeatherDescription(999)).toBe('Unknown');
+    });
+
+    describe('Caching and Resilience', () => {
+        it('should return null on cache miss', () => {
+            const service = new WeatherService();
+            service.setManualLocation(40.71, -74.01, 'Test City');
+            const key = service.getCacheKey(40.71, -74.01);
+            expect(service.getFromCache(key)).toBeNull();
+        });
+
+        it('should store and retrieve data from cache', () => {
+            const service = new WeatherService();
+            service.setManualLocation(40.71, -74.01, 'Test City');
+            const key = service.getCacheKey(40.71, -74.01);
+            const dummyData = { test: 'data' };
+            
+            service.setCache(key, dummyData);
+            const cached = service.getFromCache(key);
+            
+            expect(cached).not.toBeNull();
+            expect(cached.data).toEqual(dummyData);
+            expect(cached.lat).toBe(40.71);
+            expect(cached.lon).toBe(-74.01);
+        });
+
+        it('should handle expired cache entries correctly', () => {
+            const service = new WeatherService();
+            service.setManualLocation(40.71, -74.01, 'Test City');
+            const key = service.getCacheKey(40.71, -74.01);
+            const dummyData = { test: 'data' };
+            
+            service.setCache(key, dummyData);
+            
+            // Artificially expire the cache entry (more than 1 hour ago)
+            const entry = service.cache.get(key);
+            entry.timestamp = Date.now() - 2 * 60 * 60 * 1000; 
+            
+            // Without allowExpired, it should return null
+            expect(service.getFromCache(key, false)).toBeNull();
+            
+            // Set again and expire again to test allowExpired
+            service.setCache(key, dummyData);
+            const entry2 = service.cache.get(key);
+            entry2.timestamp = Date.now() - 2 * 60 * 60 * 1000;
+            
+            // With allowExpired, it should return the entry
+            const stale = service.getFromCache(key, true);
+            expect(stale).not.toBeNull();
+            expect(stale.data).toEqual(dummyData);
+        });
+
+        it('should fall back to stale cached data when fetch fails', async () => {
+            const service = new WeatherService();
+            service.setManualLocation(40.71, -74.01, 'Test City');
+            const key = service.getCacheKey(40.71, -74.01);
+            const dummyData = { current: { temp: 15 }, timeline: [] };
+            
+            service.setCache(key, dummyData);
+            
+            // Mock fetch to reject (simulate network error)
+            fetch.mockRejectedValueOnce(new Error('Network disconnected'));
+            
+            const data = await service.fetchWeather();
+            
+            expect(data).not.toBeNull();
+            expect(data.current.temp).toBe(15);
+            expect(data.isCached).toBe(true);
+            expect(data.cachedAt).toBeDefined();
+        });
+    });
+});
+
+describe('Weather Interpolation', () => {
+    it('should smoothly interpolate rain intensity between code 0 and code 65', () => {
+        const date1 = new Date('2026-06-11T12:00:00Z');
+        const date2 = new Date('2026-06-11T13:00:00Z');
+
+        const timeline = [
+            {
+                time: date1,
+                weatherCode: 0, // Clear sky
+                rain: 0,
+                showers: 0,
+                snowfall: 0,
+                cloudCover: 0,
+                windSpeed: 0,
+                visibility: 10000
+            },
+            {
+                time: date2,
+                weatherCode: 65, // Heavy rain
+                rain: 5.0,
+                showers: 0,
+                snowfall: 0,
+                cloudCover: 100,
+                windSpeed: 10,
+                visibility: 2000
+            }
+        ];
+
+        // Let's sample across the hour boundary
+        const res0 = getWeatherAtTime(date1, timeline);
+        const res25 = getWeatherAtTime(new Date(date1.getTime() + 15 * 60 * 1000), timeline);
+        const res50 = getWeatherAtTime(new Date(date1.getTime() + 30 * 60 * 1000), timeline);
+        const res75 = getWeatherAtTime(new Date(date1.getTime() + 45 * 60 * 1000), timeline);
+        const res100 = getWeatherAtTime(date2, timeline);
+
+        // Verify rain intensities are monotonically increasing
+        expect(res0.rainIntensity).toBe(0.0);
+        expect(res25.rainIntensity).toBeGreaterThan(0.0);
+        expect(res50.rainIntensity).toBeGreaterThan(res25.rainIntensity);
+        expect(res75.rainIntensity).toBeGreaterThan(res50.rainIntensity);
+        expect(res100.rainIntensity).toBe(1.0);
+
+        // Verify that weatherCode still flips at 0.5 factor (midpoint)
+        expect(res25.weatherCode).toBe(0);
+        expect(res50.weatherCode).toBe(65); // factor is 0.5, maps to next.weatherCode
+        expect(res75.weatherCode).toBe(65);
     });
 });
