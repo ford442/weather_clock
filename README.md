@@ -47,6 +47,7 @@ The goal: make time *visible* and *tactile*—a living, breathing environment in
 - **Decoupled Time** — Simulation time is independent of system time, enabling time-lapse and "rewind" features without touching the clock.
 - **Time Warp** — Fast-forward mode to witness a full 24-hour cycle in 60 seconds, perfect for understanding daily weather patterns.
 - **Smooth Interpolation** — Weather state changes (e.g., Clear → Rain) are interpolated over 5 seconds to prevent visual snapping and jarring transitions.
+- **10-Day Forecast View** — Toggle (or press through modes) to a beautiful strip of 10 immersive vignette cards. Click any day to focus a live 3D scene with accurate future-date sun position, wind, clouds, and precipitation + time-of-day scrubber.
 
 ## 🛠️ Setup & Running
 

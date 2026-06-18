@@ -12,6 +12,8 @@
 import * as THREE from 'three';
 import { TimelineController } from './timeline/TimelineController.js';
 import { TimelineUI } from './timeline/TimelineUI.js';
+import { ForecastController } from './forecast/ForecastController.js';
+import { ForecastUI } from './forecast/ForecastUI.js';
 
 const CAMERA_CONFIG = {
     // Clock mode camera position (near the sundial)
@@ -21,6 +23,10 @@ const CAMERA_CONFIG = {
     // Timeline mode camera position (overview of 21-day timeline)
     timelinePosition: new THREE.Vector3(0, 15, 25),
     timelineTarget: new THREE.Vector3(0, 2, 0),
+    
+    // 10-Day Forecast mode (elevated "window" view for vignettes)
+    forecastPosition: new THREE.Vector3(3, 6, 10),
+    forecastTarget: new THREE.Vector3(0, 1, 0),
     
     // Animation
     transitionDuration: 1.5, // seconds
@@ -36,9 +42,11 @@ export class ModeController {
         this.weatherService = weatherService;
         this.state = state;
         
-        this.currentMode = 'clock'; // 'clock' or 'timeline'
+        this.currentMode = 'clock'; // 'clock' | 'timeline' | 'forecast'
         this.timelineController = null;
         this.timelineUI = null;
+        this.forecastController = null; // future
+        this.forecastUI = null;
         this.isTransitioning = false;
         
         // Store clock mode camera state
@@ -164,8 +172,8 @@ export class ModeController {
         toggleBtn.id = 'mode-toggle';
         toggleBtn.className = 'mode-toggle-btn';
         toggleBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/><line x1="8" y1="8" x2="8" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="8" y1="8" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
-        toggleBtn.title = 'Switch to Timeline View (T)';
-        toggleBtn.setAttribute('aria-label', 'Toggle between clock and timeline view');
+        toggleBtn.title = 'Cycle views: Clock / Timeline / 10-Day Forecast (T)';
+        toggleBtn.setAttribute('aria-label', 'Cycle between clock, timeline and forecast views');
         
         // Add to center panel
         const centerPanel = document.getElementById('panel-center');
@@ -324,10 +332,13 @@ export class ModeController {
     }
     
     /**
-     * Toggle between clock and timeline modes
+     * Toggle through available modes: clock -> timeline -> forecast -> clock
      */
     toggleMode() {
-        const newMode = this.currentMode === 'clock' ? 'timeline' : 'clock';
+        let newMode;
+        if (this.currentMode === 'clock') newMode = 'timeline';
+        else if (this.currentMode === 'timeline') newMode = 'forecast';
+        else newMode = 'clock';
         this.switchMode(newMode);
     }
     
@@ -349,6 +360,8 @@ export class ModeController {
         
         if (newMode === 'timeline') {
             await this.enterTimelineMode();
+        } else if (newMode === 'forecast') {
+            await this.enterForecastMode();
         } else {
             await this.enterClockMode();
         }
@@ -399,6 +412,56 @@ export class ModeController {
     }
     
     /**
+     * Enter 10-Day Forecast mode (vignette strip + focused day detail)
+     */
+    async enterForecastMode() {
+        this.saveClockCameraState();
+        this.controls.enabled = false;
+
+        // Hide clock + timeline
+        this.setClockUIVisibility(false);
+        if (this.timelineController) this.setTimelineUIVisibility(false);
+
+        // Container + controller + UI
+        let fc = document.getElementById('forecast-ui-container');
+        if (!fc) {
+            fc = document.createElement('div');
+            fc.id = 'forecast-ui-container';
+            fc.style.cssText = 'position:fixed;bottom:8px;left:0;right:0;z-index:65;pointer-events:auto;';
+            document.body.appendChild(fc);
+        }
+        fc.style.display = '';
+
+        if (!this.forecastController) {
+            this.forecastController = new ForecastController(this.scene, this.camera, this.renderer);
+            this.forecastUI = new ForecastUI(fc, this.forecastController);
+
+            // Wire focus -> notify (later tasks will drive vignette render)
+            this.forecastController.onDayFocus = (idx, dayData, repDate) => {
+                // Expose for animation/main consumption
+                this._focusedForecast = { index: idx, day: dayData, repDate };
+                // Trigger a custom event consumers can listen to
+                window.dispatchEvent(new CustomEvent('forecastfocus', { detail: { index: idx, day: dayData, repDate } }));
+            };
+        }
+
+        const loc = this.getCurrentLocation();
+        await this.forecastController.loadData(loc.lat, loc.lon);
+
+        // Default focus first day
+        if (this.forecastController.days.length) {
+            this.forecastController.focusDay(0);
+        }
+
+        await this.animateCamera(
+            this.clockCameraState.position,
+            this.clockCameraState.target,
+            CAMERA_CONFIG.forecastPosition,
+            CAMERA_CONFIG.forecastTarget
+        );
+    }
+    
+    /**
      * Enter clock mode
      */
     async enterClockMode() {
@@ -407,8 +470,10 @@ export class ModeController {
             this.timelineController.disableInteractions();
         }
         
-        // 2. Hide Timeline UI
+        // 2. Hide Timeline + Forecast UI
         this.setTimelineUIVisibility(false);
+        const fc = document.getElementById('forecast-ui-container');
+        if (fc) fc.style.display = 'none';
         
         // 3. Get current camera position (might have been moved in timeline)
         const currentPosition = this.camera.position.clone();
@@ -563,6 +628,16 @@ export class ModeController {
     }
     
     /**
+     * Set visibility for forecast UI container (stub for now; real UI later)
+     */
+    setForecastUIVisibility(visible) {
+        const fc = document.getElementById('forecast-ui-container');
+        if (fc) {
+            fc.style.display = visible ? '' : 'none';
+        }
+    }
+    
+    /**
      * Update toggle button UI
      */
     updateToggleUI() {
@@ -571,12 +646,16 @@ export class ModeController {
 
         const CLOCK_SVG = `<svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/><line x1="8" y1="8" x2="8" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="8" y1="8" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
         const TIMELINE_SVG = `<svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="5" cy="8" r="1" stroke="currentColor" fill="none" stroke-width="1.5"/><circle cx="11" cy="8" r="1" stroke="currentColor" fill="none" stroke-width="1.5"/></svg>`;
+        const FORECAST_SVG = `<svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2" y="3" width="3" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="6.5" y="3" width="3" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="3" width="3" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
         
         if (this.currentMode === 'clock') {
             toggleBtn.innerHTML = CLOCK_SVG;
             toggleBtn.title = 'Switch to Timeline View (T)';
-        } else {
+        } else if (this.currentMode === 'timeline') {
             toggleBtn.innerHTML = TIMELINE_SVG;
+            toggleBtn.title = 'Switch to 10-Day Forecast (T)';
+        } else {
+            toggleBtn.innerHTML = FORECAST_SVG;
             toggleBtn.title = 'Switch to Clock View (T)';
         }
     }
@@ -586,14 +665,12 @@ export class ModeController {
      */
     updateHistory(mode) {
         const url = new URL(window.location.href);
-        url.searchParams.set('mode', mode);
-        
-        if (mode === 'timeline') {
-            history.pushState({ mode: 'timeline' }, '', url);
-        } else {
-            // Remove mode param for clock (default)
+        if (mode === 'clock') {
             url.searchParams.delete('mode');
             history.pushState({ mode: 'clock' }, '', url);
+        } else {
+            url.searchParams.set('mode', mode);
+            history.pushState({ mode }, '', url);
         }
     }
     
@@ -611,8 +688,8 @@ export class ModeController {
         // Check URL params on load
         const urlParams = new URLSearchParams(window.location.search);
         const initialMode = urlParams.get('mode') || 'clock';
-        if (initialMode === 'timeline' && this.currentMode !== 'timeline') {
-            this.switchMode('timeline');
+        if ((initialMode === 'timeline' || initialMode === 'forecast') && this.currentMode !== initialMode) {
+            this.switchMode(initialMode);
         }
     }
     
@@ -687,6 +764,13 @@ export class ModeController {
     }
     
     /**
+     * Check if currently in forecast (10-day) mode
+     */
+    isForecastMode() {
+        return this.currentMode === 'forecast';
+    }
+    
+    /**
      * Cleanup resources
      */
     dispose() {
@@ -704,15 +788,24 @@ export class ModeController {
             this.timelineUI = null;
         }
         
+        if (this.forecastController) {
+            this.forecastController.dispose();
+            this.forecastController = null;
+        }
+        if (this.forecastUI) {
+            this.forecastUI.dispose();
+            this.forecastUI = null;
+        }
+        
         const toggleBtn = document.getElementById('mode-toggle');
         if (toggleBtn) {
             toggleBtn.remove();
         }
         
-        const container = document.getElementById('timeline-ui-container');
-        if (container) {
-            container.remove();
-        }
+        const tContainer = document.getElementById('timeline-ui-container');
+        if (tContainer) tContainer.remove();
+        const fContainer = document.getElementById('forecast-ui-container');
+        if (fContainer) fContainer.remove();
     }
 }
 

@@ -125,7 +125,26 @@ export function setupDebugAPI(state, services, scene3d) {
         moonLight,
         ambientLight,
         getSimulationTime: () => state.simulationTime,
-        getWeatherData: () => state.weatherData
+        getWeatherData: () => state.weatherData,
+        getMode: () => window.modeController?.getMode?.()
+    };
+
+    // Debug: jump into forecast mode focused on a day index (0-9) at a given hour
+    window.setDebugForecastDay = (dayIndex = 0, hour = 12) => {
+        console.log('Debug forecast vignette:', dayIndex, hour);
+        state.isDebugMode = true;
+        const mc = window.modeController;
+        if (!mc) return;
+        // force mode
+        mc.switchMode('forecast').then(() => {
+            const fc = mc.forecastController;
+            if (fc && fc.days && fc.days[dayIndex]) {
+                fc.focusDay(dayIndex);
+                fc.setVignetteHour(hour);
+                // nudge animation
+                console.log('Forecast vignette focused on day', dayIndex, 'hour', hour);
+            }
+        });
     };
 }
 

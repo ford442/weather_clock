@@ -1,7 +1,7 @@
 // Animation loop and time management
 import * as THREE from 'three';
 import { updateMoonVisuals } from './moonPhase.js';
-import { updateWeatherLighting } from './weatherLighting.js';
+import { updateWeatherLighting, updateSingleWeatherLighting } from './weatherLighting.js';
 import { getWeatherAtTime, getActiveWeatherData } from './weather-simulation.js';
 import {
     updateTimeDisplay,
@@ -153,18 +153,20 @@ export class AnimationController {
         // ── Orbit controls damping ──
         if (controls) controls.update();
 
-        // ── Sundial ──
-        sundial.update(state.simulationTime);
+        // ── Sundial / Astro / normal updates (skipped when actively driving a forecast vignette) ──
+        const inForecastVignette = !!(fc && fc.isForecastMode && fc.isForecastMode() && fc._focusedForecast);
+        if (!inForecastVignette) {
+            sundial.update(state.simulationTime);
 
-        // ── Astronomy ──
-        const lat = weatherService.latitude;
-        const lon = weatherService.longitude;
-        const astroData = astronomyService.update(state.simulationTime, lat, lon, 20);
+            const lat = weatherService.latitude;
+            const lon = weatherService.longitude;
+            const astroData = astronomyService.update(state.simulationTime, lat, lon, 20);
 
-        sunLight.position.copy(astroData.sunPosition);
-        moonGroup.position.copy(astroData.moonPosition);
-        moonGroup.lookAt(0, 0, 0);
-        moonLight.position.copy(astroData.moonPosition);
+            sunLight.position.copy(astroData.sunPosition);
+            moonGroup.position.copy(astroData.moonPosition);
+            moonGroup.lookAt(0, 0, 0);
+            moonLight.position.copy(astroData.moonPosition);
+        } // end !inForecastVignette guard for sundial/astro
 
         if (astroData.sunPosition) {
             updateMoonVisuals(moonGroup, astroData.sunPosition);
@@ -181,8 +183,11 @@ export class AnimationController {
             this._lastSunriseDay = simDay;
         }
 
-        // Get active weather data
-        const activeWeatherData = getActiveWeatherData(state.simulationTime, state.weatherData);
+        // Get active weather data (skip heavy path in forecast vignette)
+        let activeWeatherData = null;
+        if (!inForecastVignette) {
+            activeWeatherData = getActiveWeatherData(state.simulationTime, state.weatherData);
+        }
 
         if (activeWeatherData) {
             // Lighting
@@ -281,6 +286,34 @@ export class AnimationController {
         // ── Timeline update (if in timeline mode) ──
         if (this.modeController?.isTimelineMode() && this.modeController.timelineController) {
             this.modeController.timelineController.update(delta);
+        }
+        
+        // ── Forecast vignette drive (single-day live 3D) ──
+        const fc = this.modeController;
+        if (fc?.isForecastMode() && fc._focusedForecast && state.weatherData) {
+            const { day, repDate } = fc._focusedForecast;
+            // Build vignette time from controller hour if present
+            let vTime = repDate || new Date(day.date + 'T12:00:00');
+            if (fc.forecastController && typeof fc.forecastController.vignetteHour === 'number') {
+                vTime = new Date(day.date + 'T00:00:00');
+                vTime.setHours(fc.forecastController.vignetteHour | 0, ((fc.forecastController.vignetteHour % 1) * 60) | 0);
+            }
+            // Astro for exact vignette time
+            const vAstro = astronomyService.update(vTime, weatherService.latitude, weatherService.longitude);
+            // position lights (important: astro does NOT set them)
+            if (sunLight) sunLight.position.copy(vAstro.sunPosition);
+            if (moonLight) moonLight.position.copy(vAstro.moonPosition);
+            // single lighting
+            const snap = getWeatherAtTime(vTime, state.weatherData.timeline || []) || day.hourly?.[0] || { weatherCode: day.weatherCode, cloudCover: 40 };
+            updateSingleWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, snap, vAstro);
+            // effects single vignette (center systems)
+            const windC = snap.windDirection != null ? snap : (day.hourly && day.hourly[0]) || snap;
+            weatherEffects.updateVignette(snap, delta, ambientLight.color, sunLight ? sunLight.position : null);
+            // sundial
+            if (sundial && sundial.update) sundial.update(vTime);
+        } else if (fc?.isForecastMode()) {
+            // still drive basic effects lightly even without focus
+            weatherEffects.updateVignette({ weatherCode: 0, cloudCover: 30, windSpeed: 5 }, delta * 0.6);
         }
 
         // ── Atmosphere theme (drives CSS custom properties) ──

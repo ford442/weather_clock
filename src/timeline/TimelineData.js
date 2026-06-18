@@ -9,6 +9,8 @@
  * - Accuracy metrics (MAE, RMSE, Skill Score)
  */
 
+import SunCalc from 'suncalc';
+
 const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1';
 const OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1';
 const OPEN_METEO_CLIMATE = 'https://climate-api.open-meteo.com/v1';
@@ -605,6 +607,80 @@ export class TimelineData {
         if (code >= 85 && code <= 86) return 'snow';
         if (code >= 95) return 'storm';
         return 'clear';
+    }
+
+    /**
+     * Get the next N forecast days (today + future).
+     * Convenience for 10-Day Forecast View (re-uses full timeline fetch + filters).
+     *
+     * @param {number} lat
+     * @param {number} lon
+     * @param {number} count - Number of days (default 10)
+     * @returns {Promise<DayData[]>}
+     */
+    async getForecastDays(lat, lon, count = 10) {
+        const all = await this.fetchTimelineData(lat, lon);
+        // Return only forecast-typed days, up to count
+        const forecastDays = all.filter(d => d.type === 'forecast').slice(0, count);
+        return forecastDays;
+    }
+
+    /**
+     * Given a DayData (with .date and .hourly), return a representative Date for
+     * vignette rendering (solar noon preferred via SunCalc, else local midday).
+     * This Date can be fed directly to AstronomyService and getWeatherAtTime.
+     */
+    getRepresentativeTimeForDay(dayData, lat, lon) {
+        if (!dayData || !dayData.date) return null;
+        const base = new Date(dayData.date + 'T12:00:00');
+
+        try {
+            const times = SunCalc.getTimes(base, lat || 40.7, lon || -74);
+            if (times && times.solarNoon) {
+                return new Date(times.solarNoon);
+            }
+        } catch (e) {
+            // fall through
+        }
+        // Fallback: noon on that calendar day (local interpretation)
+        const noon = new Date(dayData.date + 'T12:00:00');
+        return noon;
+    }
+
+    /**
+     * Pick a weather snapshot for the day suitable for a vignette preview.
+     * Prefers a point near the provided representative time or solar noon hour.
+     * Falls back to first or avg-ish entry.
+     */
+    getWeatherSnapshotForDay(dayData, representativeDate = null) {
+        if (!dayData || !Array.isArray(dayData.hourly) || dayData.hourly.length === 0) {
+            // Synthesize minimal from daily
+            return {
+                weatherCode: dayData.weatherCode || 0,
+                cloudCover: 50,
+                windSpeed: 10,
+                temp: dayData.tempAvg,
+                description: this.simplifyWeatherCondition(dayData.weatherCode || 0)
+            };
+        }
+
+        let targetTs = representativeDate ? representativeDate.getTime() : null;
+        if (!targetTs && dayData.hourly.length > 0) {
+            // guess midday ~ 12:00
+            targetTs = new Date(dayData.date + 'T12:00:00').getTime();
+        }
+
+        let best = dayData.hourly[0];
+        let bestDiff = Infinity;
+        for (const h of dayData.hourly) {
+            const ht = h.time instanceof Date ? h.time.getTime() : new Date(h.time).getTime();
+            const diff = Math.abs(ht - targetTs);
+            if (diff < bestDiff) {
+                bestDiff = diff;
+                best = h;
+            }
+        }
+        return { ...best };
     }
 
     /**

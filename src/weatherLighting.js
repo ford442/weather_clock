@@ -14,81 +14,50 @@ export const getSeverity = (code) => {
     return 30; // Other conditions
 };
 
-export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, weatherData, astroData) {
-    if (!weatherData) return;
-
-    // Calculate day/night factor based on current sun altitude (sunLight.position.y)
-    // We assume sunLight.position has been updated to the correct astronomical position before this call.
-    // NOTE: This function must NOT modify sunLight.position, as it is controlled by the astronomy service.
-    const sunY = sunLight.position.y;
-    let dayFactor = 1.0;
-
-    // Smooth transition around horizon (y=-6 to y=6)
-    // Extended for Civil Twilight realism (sun below horizon still gives light)
+/**
+ * Compute day/night factor from sun altitude (Y in scene units).
+ * Extended civil twilight range.
+ */
+export function getDayFactor(sunY) {
     const twilightRange = 6.0;
-    if (sunY < -twilightRange) dayFactor = 0;
-    else if (sunY > twilightRange) dayFactor = 1;
-    else dayFactor = (sunY + twilightRange) / (twilightRange * 2);
+    if (sunY < -twilightRange) return 0;
+    if (sunY > twilightRange) return 1;
+    return (sunY + twilightRange) / (twilightRange * 2);
+}
 
-    // Calculate target lighting based on past, current, and forecast
-    const pastWeight = 0.2;
-    const currentWeight = 0.5;
-    const forecastWeight = 0.3;
+/**
+ * Core lighting application for a *single* weather snapshot (used by both
+ * the classic triple blend and the new 10-day forecast vignettes).
+ * weatherSnap may contain: cloudCover, weatherCode, windSpeed, visibility, severity.
+ */
+export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, weatherSnap, astroData) {
+    if (!weatherSnap) return;
 
-    // Get cloud cover values
-    const pastCloud = weatherData.past?.cloudCover || 50;
-    const currentCloud = weatherData.current?.cloudCover || 50;
-    const forecastCloud = weatherData.forecast?.cloudCover || 50;
+    const sunY = sunLight ? sunLight.position.y : 0;
+    const dayFactor = getDayFactor(sunY);
 
-    // Get weather codes
-    const pastCode = weatherData.past?.weatherCode || 0;
-    const currentCode = weatherData.current?.weatherCode || 0;
-    const forecastCode = weatherData.forecast?.weatherCode || 0;
-
-    // Calculate weighted cloud cover
-    const weightedCloud = 
-        pastCloud * pastWeight +
-        currentCloud * currentWeight +
-        forecastCloud * forecastWeight;
-
-    // Helper to get severity from object (if pre-interpolated) or code
-    const getSev = (data) => data && data.severity !== undefined ? data.severity : getSeverity(data?.weatherCode || 0);
-
-    const weightedSeverity = 
-        getSev(weatherData.past) * pastWeight +
-        getSev(weatherData.current) * currentWeight +
-        getSev(weatherData.forecast) * forecastWeight;
-
-    // Calculate weighted wind speed for flickering effects
-    const getWind = (data) => data?.windSpeed || 0;
-    const weightedWind =
-        getWind(weatherData.past) * pastWeight +
-        getWind(weatherData.current) * currentWeight +
-        getWind(weatherData.forecast) * forecastWeight;
+    const cloud = weatherSnap.cloudCover ?? 50;
+    const code = weatherSnap.weatherCode ?? 0;
+    const wind = weatherSnap.windSpeed ?? 0;
+    const vis = weatherSnap.visibility ?? 10000;
+    const sev = weatherSnap.severity !== undefined ? weatherSnap.severity : getSeverity(code);
 
     // --- SUN LIGHTING ---
-    // Calculate target sun light intensity based on cloud cover and weather AND day/night
     const baseSunIntensity = 2.0;
-    // Don't reduce intensity too much for clouds, just diffuse it
-    const cloudSunFactor = 1 - (weightedCloud / 100) * 0.4;
-    const severityFactor = 1 - (weightedSeverity / 100) * 0.4;
-
+    const cloudSunFactor = 1 - (cloud / 100) * 0.4;
+    const severityFactor = 1 - (sev / 100) * 0.4;
     const targetSunIntensity = baseSunIntensity * cloudSunFactor * severityFactor * dayFactor;
 
     // --- MOON LIGHTING ---
     let targetMoonIntensity = 0;
-    let targetMoonColor = new THREE.Color(0x8899cc); // Default blue-ish
+    let targetMoonColor = new THREE.Color(0x8899cc);
 
     if (astroData && moonLight) {
-        // Moon phase illumination
         const moonIllum = astroData.moonIllumination ? astroData.moonIllumination.fraction : 0.5;
         const moonIntensityBase = 0.5 * moonIllum;
 
-        // Calculate cloud attenuation for moon (more aggressive than sun)
-        // 100% cloud cover reduces light to 10%
-        const cloudMoonFactor = 1 - (weightedCloud / 100) * 0.9;
+        const cloudMoonFactor = 1 - (cloud / 100) * 0.9;
 
-        // Horizon dimming
         const moonY = moonLight.position.y;
         let moonHorizonFactor = 1.0;
         if (moonY < -2) moonHorizonFactor = 0;
@@ -97,19 +66,13 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
 
         targetMoonIntensity = moonIntensityBase * cloudMoonFactor * moonHorizonFactor;
 
-        // Calculate Moon Color (Photorealistic Upgrade)
-        // Deep Navy (0x0f1c30) for new moon -> Bright Silver (0xe0e0ff) for full moon
-        // This gives a much richer night atmosphere than the previous simple blue.
         const minColor = new THREE.Color(0x0f1c30);
         const maxColor = new THREE.Color(0xe0e0ff);
         targetMoonColor.copy(minColor).lerp(maxColor, moonIllum);
 
-        // Boost intensity slightly for full moon to cast clearer shadows
         if (moonIllum > 0.8) targetMoonIntensity *= 1.2;
-
-        // Tint with weather? If storming, shift towards a moody slate grey
-        if (weightedSeverity > 50) {
-             targetMoonColor.lerp(new THREE.Color(0x2a2a35), 0.6);
+        if (sev > 50) {
+            targetMoonColor.lerp(new THREE.Color(0x2a2a35), 0.6);
         }
     }
 
@@ -117,12 +80,9 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
     if (sky) {
         const uniforms = sky.material.uniforms;
 
-        // Use Sun position for scattering
-        let scatteringSource = sunLight.position.clone();
+        let scatteringSource = (sunLight && sunLight.position) ? sunLight.position.clone() : new THREE.Vector3(0, 1, 0);
         let isMoonSource = false;
 
-        // If Sun is down, use Moon for scattering to keep sky interesting (Moonlight)
-        // Check elevation
         if (scatteringSource.y < -0.1 && moonLight && moonLight.position.y > 0) {
             scatteringSource.copy(moonLight.position);
             isMoonSource = true;
@@ -130,177 +90,170 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
 
         uniforms['sunPosition'].value.copy(scatteringSource).normalize();
 
-        // Adjust Turbidity (haze) based on clouds and severity
-        // Photorealistic Tuning:
-        // Clear day: ~2. Storm: ~20 (More haze/density).
-        // We increase range to make storms look oppressive.
-        const targetTurbidity = 2.0 + (weightedCloud / 100) * 10.0 + (weightedSeverity / 100) * 18.0;
+        const targetTurbidity = 2.0 + (cloud / 100) * 10.0 + (sev / 100) * 18.0;
         uniforms['turbidity'].value = targetTurbidity;
 
-        // Rayleigh (scattering) - Determines sky color.
-        // 3.0 = Nice Blue. Lower = Darker/Greyer. Higher = Redder sunset.
-        // During heavy weather, we want a darker sky, so we drop Rayleigh slightly less aggressively
-        // but ensure Turbidity does the work of "greying" it out.
-        // Start: 3.0. Storm: 0.8.
-        const targetRayleigh = 3.0 - (weightedSeverity / 100) * 2.2;
+        const targetRayleigh = 3.0 - (sev / 100) * 2.2;
         uniforms['rayleigh'].value = targetRayleigh;
 
-        // Mie Coefficient (fog/scattering)
-        // Clear: 0.005, Cloudy: 0.05
-        const targetMie = 0.005 + (weightedCloud / 100) * 0.05;
+        const targetMie = 0.005 + (cloud / 100) * 0.05;
         uniforms['mieCoefficient'].value = targetMie;
 
-        // Mie Directional G (glare)
         uniforms['mieDirectionalG'].value = 0.7;
     }
 
-    // Update Fog
-    if (scene.fog) {
-        // Fog density
-        // Clear: 0.002, Heavy Cloud/Rain: 0.05
-        // Visibility check: If visibility is low (e.g. < 1000m), increase fog
-        // Note: weightedCloud is 0-100.
-
+    // Update Fog (single snap uses its own visibility if present)
+    if (scene && scene.fog) {
         let visibilityFactor = 0;
-        if (weatherData.current && weatherData.current.visibility !== undefined) {
-             // Visibility < 2000m starts adding fog
-             const vis = weatherData.current.visibility;
-             if (vis < 2000) {
-                 visibilityFactor = 1.0 - (vis / 2000); // 0 at 2000m, 1 at 0m
-             }
+        if (vis < 2000) {
+            visibilityFactor = 1.0 - (vis / 2000);
         }
-
-        let targetFogDensity = 0.0001 + (weightedCloud / 100) * 0.005 + (weightedSeverity / 100) * 0.03 + visibilityFactor * 0.05;
-        // CAP Fog density to avoid "Grey Screen of Death"
-        // Capped at 0.025 to prevent visibility loss
+        let targetFogDensity = 0.0001 + (cloud / 100) * 0.005 + (sev / 100) * 0.03 + visibilityFactor * 0.05;
         if (targetFogDensity > 0.025) targetFogDensity = 0.025;
 
-        // Interpolate current density to target
         scene.fog.density += (targetFogDensity - scene.fog.density) * 0.05;
 
-        // Fog color matching ambient/sky
-        // We use the same target ambient color but maybe slightly lighter/bluer
         const fogColor = new THREE.Color().copy(ambientLight.color).multiplyScalar(0.8);
         scene.fog.color.lerp(fogColor, transitionSpeed);
     }
 
-    // Calculate target ambient light intensity
-    // Minimum ambient at night (moonlight ambient)
+    // Ambient target
     const nightAmbient = 0.05;
-    // Ambient should be higher when cloudy (scattering) relative to sun
-    // Base day ambient 0.5
     const dayAmbient = 0.5;
     const targetAmbientIntensity = nightAmbient + (dayAmbient - nightAmbient) * dayFactor;
 
-    // Calculate sun color based on weather
-    // Enhanced palette for realism:
-    // Thunderstorm: Cold, bluish-white (electric).
-    // Snow: Clean white (no yellow tint).
-    // Rain: Muted, desaturated warm grey.
-    // Overcast: Flat white.
-    // Clear: Warm, golden-white.
+    // Sun color (single uses the snap's code + cloud)
     let targetSunColor;
-    if (currentCode >= 95) {
-        targetSunColor = new THREE.Color(0xccccff); // Electric Blue-White
-    } else if (currentCode >= 70 && currentCode <= 77) { // Snow
-        targetSunColor = new THREE.Color(0xf0f8ff); // Alice Blue / Ice White
-    } else if (currentCode >= 60) { // Rain
-        targetSunColor = new THREE.Color(0xddeeff); // Cool White
-    } else if (weightedCloud > 70) {
-        targetSunColor = new THREE.Color(0xeeeeee); // Flat White
-    } else if (weightedCloud > 40) {
-        targetSunColor = new THREE.Color(0xfffae0); // Soft Yellow-White
+    if (code >= 95) {
+        targetSunColor = new THREE.Color(0xccccff);
+    } else if (code >= 70 && code <= 77) {
+        targetSunColor = new THREE.Color(0xf0f8ff);
+    } else if (code >= 60) {
+        targetSunColor = new THREE.Color(0xddeeff);
+    } else if (cloud > 70) {
+        targetSunColor = new THREE.Color(0xeeeeee);
+    } else if (cloud > 40) {
+        targetSunColor = new THREE.Color(0xfffae0);
     } else {
-        targetSunColor = new THREE.Color(0xfff0c0); // Golden White
+        targetSunColor = new THREE.Color(0xfff0c0);
     }
 
-    // Dynamic Horizon Color Shift (Sunset/Sunrise/Dusk)
-    // If clear enough, tint sun orange near horizon, then purple below
-    if (weightedCloud < 70 && currentCode < 60) {
-        if (sunY >= 0 && sunY < 10) {
-            // Sunset Orange
-            const sunsetColor = new THREE.Color(0xffaa55); // Rich Orange
-            const sunsetFactor = 1.0 - (sunY / 10.0); // 1.0 at horizon, 0.0 at 30 deg elevation
-            // Blend towards orange
+    // Horizon tint (use snap's code/cloud)
+    if (cloud < 70 && code < 60 && sunLight) {
+        const sY = sunLight.position.y;
+        if (sY >= 0 && sY < 10) {
+            const sunsetColor = new THREE.Color(0xffaa55);
+            const sunsetFactor = 1.0 - (sY / 10.0);
             targetSunColor.lerp(sunsetColor, sunsetFactor * 0.7);
-        } else if (sunY < 0 && sunY > -6) {
-             // Dusk Purple (Aether Architect: "Dusk Purple")
-             const sunsetColor = new THREE.Color(0xffaa55);
-             const duskColor = new THREE.Color(0x8855aa); // Deep Purple
-
-             // Factor: 0 at horizon (Orange), 1 at -6 (Purple)
-             const t = Math.abs(sunY) / 6.0;
-
-             // Start with Orange base (matching the sunset end state)
-             const base = new THREE.Color().copy(targetSunColor).lerp(sunsetColor, 0.7);
-
-             // Blend towards Purple
-             targetSunColor.copy(base).lerp(duskColor, t);
+        } else if (sY < 0 && sY > -6) {
+            const sunsetColor = new THREE.Color(0xffaa55);
+            const duskColor = new THREE.Color(0x8855aa);
+            const t = Math.abs(sY) / 6.0;
+            const base = new THREE.Color().copy(targetSunColor).lerp(sunsetColor, 0.7);
+            targetSunColor.copy(base).lerp(duskColor, t);
         }
     }
 
-    // Calculate ambient color
+    // Ambient color
     let targetAmbientColor;
-    if (weightedSeverity > 70) {
-        targetAmbientColor = new THREE.Color(0x333355); // Deeper Blue-Grey
-    } else if (weightedSeverity > 40) { // Rain/Moderate weather (Code 63 is here)
-        // Darker, bluer grey for rain
+    if (sev > 70) {
+        targetAmbientColor = new THREE.Color(0x333355);
+    } else if (sev > 40) {
         targetAmbientColor = new THREE.Color(0x555577);
-    } else if (weightedCloud > 60) {
+    } else if (cloud > 60) {
         targetAmbientColor = new THREE.Color(0x888899);
     } else {
         targetAmbientColor = new THREE.Color(0xffffff);
     }
 
-    // Tint ambient blue-ish at night, with a Purple Dusk transition
-    // Aether Architect: "Dusk Purple" - Smooth gradient from Sunset Orange -> Purple -> Night Blue
     if (dayFactor < 0.5) {
         const nightColor = new THREE.Color(0x111122);
-        const duskColor = new THREE.Color(0x6a4a7c); // Rich Purple
-
-        // dayFactor: 0.5 (Horizon) -> 0.0 (Night)
-        // We want Purple peak around 0.25 (Mid-Twilight)
-
+        const duskColor = new THREE.Color(0x6a4a7c);
         if (dayFactor > 0.2) {
-            // Horizon (0.5) -> Dusk (0.2)
-            // Interpolate from Current (White/Grey) to Dusk Purple
-            // factor goes 0.0 -> 1.0
             const t = (0.5 - dayFactor) / 0.3;
             targetAmbientColor.lerp(duskColor, t);
         } else {
-            // Dusk (0.2) -> Night (0.0)
-            // Interpolate from Dusk Purple to Night Blue
             const t = (0.2 - dayFactor) / 0.2;
-            // Start at Dusk
             targetAmbientColor.copy(duskColor).lerp(nightColor, t);
         }
     }
 
-    // Smoothly transition intensities
+    // Transitions + flicker (use provided snap wind)
     previousIntensity.sun += (targetSunIntensity - previousIntensity.sun) * transitionSpeed;
     previousIntensity.ambient += (targetAmbientIntensity - previousIntensity.ambient) * transitionSpeed;
     previousIntensity.moon += (targetMoonIntensity - previousIntensity.moon) * transitionSpeed;
 
-    // Apply Wind Flicker (Aether's "Feel the Time")
-    // If wind is high, light flickers slightly (clouds passing fast, rustling)
     let flicker = 1.0;
-    if (weightedWind > 20) {
+    if (wind > 20) {
         const time = performance.now() * 0.001;
-        // Combine sines for organic flicker
         const noise = Math.sin(time * 10) * 0.5 + Math.sin(time * 23) * 0.3 + Math.sin(time * 41) * 0.2;
-        // Scale flicker magnitude by wind speed (max 10% variation at 100km/h)
-        const magnitude = Math.min(0.1, (weightedWind - 20) * 0.002);
+        const magnitude = Math.min(0.1, (wind - 20) * 0.002);
         flicker = 1.0 + noise * magnitude;
     }
 
-    sunLight.intensity = previousIntensity.sun * flicker;
-    ambientLight.intensity = previousIntensity.ambient * flicker;
+    if (sunLight) {
+        sunLight.intensity = previousIntensity.sun * flicker;
+        sunLight.color.lerp(targetSunColor, transitionSpeed);
+    }
+    if (ambientLight) {
+        ambientLight.intensity = previousIntensity.ambient * flicker;
+        ambientLight.color.lerp(targetAmbientColor, transitionSpeed);
+    }
     if (moonLight) {
-        moonLight.intensity = previousIntensity.moon * flicker; // Moon flickers too
+        moonLight.intensity = previousIntensity.moon * flicker;
         moonLight.color.lerp(targetMoonColor, transitionSpeed);
     }
+}
 
-    // Smoothly transition colors
-    sunLight.color.lerp(targetSunColor, transitionSpeed);
-    ambientLight.color.lerp(targetAmbientColor, transitionSpeed);
+/**
+ * Original triple-blend entry point (used by clock mode 3-zone).
+ * Computes weighted values then delegates to the single applicator.
+ */
+export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, weatherData, astroData) {
+    if (!weatherData) return;
+
+    const sunY = sunLight ? sunLight.position.y : 0;
+    const dayFactor = getDayFactor(sunY);
+
+    const pastWeight = 0.2;
+    const currentWeight = 0.5;
+    const forecastWeight = 0.3;
+
+    const pastCloud = weatherData.past?.cloudCover || 50;
+    const currentCloud = weatherData.current?.cloudCover || 50;
+    const forecastCloud = weatherData.forecast?.cloudCover || 50;
+
+    const pastCode = weatherData.past?.weatherCode || 0;
+    const currentCode = weatherData.current?.weatherCode || 0;
+    const forecastCode = weatherData.forecast?.weatherCode || 0;
+
+    const weightedCloud =
+        pastCloud * pastWeight +
+        currentCloud * currentWeight +
+        forecastCloud * forecastWeight;
+
+    const getSev = (data) => data && data.severity !== undefined ? data.severity : getSeverity(data?.weatherCode || 0);
+    const weightedSeverity =
+        getSev(weatherData.past) * pastWeight +
+        getSev(weatherData.current) * currentWeight +
+        getSev(weatherData.forecast) * forecastWeight;
+
+    const getWind = (data) => data?.windSpeed || 0;
+    const weightedWind =
+        getWind(weatherData.past) * pastWeight +
+        getWind(weatherData.current) * currentWeight +
+        getWind(weatherData.forecast) * forecastWeight;
+
+    // Build a "representative" snap for the applicator (color decisions lean on current)
+    const repSnap = {
+        cloudCover: weightedCloud,
+        weatherCode: currentCode,
+        windSpeed: weightedWind,
+        visibility: (weatherData.current && weatherData.current.visibility) || 10000,
+        severity: weightedSeverity
+    };
+
+    // Reuse the single implementation for actual application + sky/fog/transitions.
+    // Note: the single fn recomputes dayFactor internally from sunY; we already have it but it's cheap.
+    updateSingleWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, repSnap, astroData);
 }

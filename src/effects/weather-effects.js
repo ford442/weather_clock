@@ -58,6 +58,7 @@ export class WeatherEffects {
         this.raycaster = new THREE.Raycaster();
         this.downVector = new THREE.Vector3(0, -1, 0);
         this.flashIntensity = 0;
+        this._vignetteMode = false;
         this.reducedMotion = false;
         this.lightningTimeoutId = null;
 
@@ -239,5 +240,53 @@ export class WeatherEffects {
         }, 100 + Math.random() * 100);
 
         this.flashIntensity = 2.0;
+    }
+
+    /**
+     * Update for a single vignette (forecast day focused view).
+     * Drives only the "curr" systems centered around 0 for simplicity.
+     */
+    updateVignette(weatherSnap, delta = 0.016, lightColor = null, sunPos = null, moonPos = null, sunColor = null, moonColor = null) {
+        if (!weatherSnap) return;
+        const s = this.ensureIntensitiesForSnap(weatherSnap); // reuse existing logic if possible
+        const wind = s.windSpeed || 0;
+        const dir = s.windDirection || 0;
+        const rainI = s.rainIntensity || 0;
+        const snowI = s.snowIntensity || 0;
+        const fogI = s.fogIntensity || 0;
+        const code = s.weatherCode || 0;
+        const cCover = s.cloudCover || 40;
+
+        // Center the curr systems around origin for vignette (they were created with zone)
+        // We do not move them every frame; just feed intensity + wind. Visuals stay "local".
+        this.currRain.update(delta, wind, dir, rainI, this.raycaster, this.sundialGroup || null, this.createSplash.bind(this), lightColor);
+        this.currSnow.update(delta, wind, dir, snowI, lightColor);
+        this.currCumulus.update(delta, wind, Math.min(1, cCover / 55), cCover, code);
+        this.currStratus.update(delta, wind, Math.min(1, cCover / 70), cCover, code);
+        this.currCirrus.update(delta, wind, Math.min(1, cCover / 90), cCover, code);
+        this.currDust.update(delta, wind, dir, rainI, lightColor);
+        this.currFog.setIntensity(fogI);
+        this.currFog.update(delta, wind, dir);
+
+        if (sunPos) this.starField.update(sunPos);
+
+        if (code >= 95 && Math.random() < 0.012) this.createLightning();
+
+        this.splashSystem.update(lightColor);
+    }
+
+    // lightweight helper (mirrors ensure in weather-simulation)
+    ensureIntensitiesForSnap(d) {
+        if (!d) return {};
+        if (d.rainIntensity != null) return d;
+        const code = d.weatherCode || 0;
+        let rainI = 0, snowI = 0, fogI = 0;
+        const r = (d.rain || 0) + (d.showers || 0);
+        if (r > 0) rainI = Math.min(1, r / 5); else if (code >= 51) rainI = Math.min(1, (code - 50) / 30);
+        const sn = d.snowfall || 0;
+        if (sn > 0) snowI = Math.min(1, sn / 3); else if (code >= 71) snowI = Math.min(1, (code - 70) / 20);
+        if (code === 45 || code === 48) fogI = 1;
+        else if ((d.visibility || 10000) < 2000) fogI = Math.max(0, 1 - (d.visibility || 10000) / 2000);
+        return { ...d, rainIntensity: rainI, snowIntensity: snowI, fogIntensity: fogI };
     }
 }

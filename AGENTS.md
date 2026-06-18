@@ -15,9 +15,10 @@ This file applies to the entire `weather_clock` repository.
 - **Particle effects** — rain, snow, wind dust, volumetric-style clouds, stars, and lightning.
 - **Time simulation** — runs on a decoupled `simulationTime` with an optional time-warp feature (24-hour cycle in 60 seconds).
 
-The app has two viewing modes:
+The app has three viewing modes:
 1. **Clock Mode** — A 3D sundial with analog hands, surrounding sky, and overlaid weather panels.
 2. **Timeline Mode** — A 21-day horizontal timeline of weather columns. Toggle with the button in the top-right or press `T`.
+3. **10-Day Forecast View** — Strip of 10 daily vignette cards (2D previews) + click-to-focus live 3D scene with date-specific astronomy, wind, clouds, and precipitation. Time-of-day scrubber per day. Cycle modes with the top-right button.
 
 ---
 
@@ -62,7 +63,8 @@ The app has two viewing modes:
 | `moonPhase.js` | Moon phase math and visual moon mesh creation. |
 | `atmosphereTheme.js` | Updates CSS custom properties (`--accent`, `--glow`, `--trend-glow`, etc.) based on time of day and weather severity. |
 | `debug.js` | Exposes `window.setDebugWeather(code)`, `window.setDebugTime(hour)`, and `window.aetherDebug` for runtime inspection. |
-| `ModeController.js` | Manages switching between Clock and Timeline modes, camera animations, UI visibility toggles, drawer management, and browser history (`?mode=timeline`). |
+| `ModeController.js` | Manages switching between Clock, Timeline, and Forecast (10-day vignette) modes, camera animations, UI visibility toggles, and browser history (`?mode=...`). |
+| `forecast/` | ForecastController + ForecastUI + DailyPreview (2D). New mode for immersive future-day vignettes. |
 | `vendor/suncalc.js` | Vendored SunCalc library patched for ES module compatibility. |
 
 ### Timeline Subsystem (`src/timeline/`)
