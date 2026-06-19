@@ -4,6 +4,9 @@ import * as THREE from 'three';
 let previousIntensity = { sun: 0.8, moon: 0.0, ambient: 0.4 };
 const transitionSpeed = 0.01; // Slower transition (approx 5s)
 
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const lerp = (a, b, t) => a + (b - a) * t;
+
 // Calculate weighted severity (0 = clear, 100 = severe weather)
 export const getSeverity = (code) => {
     if (code === 0) return 0;
@@ -25,6 +28,64 @@ export function getDayFactor(sunY) {
     return (sunY + twilightRange) / (twilightRange * 2);
 }
 
+function getSeasonalWarmth(date = new Date(), lat = 40.7128) {
+    const d = date instanceof Date ? date : new Date(date);
+    const start = new Date(d.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((d - start) / 86400000);
+    const northernWarmth = (Math.sin(((dayOfYear - 80) / 365) * Math.PI * 2) + 1) / 2;
+    return lat < 0 ? 1 - northernWarmth : northernWarmth;
+}
+
+function getVisibilityHaze(visibility = 10000) {
+    if (visibility == null) return 0;
+    return clamp(1 - ((visibility - 2000) / 10000), 0, 1);
+}
+
+/**
+ * Forecast-day atmosphere controls for the Three Sky shader and lights.
+ * This is intentionally opt-in: clock mode omits weatherSnap.atmosphere and
+ * keeps the established live lighting formula.
+ */
+export function deriveDailyAtmosphere(weatherSnap, astroData = null, options = {}) {
+    const cloud = clamp(weatherSnap?.cloudCover ?? 50, 0, 100);
+    const cloudFactor = cloud / 100;
+    const code = weatherSnap?.weatherCode ?? 0;
+    const severity = clamp(weatherSnap?.severity ?? getSeverity(code), 0, 100) / 100;
+    const visibility = weatherSnap?.visibility ?? 10000;
+    const haze = clamp(getVisibilityHaze(visibility) * 0.75 + cloudFactor * 0.35 + severity * 0.4, 0, 1);
+    const seasonalWarmth = getSeasonalWarmth(options.date, options.lat ?? 40.7128);
+
+    const sunY = astroData?.sunPosition?.y ?? 0;
+    const dayFactor = getDayFactor(sunY);
+    const lowSunFactor = dayFactor > 0 ? clamp(1 - (sunY / 12), 0, 1) : 0;
+    const overcastFactor = clamp((cloudFactor - 0.55) / 0.45, 0, 1);
+    const brokenCloudFactor = cloudFactor > 0.25 && cloudFactor < 0.75 ? 1 : 0;
+
+    const clearBlueBoost = (1 - cloudFactor) * (0.75 + seasonalWarmth * 0.25);
+    const stormCooling = code >= 95 ? 1 : 0;
+    const snowCooling = code >= 70 && code <= 77 ? 1 : 0;
+
+    return {
+        turbidity: clamp(lerp(2.2, 9.5, cloudFactor) + haze * 9.5 + severity * 7.0 + lowSunFactor * 2.0, 2, 28),
+        rayleigh: clamp(lerp(1.25, 4.2, clearBlueBoost) - severity * 1.0 - overcastFactor * 0.8, 0.55, 4.5),
+        mieCoefficient: clamp(0.0035 + haze * 0.05 + cloudFactor * 0.018 + lowSunFactor * brokenCloudFactor * 0.018, 0.002, 0.09),
+        mieDirectionalG: clamp(0.68 + haze * 0.12 + lowSunFactor * brokenCloudFactor * 0.06, 0.62, 0.86),
+        sunIntensityMultiplier: clamp((0.78 + seasonalWarmth * 0.18) * (1 - overcastFactor * 0.45) * (1 - severity * 0.35), 0.18, 1.15),
+        ambientIntensityMultiplier: clamp(0.82 + overcastFactor * 0.55 + haze * 0.18, 0.72, 1.45),
+        moonIntensityMultiplier: clamp((1 - cloudFactor * 0.85) * (1 - haze * 0.35), 0.05, 1),
+        shadowRadius: lerp(0.8, 6.0, clamp(overcastFactor * 0.75 + haze * 0.35 + severity * 0.35, 0, 1)),
+        fogDensityMultiplier: clamp(0.75 + haze * 1.6 + severity * 0.7, 0.75, 3.0),
+        skyFogColor: new THREE.Color(0x9fb4ca).lerp(new THREE.Color(0x7f8791), clamp(overcastFactor + severity * 0.5, 0, 1)),
+        sunColor: new THREE.Color(0xfff2c8)
+            .lerp(new THREE.Color(0xffb36a), lowSunFactor * (1 - overcastFactor) * 0.55)
+            .lerp(new THREE.Color(0xdde7f2), overcastFactor * 0.5 + snowCooling * 0.3)
+            .lerp(new THREE.Color(0xbcc8ff), stormCooling * 0.35),
+        ambientColor: new THREE.Color(0xffffff)
+            .lerp(new THREE.Color(0x8d98a8), overcastFactor * 0.75)
+            .lerp(new THREE.Color(0x667089), severity * 0.45)
+    };
+}
+
 /**
  * Core lighting application for a *single* weather snapshot (used by both
  * the classic triple blend and the new 10-day forecast vignettes).
@@ -41,12 +102,14 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
     const wind = weatherSnap.windSpeed ?? 0;
     const vis = weatherSnap.visibility ?? 10000;
     const sev = weatherSnap.severity !== undefined ? weatherSnap.severity : getSeverity(code);
+    const atmosphere = weatherSnap.atmosphere || null;
+    const localTransitionSpeed = atmosphere ? 0.045 : transitionSpeed;
 
     // --- SUN LIGHTING ---
     const baseSunIntensity = 2.0;
     const cloudSunFactor = 1 - (cloud / 100) * 0.4;
     const severityFactor = 1 - (sev / 100) * 0.4;
-    const targetSunIntensity = baseSunIntensity * cloudSunFactor * severityFactor * dayFactor;
+    const targetSunIntensity = baseSunIntensity * cloudSunFactor * severityFactor * dayFactor * (atmosphere?.sunIntensityMultiplier ?? 1);
 
     // --- MOON LIGHTING ---
     let targetMoonIntensity = 0;
@@ -64,7 +127,7 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
         else if (moonY > 2) moonHorizonFactor = 1;
         else moonHorizonFactor = (moonY + 2) / 4;
 
-        targetMoonIntensity = moonIntensityBase * cloudMoonFactor * moonHorizonFactor;
+        targetMoonIntensity = moonIntensityBase * cloudMoonFactor * moonHorizonFactor * (atmosphere?.moonIntensityMultiplier ?? 1);
 
         const minColor = new THREE.Color(0x0f1c30);
         const maxColor = new THREE.Color(0xe0e0ff);
@@ -90,16 +153,22 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
 
         uniforms['sunPosition'].value.copy(scatteringSource).normalize();
 
-        const targetTurbidity = 2.0 + (cloud / 100) * 10.0 + (sev / 100) * 18.0;
+        const targetTurbidity = atmosphere?.turbidity ?? (2.0 + (cloud / 100) * 10.0 + (sev / 100) * 18.0);
         uniforms['turbidity'].value = targetTurbidity;
 
-        const targetRayleigh = 3.0 - (sev / 100) * 2.2;
+        const targetRayleigh = atmosphere?.rayleigh ?? (3.0 - (sev / 100) * 2.2);
         uniforms['rayleigh'].value = targetRayleigh;
 
-        const targetMie = 0.005 + (cloud / 100) * 0.05;
+        const targetMie = atmosphere?.mieCoefficient ?? (0.005 + (cloud / 100) * 0.05);
         uniforms['mieCoefficient'].value = targetMie;
 
-        uniforms['mieDirectionalG'].value = 0.7;
+        uniforms['mieDirectionalG'].value = atmosphere?.mieDirectionalG ?? 0.7;
+        sky.userData.atmosphere = {
+            turbidity: targetTurbidity,
+            rayleigh: targetRayleigh,
+            mieCoefficient: targetMie,
+            mieDirectionalG: uniforms['mieDirectionalG'].value
+        };
     }
 
     // Update Fog (single snap uses its own visibility if present)
@@ -108,13 +177,16 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
         if (vis < 2000) {
             visibilityFactor = 1.0 - (vis / 2000);
         }
-        let targetFogDensity = 0.0001 + (cloud / 100) * 0.005 + (sev / 100) * 0.03 + visibilityFactor * 0.05;
+        let targetFogDensity = (0.0001 + (cloud / 100) * 0.005 + (sev / 100) * 0.03 + visibilityFactor * 0.05)
+            * (atmosphere?.fogDensityMultiplier ?? 1);
         if (targetFogDensity > 0.025) targetFogDensity = 0.025;
 
         scene.fog.density += (targetFogDensity - scene.fog.density) * 0.05;
 
-        const fogColor = new THREE.Color().copy(ambientLight.color).multiplyScalar(0.8);
-        scene.fog.color.lerp(fogColor, transitionSpeed);
+        const fogColor = atmosphere?.skyFogColor
+            ? new THREE.Color().copy(atmosphere.skyFogColor)
+            : new THREE.Color().copy(ambientLight.color).multiplyScalar(0.8);
+        scene.fog.color.lerp(fogColor, localTransitionSpeed);
     }
 
     // Ambient target
@@ -124,7 +196,9 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
 
     // Sun color (single uses the snap's code + cloud)
     let targetSunColor;
-    if (code >= 95) {
+    if (atmosphere?.sunColor) {
+        targetSunColor = atmosphere.sunColor.clone();
+    } else if (code >= 95) {
         targetSunColor = new THREE.Color(0xccccff);
     } else if (code >= 70 && code <= 77) {
         targetSunColor = new THREE.Color(0xf0f8ff);
@@ -156,7 +230,9 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
 
     // Ambient color
     let targetAmbientColor;
-    if (sev > 70) {
+    if (atmosphere?.ambientColor) {
+        targetAmbientColor = atmosphere.ambientColor.clone();
+    } else if (sev > 70) {
         targetAmbientColor = new THREE.Color(0x333355);
     } else if (sev > 40) {
         targetAmbientColor = new THREE.Color(0x555577);
@@ -179,9 +255,10 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
     }
 
     // Transitions + flicker (use provided snap wind)
-    previousIntensity.sun += (targetSunIntensity - previousIntensity.sun) * transitionSpeed;
-    previousIntensity.ambient += (targetAmbientIntensity - previousIntensity.ambient) * transitionSpeed;
-    previousIntensity.moon += (targetMoonIntensity - previousIntensity.moon) * transitionSpeed;
+    const adjustedAmbientIntensity = targetAmbientIntensity * (atmosphere?.ambientIntensityMultiplier ?? 1);
+    previousIntensity.sun += (targetSunIntensity - previousIntensity.sun) * localTransitionSpeed;
+    previousIntensity.ambient += (adjustedAmbientIntensity - previousIntensity.ambient) * localTransitionSpeed;
+    previousIntensity.moon += (targetMoonIntensity - previousIntensity.moon) * localTransitionSpeed;
 
     let flicker = 1.0;
     if (wind > 20) {
@@ -193,15 +270,18 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
 
     if (sunLight) {
         sunLight.intensity = previousIntensity.sun * flicker;
-        sunLight.color.lerp(targetSunColor, transitionSpeed);
+        sunLight.color.lerp(targetSunColor, localTransitionSpeed);
+        if (sunLight.shadow && atmosphere?.shadowRadius != null) {
+            sunLight.shadow.radius += (atmosphere.shadowRadius - sunLight.shadow.radius) * localTransitionSpeed;
+        }
     }
     if (ambientLight) {
         ambientLight.intensity = previousIntensity.ambient * flicker;
-        ambientLight.color.lerp(targetAmbientColor, transitionSpeed);
+        ambientLight.color.lerp(targetAmbientColor, localTransitionSpeed);
     }
     if (moonLight) {
         moonLight.intensity = previousIntensity.moon * flicker;
-        moonLight.color.lerp(targetMoonColor, transitionSpeed);
+        moonLight.color.lerp(targetMoonColor, localTransitionSpeed);
     }
 }
 

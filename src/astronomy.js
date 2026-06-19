@@ -46,6 +46,66 @@ export class AstronomyService {
     }
 
     /**
+     * Calculate positions for an arbitrary date without exposing mutable service vectors.
+     * Useful for forecast vignettes, thumbnails, and tests that need stable snapshots.
+     */
+    getPositionsForDate(date, lat, lon, distance = 20) {
+        const data = this.update(date, lat, lon, distance);
+        return {
+            sunPosition: data.sunPosition.clone(),
+            moonPosition: data.moonPosition.clone(),
+            moonIllumination: { ...data.moonIllumination },
+            sunrise: data.sunrise,
+            sunset: data.sunset
+        };
+    }
+
+    /**
+     * Return local solar noon for a date/location, falling back to civil noon
+     * when SunCalc cannot provide a valid value for extreme locations/seasons.
+     */
+    getSolarNoon(date, lat, lon) {
+        const latitude = lat || 40.7128;
+        const longitude = lon || -74.0060;
+        const base = date instanceof Date ? date : new Date(date);
+        const times = SunCalc.getTimes(base, latitude, longitude);
+        if (times.solarNoon instanceof Date && Number.isFinite(times.solarNoon.getTime())) {
+            return times.solarNoon;
+        }
+
+        const fallback = new Date(base);
+        fallback.setHours(12, 0, 0, 0);
+        return fallback;
+    }
+
+    /**
+     * Build a Date on the same local day at a decimal hour, e.g. 18.5 = 18:30.
+     */
+    getDateAtHour(date, hour = 12) {
+        const base = date instanceof Date ? new Date(date) : new Date(date);
+        const clampedHour = Math.max(0, Math.min(23.99, Number(hour) || 0));
+        base.setHours(
+            Math.floor(clampedHour),
+            Math.floor((clampedHour % 1) * 60),
+            0,
+            0
+        );
+        return base;
+    }
+
+    /**
+     * Convenience wrapper for future-day forecast scrubbing.
+     */
+    getPositionsForDateAtHour(date, hour, lat, lon, distance = 20) {
+        return this.getPositionsForDate(
+            this.getDateAtHour(date, hour),
+            lat,
+            lon,
+            distance
+        );
+    }
+
+    /**
      * Convert SunCalc spherical coordinates to Three.js Cartesian.
      * Mapping assumptions:
      * Y = Up

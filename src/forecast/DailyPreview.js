@@ -4,17 +4,24 @@
  */
 
 import { AstronomyService } from '../astronomy.js';
+import { buildDailySceneSnapshot } from '../dailyScene.js';
+import { buildWeatherEffectConfig } from '../effects/weather-effects.js';
 
 const astro = new AstronomyService();
 
-export function renderDailyPreview(canvas, dayData, repDate, lat = 40.7, lon = -74) {
+export function renderDailyPreview(canvas, dayData, repDate, lat = 40.7, lon = -74, timeMs = 0) {
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: true });
     const w = canvas.width, h = canvas.height;
 
     // Background sky gradient (rough time of day + cloud factor)
-    const cloud = (dayData && (dayData.hourly?.[0]?.cloudCover ?? 40)) || 40;
-    const code = dayData?.weatherCode || 0;
+    const snap = buildDailySceneSnapshot(dayData, repDate);
+    const effectConfig = buildWeatherEffectConfig(snap, 'thumbnail');
+    const cloud = snap.cloudCover;
+    const code = snap.weatherCode;
+    const windRad = (90 - effectConfig.windDir) * Math.PI / 180;
+    const windX = Math.cos(windRad);
+    const windY = -Math.sin(windRad);
     const isNight = (repDate && (repDate.getHours() < 6 || repDate.getHours() > 20)) || false;
 
     let top = isNight ? '#0b1020' : '#1e3a8a';
@@ -64,20 +71,23 @@ export function renderDailyPreview(canvas, dayData, repDate, lat = 40.7, lon = -
     const nCloud = Math.floor(1 + (cloud / 100) * 4);
     ctx.fillStyle = 'rgba(226,232,240,0.75)';
     for (let i = 0; i < nCloud; i++) {
-        const px = 18 + (i % 3) * 28 + (i * 7 % 11);
-        const py = 18 + Math.floor(i / 3) * 9;
+        const windPhase = (timeMs * 0.0008 * Math.max(2, effectConfig.windSpeed)) % 24;
+        const windOffset = (windPhase + effectConfig.windSpeed * 0.35 + i * 8) % 24;
+        const px = 18 + (i % 3) * 28 + (i * 7 % 11) + windX * windOffset;
+        const py = 18 + Math.floor(i / 3) * 9 + windY * windOffset * 0.35;
         ctx.beginPath();
-        ctx.ellipse(px, py, 10 + (i % 2) * 3, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(px, py, 10 + (i % 2) * 3, 5, windRad * 0.18, 0, Math.PI * 2);
         ctx.fill();
     }
 
     // Precipitation (simple lines for rain, dots for snow)
-    const isRain = code >= 51 && code < 71;
-    const isSnow = code >= 71 && code < 80;
+    const isRain = effectConfig.precipType === 'rain';
+    const isSnow = effectConfig.precipType === 'snow';
     if (isRain || isSnow) {
         ctx.strokeStyle = isSnow ? '#e0f2fe' : '#bae6fd';
         ctx.lineWidth = isSnow ? 1 : 1.5;
-        for (let i = 0; i < (isSnow ? 12 : 8); i++) {
+        const precipCount = Math.max(isSnow ? 8 : 6, Math.floor((isSnow ? 12 : 10) * (0.35 + effectConfig.precipIntensity)));
+        for (let i = 0; i < precipCount; i++) {
             const x = 12 + (i * 17) % (w - 16);
             const y0 = 26 + (i * 11) % (h * 0.4);
             if (isSnow) {
@@ -86,7 +96,7 @@ export function renderDailyPreview(canvas, dayData, repDate, lat = 40.7, lon = -
             } else {
                 ctx.beginPath();
                 ctx.moveTo(x, y0);
-                ctx.lineTo(x + 2, y0 + 11);
+                ctx.lineTo(x + 2 + windX * 5, y0 + 11 + windY * 2);
                 ctx.stroke();
             }
         }

@@ -21,9 +21,12 @@ export class ForecastController {
         this.days = [];               // DayData[] (next 10)
         this.focusedIndex = 0;        // which day is expanded in main view
         this.vignetteHour = 12;       // 0-23.99 for scrubber
+        this.isPlayingDay = false;
+        this.playHoursPerSecond = 0.75;
 
         this.onDayFocus = null;       // (index, dayData, repDate) => void
         this.onDataLoaded = null;
+        this.onHourChange = null;
 
         this.isVisible = false;
         this.isLoading = false;
@@ -82,15 +85,25 @@ export class ForecastController {
 
     setVignetteHour(hour) {
         this.vignetteHour = Math.max(0, Math.min(23.99, hour));
+        if (this.onHourChange) this.onHourChange(this.vignetteHour);
+    }
+
+    toggleDayPlayback(forceState = null) {
+        this.isPlayingDay = forceState == null ? !this.isPlayingDay : !!forceState;
+        return this.isPlayingDay;
     }
 
     update(delta) {
-        // Future: per-vignette animation, particles for thumbnails etc.
+        if (!this.isPlayingDay) return;
+        const nextHour = this.vignetteHour + delta * this.playHoursPerSecond;
+        this.setVignetteHour(nextHour >= 24 ? nextHour % 24 : nextHour);
     }
 
     dispose() {
         this.days = [];
+        this.isPlayingDay = false;
         this.onDayFocus = null;
         this.onDataLoaded = null;
+        this.onHourChange = null;
     }
 }

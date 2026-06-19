@@ -47,7 +47,7 @@ The goal: make time *visible* and *tactile*—a living, breathing environment in
 - **Decoupled Time** — Simulation time is independent of system time, enabling time-lapse and "rewind" features without touching the clock.
 - **Time Warp** — Fast-forward mode to witness a full 24-hour cycle in 60 seconds, perfect for understanding daily weather patterns.
 - **Smooth Interpolation** — Weather state changes (e.g., Clear → Rain) are interpolated over 5 seconds to prevent visual snapping and jarring transitions.
-- **10-Day Forecast View** — Toggle (or press through modes) to a beautiful strip of 10 immersive vignette cards. Click any day to focus a live 3D scene with accurate future-date sun position, wind, clouds, and precipitation + time-of-day scrubber.
+- **10-Day Forecast View** — Toggle (or press through modes) to a strip of 10 animated canvas vignette cards. Click, tap, or keyboard-focus any day to drive one shared high-quality 3D `DailyScene` with accurate future-date sun/moon position, wind-directed clouds, precipitation, and a time-of-day scrubber.
 
 ## 🛠️ Setup & Running
 
@@ -106,6 +106,9 @@ Ensure the dev server is running (`npm run dev`), then run the consolidated veri
 ```bash
 # Run all visual tests and compare against baselines
 python3 verification/run_all.py
+
+# Run the 10-day forecast focused-view smoke and capture representative days
+python3 verification/verify_forecast_view.py
 ```
 
 If visual regressions are expected or intended (e.g., after updating shaders or lighting), you can update the committed baseline images locally using the `VISUAL_UPDATE` environment flag:
@@ -137,6 +140,8 @@ window.aetherDebug.getSimulationTime();    // Current simulation time
 window.aetherDebug.getWeatherData();       // Fetched weather payload
 window.aetherDebug.getSunPosition();       // Sun azimuth/elevation
 window.aetherDebug.getMoonPosition();      // Moon azimuth/elevation
+window.aetherDebug.getPerformanceMetrics();      // FPS, quality tier, active mode
+window.aetherDebug.getForecastPreviewMetrics();  // 10-day canvas preview budget
 ```
 
 Perfect for quickly testing edge cases (midnight snow, sunset storms, etc.) without waiting for real weather.
@@ -155,6 +160,15 @@ Perfect for quickly testing edge cases (midnight snow, sunset storms, etc.) with
 - **Shader-First** — Complex visuals (sky, lighting) are handled in GLSL, not CPU logic
 - **Object Pooling** — Particles are reused to minimize garbage collection
 - **Decoupled Simulation** — Time runs independently of renderer, enabling time-warp and replays
+- **Forecast Rendering Budget** — The 10-day strip uses cheap 2D canvas previews throttled to ~10 fps and paused for hidden/reduced-motion states. The focused forecast view reuses one full Three.js scene through `DailyScene`; do not add per-card WebGL renderers.
+
+### 10-Day Forecast Architecture
+
+- `src/dailyScene.js` owns the focused forecast scene adapter. It accepts a day, representative time/hour, location, quality preset, and existing renderer scene resources.
+- `src/forecast/DailyPreview.js` renders card previews on 2D canvas using the same daily snapshot/effect mapping as the focused scene.
+- `src/effects/weather-effects.js` exposes `buildWeatherEffectConfig()` for forecast-specific cloud, wind, rain, snow, and quality-tier mapping.
+- `src/weatherLighting.js` exposes `deriveDailyAtmosphere()` for future-date sky uniforms and per-day light color/intensity.
+- `ForecastUI` keeps thumbnails cheap: visible-card-only redraw, hidden-tab pause, reduced-motion static fallback, and a single shared RAF.
 
 ## 🤝 Contributing
 

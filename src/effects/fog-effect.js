@@ -72,4 +72,20 @@ export class FogEffect {
             if (mesh.position.z < -8) mesh.position.z = 8;
         });
     }
+
+    setVisible(visible) {
+        this.planes.forEach(({ mesh }) => {
+            mesh.visible = visible && this.currentOpacity >= 0.005;
+        });
+    }
+
+    dispose() {
+        this.planes.forEach(({ mesh }) => {
+            this.scene.remove(mesh);
+            mesh.geometry?.dispose?.();
+            mesh.material?.map?.dispose?.();
+            mesh.material?.dispose?.();
+        });
+        this.planes = [];
+    }
 }

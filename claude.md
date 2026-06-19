@@ -26,7 +26,9 @@ npm run dev
 - **`main.js`** - Initializes renderer, scene, and animation loop
 - **`astronomy.js`** - Sun/moon position calculations (wraps SunCalc)
 - **`weather.js`** - Fetches Open-Meteo data and manages weather state
-- **`weatherEffects.js`** - Particle system for rain, snow, clouds
+- **`effects/weather-effects.js`** - Particle system coordinator for rain, snow, clouds, wind dust, fog, and forecast vignette effects
+- **`dailyScene.js`** - Focused 10-day forecast scene adapter; reuses the main Three.js scene, sky, lights, sundial, and pooled weather effects for one selected day
+- **`forecast/`** - 10-day forecast controller, UI strip, and cheap 2D canvas daily previews
 - **`weatherLighting.js`** - Sky shaders, lighting, bloom post-processing
 - **`moonPhase.js`** - Moon phase calculations and visual rendering
 - **`sundial.js`** - Ground plane and sundial geometry
@@ -61,6 +63,12 @@ npm run dev
 - InstancedMesh reuses particle geometry to minimize garbage collection
 - Object pooling pattern for rain/snow drops
 - Wind vector influences particle trajectories
+
+### 5. **10-Day Forecast Rendering Budget**
+- Do not create 10 WebGL renderers for forecast cards.
+- Cards use `DailyPreview` 2D canvas snapshots/light animation, throttled to about 10 fps and paused when hidden or reduced-motion is active.
+- The focused day uses one `DailyScene` instance that swaps day data and drives the existing sky, lights, sundial, and `WeatherEffects`.
+- Forecast weather effect mapping lives in `buildWeatherEffectConfig()`; atmosphere mapping lives in `deriveDailyAtmosphere()`.
 
 ## Testing & Verification
 
@@ -107,15 +115,23 @@ window.aetherDebug.getSimulationTime();
 window.aetherDebug.getWeatherData();
 window.aetherDebug.getSunPosition();
 window.aetherDebug.getMoonPosition();
+window.aetherDebug.getPerformanceMetrics();
+window.aetherDebug.getForecastPreviewMetrics();
 ```
 
 ## Common Tasks
 
 ### Add a New Weather Effect
-1. Define particle behavior in `weatherEffects.js`
+1. Define particle behavior in `effects/weather-effects.js`
 2. Create shader if needed in `shaders.js`
 3. Map weather code in `weather.js`
 4. Add test case in `verification/`
+
+### Modify the 10-Day Forecast View
+1. Keep card previews in `forecast/DailyPreview.js` as 2D canvas work unless there is a measured reason to change.
+2. Put focused-scene behavior in `dailyScene.js`.
+3. Reuse `buildWeatherEffectConfig()` for cloud, wind, and precipitation mapping.
+4. Verify with `python3 verification/verify_forecast_view.py` while the dev server is running.
 
 ### Modify Sky Appearance
 1. Edit GLSL in `weatherLighting.js` (sky shader)

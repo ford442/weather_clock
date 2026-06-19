@@ -49,6 +49,8 @@ export class CloudSystem extends ParticleSystemBase {
 
         this.clouds = [];
         this.dummy = new THREE.Object3D();
+        this.currentWindX = 0;
+        this.currentWindZ = 0;
         // Reusable quaternion for puff spin
         this._spinQuat = new THREE.Quaternion();
         this._spinAxis = new THREE.Vector3(0, 0, 1);
@@ -158,7 +160,7 @@ export class CloudSystem extends ParticleSystemBase {
         return puffs;
     }
 
-    update(delta, windSpeed, cloudCover, lightColor, sunPos, moonPos, sunColor, moonColor, weatherCode = 0) {
+    update(delta, windSpeed, cloudCover, lightColor, sunPos, moonPos, sunColor, moonColor, weatherCode = 0, windDir = 90) {
         // Update global lighting uniforms (shared across all cloud systems)
         if (lightColor) cloudShaderInjection.uniforms.uAmbientColor.value.copy(lightColor);
         if (sunPos)     cloudShaderInjection.uniforms.uSunPosition.value.copy(sunPos);
@@ -201,6 +203,15 @@ export class CloudSystem extends ParticleSystemBase {
         const camQuat = this.camera.quaternion;
         const time = Date.now() * 0.001;
         const { windMult } = this.cfg;
+        const rad = (90 - windDir) * Math.PI / 180;
+        const moveSpeed = (0.05 + windSpeed * 0.01) * delta * windMult;
+        const targetWindX = Math.cos(rad) * moveSpeed;
+        const targetWindZ = -Math.sin(rad) * moveSpeed;
+        const windSmooth = Math.min(1, delta * 2.5);
+        this.currentWindX += (targetWindX - this.currentWindX) * windSmooth;
+        this.currentWindZ += (targetWindZ - this.currentWindZ) * windSmooth;
+        const zMin = -7;
+        const zMax = 7;
 
         // Instance color: top = white, bottom = shadow tinted by stormFactor
         // Storm tops are darker overall
@@ -216,11 +227,12 @@ export class CloudSystem extends ParticleSystemBase {
         for (let i = 0; i < this.clouds.length; i++) {
             const cloud = this.clouds[i];
 
-            // Move cloud horizontally (cirrus faster, stratus slower)
-            const moveSpeed = (0.05 + windSpeed * 0.01) * delta * windMult;
-            cloud.x += moveSpeed;
+            cloud.x += this.currentWindX;
+            cloud.z += this.currentWindZ;
             if (cloud.x > this.zone.maxX) cloud.x = this.zone.minX;
             if (cloud.x < this.zone.minX) cloud.x = this.zone.maxX;
+            if (cloud.z > zMax) cloud.z = zMin;
+            if (cloud.z < zMin) cloud.z = zMax;
 
             // Gentle vertical bob (amplitude comes from per-type config)
             const bob = Math.sin(time * 0.28 + cloud.floatOffset) * this.cfg.bobAmp;
@@ -242,7 +254,9 @@ export class CloudSystem extends ParticleSystemBase {
                     this.dummy.quaternion.copy(camQuat);
                     this._spinQuat.setFromAxisAngle(this._spinAxis, puff.rotation);
                     this.dummy.quaternion.multiply(this._spinQuat);
-                    this.dummy.scale.setScalar(puff.scale * cloud.scale);
+                    const baseScale = puff.scale * cloud.scale;
+                    const stretch = 1 + Math.min(0.35, windSpeed * 0.008) * (this.cloudType === 'cirrus' ? 1.4 : 0.7);
+                    this.dummy.scale.set(baseScale * stretch, baseScale, baseScale);
                     this.dummy.updateMatrix();
                     this.mesh.setMatrixAt(idx, this.dummy.matrix);
 

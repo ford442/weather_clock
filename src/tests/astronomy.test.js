@@ -45,4 +45,13 @@ describe('AstronomyService', () => {
         // Sun should be below horizon
         expect(result.sunPosition.y).toBeLessThan(0);
     });
+
+    it('should calculate future-day positions at a requested local hour', () => {
+        const service = new AstronomyService();
+        const result = service.getPositionsForDateAtHour('2026-06-21', 12, 40.7128, -74.0060, 20);
+
+        expect(result.sunPosition).toBeInstanceOf(THREE.Vector3);
+        expect(result.moonPosition).toBeInstanceOf(THREE.Vector3);
+        expect(result.sunPosition.y).toBeGreaterThan(0);
+    });
 });

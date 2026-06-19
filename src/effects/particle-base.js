@@ -34,4 +34,22 @@ export class ParticleSystemBase {
         }
         return this.currentOpacity;
     }
+
+    setVisible(visible) {
+        if (this.mesh) this.mesh.visible = visible;
+    }
+
+    dispose() {
+        if (this.mesh) {
+            this.scene?.remove?.(this.mesh);
+            this.mesh.geometry?.dispose?.();
+            const material = this.mesh.material;
+            if (Array.isArray(material)) {
+                material.forEach((m) => m?.dispose?.());
+            } else {
+                material?.dispose?.();
+            }
+        }
+        this.mesh = null;
+    }
 }

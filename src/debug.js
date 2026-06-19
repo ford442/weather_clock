@@ -128,6 +128,8 @@ export function setupDebugAPI(state, services, scene3d) {
         getSimulationTime: () => state.simulationTime,
         getWeatherData: () => state.weatherData,
         getDailyForecast: () => state.weatherData?.dailyForecast ?? null,
+        getPerformanceMetrics: () => window.aetherPerf || null,
+        getForecastPreviewMetrics: () => window.modeController?.forecastUI?.previewMetrics || null,
         getMode: () => window.modeController?.getMode?.()
     };
 

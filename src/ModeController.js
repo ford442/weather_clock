@@ -438,6 +438,7 @@ export class ModeController {
 
             // Wire focus -> notify (later tasks will drive vignette render)
             this.forecastController.onDayFocus = (idx, dayData, repDate) => {
+                this.forecastUI?.highlightCard?.(idx);
                 // Expose for animation/main consumption
                 this._focusedForecast = { index: idx, day: dayData, repDate };
                 // Trigger a custom event consumers can listen to
@@ -447,6 +448,9 @@ export class ModeController {
 
         const loc = this.getCurrentLocation();
         const prefetchedDaily = this.state?.weatherData?.dailyForecast || null;
+        if (!prefetchedDaily?.length) {
+            this.forecastUI?.renderLoading?.();
+        }
         await this.forecastController.loadData(loc.lat, loc.lon, prefetchedDaily);
 
         // Default focus first day
@@ -744,6 +748,10 @@ export class ModeController {
      * Get current location from weather service
      */
     getCurrentLocation() {
+        if ((this.weatherService.latitude == null || this.weatherService.longitude == null)
+            && this.weatherService.setDefaultLocation) {
+            this.weatherService.setDefaultLocation();
+        }
         return {
             lat: this.weatherService.latitude,
             lon: this.weatherService.longitude

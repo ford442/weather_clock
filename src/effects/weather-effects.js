@@ -7,6 +7,55 @@ import { StarField } from './star-field.js';
 import { FogEffect } from './fog-effect.js';
 import { SplashSystem } from './splash-system.js';
 
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function inferPrecipType(code, rainIntensity, snowIntensity) {
+    if (snowIntensity > rainIntensity && snowIntensity > 0.01) return 'snow';
+    if (rainIntensity > 0.01) return 'rain';
+    if (code >= 71 && code < 80) return 'snow';
+    if ((code >= 51 && code < 71) || (code >= 80 && code < 90) || code >= 95) return 'rain';
+    return 'none';
+}
+
+export function buildWeatherEffectConfig(weatherSnap = {}, quality = 'focused') {
+    const code = weatherSnap.weatherCode || 0;
+    const rain = (weatherSnap.rain || 0) + (weatherSnap.showers || 0);
+    const snowfall = weatherSnap.snowfall || 0;
+    const rainIntensity = clamp(
+        weatherSnap.rainIntensity ?? (rain > 0 ? rain / 8 : ((code >= 51 && code < 71) || code >= 80 ? (code - 50) / 35 : 0)),
+        0,
+        1
+    );
+    const snowIntensity = clamp(
+        weatherSnap.snowIntensity ?? (snowfall > 0 ? snowfall / 4 : (code >= 71 && code < 80 ? (code - 70) / 18 : 0)),
+        0,
+        1
+    );
+    const fogIntensity = clamp(
+        weatherSnap.fogIntensity ?? ((code === 45 || code === 48) ? 1 : 1 - ((weatherSnap.visibility ?? 10000) / 2000)),
+        0,
+        1
+    );
+    const cloudCover = clamp(weatherSnap.cloudCover ?? 35, 0, 100);
+    const precipType = weatherSnap.precipType || inferPrecipType(code, rainIntensity, snowIntensity);
+    const particleScale = quality === 'thumbnail' ? 0.18 : quality === 'low' ? 0.45 : quality === 'medium' ? 0.7 : 1;
+
+    return {
+        weatherCode: code,
+        cloudCover,
+        windSpeed: weatherSnap.windSpeed || 0,
+        windDir: weatherSnap.windDirection ?? weatherSnap.windDir ?? 0,
+        precipType,
+        precipIntensity: precipType === 'snow' ? snowIntensity : precipType === 'rain' ? rainIntensity : 0,
+        rainIntensity: precipType === 'rain' ? rainIntensity : 0,
+        snowIntensity: precipType === 'snow' ? snowIntensity : 0,
+        fogIntensity,
+        particleScale
+    };
+}
+
 export class WeatherEffects {
     constructor(scene, sundialGroup, camera, quality = 'high') {
         this.scene = scene;
@@ -68,6 +117,10 @@ export class WeatherEffects {
         this.scene.add(this.lightningLight);
 
         this.splashSystem = new SplashSystem(scene);
+        this._pastSystems = [this.pastRain, this.pastSnow, this.pastCumulus, this.pastStratus, this.pastCirrus, this.pastDust, this.pastFog];
+        this._currSystems = [this.currRain, this.currSnow, this.currCumulus, this.currStratus, this.currCirrus, this.currDust, this.currFog];
+        this._futureSystems = [this.futureRain, this.futureSnow, this.futureCumulus, this.futureStratus, this.futureCirrus, this.futureDust, this.futureFog];
+        this._allSystems = [...this._pastSystems, ...this._currSystems, ...this._futureSystems, this.starField, this.splashSystem];
     }
 
     setReducedMotion(reducedMotion) {
@@ -150,6 +203,7 @@ export class WeatherEffects {
     }
 
     update(past, current, forecast, delta = 0.016, lightColor, sunPos, moonPos, sunColor, moonColor) {
+        if (this._vignetteMode) this.setVignetteMode(false);
         if (this.flashIntensity > 0) {
             this.flashIntensity -= delta * 15.0;
             if (this.flashIntensity < 0) this.flashIntensity = 0;
@@ -182,27 +236,27 @@ export class WeatherEffects {
 
         this.pastRain.update(delta, p.wind, p.dir, p.rain, this.raycaster, null, null, lightColor);
         this.pastSnow.update(delta, p.wind, p.dir, p.snow, lightColor);
-        this.pastCumulus.update(delta, p.wind, pCovers.cumulus, ...args, p.code);
-        this.pastStratus.update(delta, p.wind, pCovers.stratus, ...args, p.code);
-        this.pastCirrus.update(delta,  p.wind, pCovers.cirrus,  ...args, p.code);
+        this.pastCumulus.update(delta, p.wind, pCovers.cumulus, ...args, p.code, p.dir);
+        this.pastStratus.update(delta, p.wind, pCovers.stratus, ...args, p.code, p.dir);
+        this.pastCirrus.update(delta,  p.wind, pCovers.cirrus,  ...args, p.code, p.dir);
         this.pastDust.update(delta, p.wind, p.dir, p.rain, lightColor);
         this.pastFog.setIntensity(p.fog);
         this.pastFog.update(delta, p.wind, p.dir);
 
         this.currRain.update(delta, c.wind, c.dir, c.rain, this.raycaster, this.sundialGroup, (pos) => this.splashSystem.spawnSplash(pos), lightColor);
         this.currSnow.update(delta, c.wind, c.dir, c.snow, lightColor);
-        this.currCumulus.update(delta, c.wind, cCovers.cumulus, ...args, c.code);
-        this.currStratus.update(delta, c.wind, cCovers.stratus, ...args, c.code);
-        this.currCirrus.update(delta,  c.wind, cCovers.cirrus,  ...args, c.code);
+        this.currCumulus.update(delta, c.wind, cCovers.cumulus, ...args, c.code, c.dir);
+        this.currStratus.update(delta, c.wind, cCovers.stratus, ...args, c.code, c.dir);
+        this.currCirrus.update(delta,  c.wind, cCovers.cirrus,  ...args, c.code, c.dir);
         this.currDust.update(delta, c.wind, c.dir, c.rain, lightColor);
         this.currFog.setIntensity(c.fog);
         this.currFog.update(delta, c.wind, c.dir);
 
         this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null, lightColor);
         this.futureSnow.update(delta, f.wind, f.dir, f.snow, lightColor);
-        this.futureCumulus.update(delta, f.wind, fCovers.cumulus, ...args, f.code);
-        this.futureStratus.update(delta, f.wind, fCovers.stratus, ...args, f.code);
-        this.futureCirrus.update(delta,  f.wind, fCovers.cirrus,  ...args, f.code);
+        this.futureCumulus.update(delta, f.wind, fCovers.cumulus, ...args, f.code, f.dir);
+        this.futureStratus.update(delta, f.wind, fCovers.stratus, ...args, f.code, f.dir);
+        this.futureCirrus.update(delta,  f.wind, fCovers.cirrus,  ...args, f.code, f.dir);
         this.futureDust.update(delta, f.wind, f.dir, f.rain, lightColor);
         this.futureFog.setIntensity(f.fog);
         this.futureFog.update(delta, f.wind, f.dir);
@@ -248,22 +302,25 @@ export class WeatherEffects {
      */
     updateVignette(weatherSnap, delta = 0.016, lightColor = null, sunPos = null, moonPos = null, sunColor = null, moonColor = null) {
         if (!weatherSnap) return;
-        const s = this.ensureIntensitiesForSnap(weatherSnap); // reuse existing logic if possible
-        const wind = s.windSpeed || 0;
-        const dir = s.windDirection || 0;
-        const rainI = s.rainIntensity || 0;
-        const snowI = s.snowIntensity || 0;
-        const fogI = s.fogIntensity || 0;
-        const code = s.weatherCode || 0;
-        const cCover = s.cloudCover || 40;
+        if (!this._vignetteMode) this.setVignetteMode(true);
+        const cfg = buildWeatherEffectConfig(this.ensureIntensitiesForSnap(weatherSnap), weatherSnap.quality || this.quality);
+        const wind = cfg.windSpeed;
+        const dir = cfg.windDir;
+        const rainI = cfg.rainIntensity * cfg.particleScale;
+        const snowI = cfg.snowIntensity * cfg.particleScale;
+        const fogI = cfg.fogIntensity;
+        const code = cfg.weatherCode;
+        const cCover = cfg.cloudCover;
 
         // Center the curr systems around origin for vignette (they were created with zone)
         // We do not move them every frame; just feed intensity + wind. Visuals stay "local".
         this.currRain.update(delta, wind, dir, rainI, this.raycaster, this.sundialGroup || null, (pos) => this.splashSystem.spawnSplash(pos), lightColor);
         this.currSnow.update(delta, wind, dir, snowI, lightColor);
-        this.currCumulus.update(delta, wind, Math.min(1, cCover / 55), cCover, code);
-        this.currStratus.update(delta, wind, Math.min(1, cCover / 70), cCover, code);
-        this.currCirrus.update(delta, wind, Math.min(1, cCover / 90), cCover, code);
+        const covers = this._cloudTypeCovers(code, cCover, rainI, snowI, fogI);
+        const args = [lightColor, sunPos, moonPos, sunColor, moonColor];
+        this.currCumulus.update(delta, wind, covers.cumulus, ...args, code, dir);
+        this.currStratus.update(delta, wind, covers.stratus, ...args, code, dir);
+        this.currCirrus.update(delta, wind, covers.cirrus, ...args, code, dir);
         this.currDust.update(delta, wind, dir, rainI, lightColor);
         this.currFog.setIntensity(fogI);
         this.currFog.update(delta, wind, dir);
@@ -273,6 +330,12 @@ export class WeatherEffects {
         if (code >= 95 && Math.random() < 0.012) this.createLightning();
 
         this.splashSystem.update(lightColor);
+    }
+
+    setVignetteMode(enabled) {
+        this._vignetteMode = enabled;
+        for (const sys of this._pastSystems) sys?.setVisible?.(!enabled);
+        for (const sys of this._futureSystems) sys?.setVisible?.(!enabled);
     }
 
     // lightweight helper (mirrors ensure in weather-simulation)
@@ -288,5 +351,18 @@ export class WeatherEffects {
         if (code === 45 || code === 48) fogI = 1;
         else if ((d.visibility || 10000) < 2000) fogI = Math.max(0, 1 - (d.visibility || 10000) / 2000);
         return { ...d, rainIntensity: rainI, snowIntensity: snowI, fogIntensity: fogI };
+    }
+
+    dispose() {
+        if (this.lightningTimeoutId != null) {
+            clearTimeout(this.lightningTimeoutId);
+            this.lightningTimeoutId = null;
+        }
+        for (const sys of this._allSystems) sys?.dispose?.();
+        if (this.lightningLight) {
+            this.scene.remove(this.lightningLight);
+            this.lightningLight.dispose?.();
+            this.lightningLight = null;
+        }
     }
 }

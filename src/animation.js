@@ -1,8 +1,9 @@
 // Animation loop and time management
 import * as THREE from 'three';
 import { updateMoonVisuals } from './moonPhase.js';
-import { updateWeatherLighting, updateSingleWeatherLighting } from './weatherLighting.js';
-import { getWeatherAtTime, getActiveWeatherData } from './weather-simulation.js';
+import { updateWeatherLighting } from './weatherLighting.js';
+import { getActiveWeatherData } from './weather-simulation.js';
+import { DailyScene } from './dailyScene.js';
 import {
     updateTimeDisplay,
     updateWeatherDisplay,
@@ -42,10 +43,17 @@ export class AnimationController {
         this._lastThemeMs = 0;
         this._lastSparklineHour = -1;
         this._lastSunriseDay = -1; // track day to avoid per-frame DOM updates
+        this.dailyScene = null;
 
         // FPS tracking for auto-downgrade
         this.fpsSamples = [];
         this.lastFpsCheckTime = performance.now();
+        this.performanceMetrics = {
+            fps: 0,
+            quality: getQualityTier(),
+            mode: 'clock',
+            sampleCount: 0
+        };
     }
     
     /**
@@ -116,6 +124,14 @@ export class AnimationController {
                 if (this.fpsSamples.length >= 150) {
                     const avgFps = this.fpsSamples.reduce((a, b) => a + b, 0) / this.fpsSamples.length;
                     const currentTier = getQualityTier();
+                    this.performanceMetrics = {
+                        fps: Math.round(avgFps),
+                        quality: currentTier,
+                        mode: this.modeController?.getMode?.() || 'clock',
+                        sampleCount: this.fpsSamples.length,
+                        forecastPreview: this.modeController?.forecastUI?.previewMetrics || null
+                    };
+                    window.aetherPerf = this.performanceMetrics;
                     
                     if (avgFps < 30) {
                         let nextTier = null;
@@ -180,7 +196,7 @@ export class AnimationController {
 
         // Update sunrise/sunset only when the day changes (not every frame)
         const simDay = state.simulationTime.getDate();
-        if (simDay !== this._lastSunriseDay && astroData.sunrise && astroData.sunset) {
+        if (astroData && simDay !== this._lastSunriseDay && astroData.sunrise && astroData.sunset) {
             updateSunriseSunset(astroData.sunrise, astroData.sunset);
             this._lastSunriseDay = simDay;
         }
@@ -289,33 +305,29 @@ export class AnimationController {
         if (this.modeController?.isTimelineMode() && this.modeController.timelineController) {
             this.modeController.timelineController.update(delta);
         }
+
+        if (this.modeController?.isForecastMode() && this.modeController.forecastController) {
+            this.modeController.forecastController.update(delta);
+        }
         
         // ── Forecast vignette drive (single-day live 3D) ──
         const fc = this.modeController;
         if (fc?.isForecastMode() && fc._focusedForecast && state.weatherData) {
             const { day, repDate } = fc._focusedForecast;
-            // Build vignette time from controller hour if present
-            let vTime = repDate || new Date(day.date + 'T12:00:00');
-            if (fc.forecastController && typeof fc.forecastController.vignetteHour === 'number') {
-                vTime = new Date(day.date + 'T00:00:00');
-                vTime.setHours(fc.forecastController.vignetteHour | 0, ((fc.forecastController.vignetteHour % 1) * 60) | 0);
-            }
-            // Astro for exact vignette time
-            const vAstro = astronomyService.update(vTime, weatherService.latitude, weatherService.longitude);
-            // position lights (important: astro does NOT set them)
-            if (sunLight) sunLight.position.copy(vAstro.sunPosition);
-            if (moonLight) moonLight.position.copy(vAstro.moonPosition);
-            // single lighting
-            const snap = getWeatherAtTime(vTime, state.weatherData.timeline || []) || day.hourly?.[0] || { weatherCode: day.weatherCode, cloudCover: 40 };
-            updateSingleWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, snap, vAstro);
-            // effects single vignette (center systems)
-            const windC = snap.windDirection != null ? snap : (day.hourly && day.hourly[0]) || snap;
-            weatherEffects.updateVignette(snap, delta, ambientLight.color, sunLight ? sunLight.position : null);
-            // sundial
-            if (sundial && sundial.update) sundial.update(vTime);
-        } else if (fc?.isForecastMode()) {
-            // still drive basic effects lightly even without focus
-            weatherEffects.updateVignette({ weatherCode: 0, cloudCover: 30, windSpeed: 5 }, delta * 0.6);
+            const dailyScene = this._ensureDailyScene();
+            dailyScene.setLocation(weatherService.latitude, weatherService.longitude);
+            dailyScene.setDay(day, {
+                representativeTime: repDate,
+                hour: fc.forecastController?.vignetteHour
+            });
+            dailyScene.setEnabled(true);
+            dailyScene.update(delta);
+
+            // Keep the weather panel's wind compass in sync with the focused day.
+            const snap = dailyScene.getSnapshot();
+            if (snap?.windDirection != null) updateWindCompass(snap.windDirection);
+        } else {
+            this.dailyScene?.setEnabled(false);
         }
 
         // ── Atmosphere theme (drives CSS custom properties) ──
@@ -324,6 +336,26 @@ export class AnimationController {
         }
 
         pipeline.render();
+    }
+
+    _ensureDailyScene() {
+        if (this.dailyScene) return this.dailyScene;
+        const { scene, sky, sundial, moonGroup, weatherEffects, sunLight, moonLight, ambientLight } = this.scene3d;
+        this.dailyScene = new DailyScene({
+            scene,
+            sky,
+            sundial,
+            moonGroup,
+            weatherEffects,
+            sunLight,
+            moonLight,
+            ambientLight,
+            astronomyService: this.services.astronomyService,
+            lat: this.services.weatherService.latitude,
+            lon: this.services.weatherService.longitude,
+            quality: 'focused'
+        });
+        return this.dailyScene;
     }
 
     _shouldUpdateReducedMotionEffects(delta) {
@@ -345,6 +377,12 @@ export class AnimationController {
             cancelAnimationFrame(this.rafId);
             this.rafId = null;
         }
+    }
+
+    dispose() {
+        this.stop();
+        this.dailyScene?.dispose();
+        this.dailyScene = null;
     }
 }
 

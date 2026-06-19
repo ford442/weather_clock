@@ -73,4 +73,16 @@ export class SplashSystem {
             this.mesh.geometry.attributes.position.needsUpdate = true;
         }
     }
+
+    setVisible(visible) {
+        if (this.mesh) this.mesh.visible = visible;
+    }
+
+    dispose() {
+        if (!this.mesh) return;
+        this.scene.remove(this.mesh);
+        this.mesh.geometry?.dispose?.();
+        this.mesh.material?.dispose?.();
+        this.mesh = null;
+    }
 }
