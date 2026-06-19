@@ -154,13 +154,15 @@ export class AnimationController {
         if (controls) controls.update();
 
         // ── Sundial / Astro / normal updates (skipped when actively driving a forecast vignette) ──
-        const inForecastVignette = !!(fc && fc.isForecastMode && fc.isForecastMode() && fc._focusedForecast);
+        const mc = this.modeController;
+        const inForecastVignette = !!(mc && mc.isForecastMode && mc.isForecastMode() && mc._focusedForecast);
+        let astroData = null;
         if (!inForecastVignette) {
             sundial.update(state.simulationTime);
 
             const lat = weatherService.latitude;
             const lon = weatherService.longitude;
-            const astroData = astronomyService.update(state.simulationTime, lat, lon, 20);
+            astroData = astronomyService.update(state.simulationTime, lat, lon, 20);
 
             sunLight.position.copy(astroData.sunPosition);
             moonGroup.position.copy(astroData.moonPosition);
@@ -168,7 +170,7 @@ export class AnimationController {
             moonLight.position.copy(astroData.moonPosition);
         } // end !inForecastVignette guard for sundial/astro
 
-        if (astroData.sunPosition) {
+        if (astroData?.sunPosition) {
             updateMoonVisuals(moonGroup, astroData.sunPosition);
         }
 

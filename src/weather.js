@@ -1,4 +1,10 @@
 import SunCalc from 'suncalc';
+import {
+    DAILY_FORECAST_PARAMS,
+    DAILY_HOURLY_PARAMS,
+    parseDailyForecast,
+    getRepresentativeTimeForDay
+} from './dailyForecast.js';
 
 export class WeatherServiceError extends Error {
     constructor(message, status, endpoint) {
@@ -399,6 +405,89 @@ export class WeatherService {
         return results.filter(r => r !== null);
     }
 
+    /**
+     * Fetch a clean, normalized 10-day daily forecast for the current or provided location.
+     * Results are cached with the same memory + localStorage TTL as fetchWeather.
+     *
+     * @param {number} lat - Latitude
+     * @param {number} lon - Longitude
+     * @param {number} days - Number of forecast days (default 10, max 16)
+     * @returns {Promise<Array<Object>>} Normalized daily forecast array
+     */
+    async getDailyForecast(lat, lon, days = 10) {
+        const latitude = lat ?? this.latitude;
+        const longitude = lon ?? this.longitude;
+
+        if (latitude == null || longitude == null) {
+            throw new Error('Location not available');
+        }
+
+        const clampedDays = Math.max(1, Math.min(16, days));
+        const cacheKey = this.getCacheKey(latitude, longitude, `daily_${clampedDays}`);
+
+        try {
+            const cached = this.getFromCache(cacheKey);
+            if (cached) {
+                return cached.data;
+            }
+
+            const url = new URL('https://api.open-meteo.com/v1/forecast');
+            url.searchParams.append('latitude', latitude);
+            url.searchParams.append('longitude', longitude);
+            url.searchParams.append('forecast_days', clampedDays);
+            url.searchParams.append('daily', DAILY_FORECAST_PARAMS);
+            url.searchParams.append('hourly', DAILY_HOURLY_PARAMS);
+            url.searchParams.append('daily_units', ''); // Request units metadata
+            url.searchParams.append('timezone', 'auto');
+
+            const response = await fetch(url.toString());
+
+            if (response.ok === false) {
+                throw new WeatherServiceError(
+                    `Daily forecast API error: ${response.status} ${response.statusText}`,
+                    response.status,
+                    'open_meteo_daily_forecast'
+                );
+            }
+
+            const data = await response.json();
+            const forecast = parseDailyForecast(data, { expectedDays: clampedDays });
+
+            if (!forecast || forecast.length === 0) {
+                throw new WeatherServiceError(
+                    'Daily forecast response contained no usable days',
+                    200,
+                    'open_meteo_daily_forecast'
+                );
+            }
+
+            this.setCache(cacheKey, forecast);
+            return forecast;
+        } catch (error) {
+            console.error('Daily forecast fetch failed, attempting cache fallback:', error);
+
+            const stale = this.getFromCache(cacheKey, true);
+            if (stale) {
+                console.warn('Serving cached daily forecast due to fetch error');
+                return stale.data;
+            }
+
+            throw error;
+        }
+    }
+
+    /**
+     * Get a representative Date for a daily forecast day (solar noon preferred).
+     * @param {Object} day - Normalized daily forecast object
+     * @param {number} lat - Latitude
+     * @param {number} lon - Longitude
+     * @returns {Date}
+     */
+    getDailyForecastRepresentativeTime(day, lat, lon) {
+        if (!day || !day.date) return null;
+        return getRepresentativeTimeForDay(day.date, lat ?? this.latitude, lon ?? this.longitude);
+    }
+
     getCacheKey(lat, lon, type = 'weather') {
         const roundedLat = Math.round(lat * 100) / 100;
         const roundedLon = Math.round(lon * 100) / 100;
@@ -408,41 +497,33 @@ export class WeatherService {
     getFromCache(key, allowExpired = false) {
         // Try memory first
         let cached = this.cache.get(key);
-        
+
         if (!cached && typeof localStorage !== 'undefined') {
-            // Try localStorage
+            // Try localStorage using a key-scoped entry so multiple cache types
+            // (weather, daily, etc.) can coexist for the same location.
             try {
-                const storageStr = localStorage.getItem('weatherclock_cache_v1');
+                const storageStr = localStorage.getItem(`weatherclock_cache_v1_${key}`);
                 if (storageStr) {
-                    const parsed = JSON.parse(storageStr);
-                    if (parsed && parsed.lat !== undefined && parsed.lon !== undefined) {
-                        // Check if coordinates match within ~1km precision (2 decimal places)
-                        const roundedLat = Math.round(this.latitude * 100) / 100;
-                        const roundedLon = Math.round(this.longitude * 100) / 100;
-                        const cachedRoundedLat = Math.round(parsed.lat * 100) / 100;
-                        const cachedRoundedLon = Math.round(parsed.lon * 100) / 100;
-                        
-                        if (roundedLat === cachedRoundedLat && roundedLon === cachedRoundedLon) {
-                            cached = parsed;
-                            this.cache.set(key, cached);
-                        }
+                    cached = JSON.parse(storageStr);
+                    if (cached) {
+                        this.cache.set(key, cached);
                     }
                 }
             } catch (e) {
                 console.error('Failed to read from localStorage cache:', e);
             }
         }
-        
+
         if (!cached) return null;
-        
+
         const now = Date.now();
         const isExpired = now - cached.timestamp > 60 * 60 * 1000; // 1 hour TTL
-        
+
         if (isExpired && !allowExpired) {
             this.deleteFromCache(key);
             return null;
         }
-        
+
         return cached;
     }
 
@@ -454,10 +535,10 @@ export class WeatherService {
             lon: this.longitude
         };
         this.cache.set(key, cacheEntry);
-        
+
         if (typeof localStorage !== 'undefined') {
             try {
-                localStorage.setItem('weatherclock_cache_v1', JSON.stringify(cacheEntry));
+                localStorage.setItem(`weatherclock_cache_v1_${key}`, JSON.stringify(cacheEntry));
             } catch (e) {
                 console.error('Failed to write to localStorage cache:', e);
             }
@@ -468,7 +549,7 @@ export class WeatherService {
         this.cache.delete(key);
         if (typeof localStorage !== 'undefined') {
             try {
-                localStorage.removeItem('weatherclock_cache_v1');
+                localStorage.removeItem(`weatherclock_cache_v1_${key}`);
             } catch (e) {
                 console.error('Failed to delete from localStorage cache:', e);
             }

@@ -433,7 +433,7 @@ export class ModeController {
         fc.style.display = '';
 
         if (!this.forecastController) {
-            this.forecastController = new ForecastController(this.scene, this.camera, this.renderer);
+            this.forecastController = new ForecastController(this.scene, this.camera, this.renderer, this.weatherService);
             this.forecastUI = new ForecastUI(fc, this.forecastController);
 
             // Wire focus -> notify (later tasks will drive vignette render)
@@ -446,7 +446,8 @@ export class ModeController {
         }
 
         const loc = this.getCurrentLocation();
-        await this.forecastController.loadData(loc.lat, loc.lon);
+        const prefetchedDaily = this.state?.weatherData?.dailyForecast || null;
+        await this.forecastController.loadData(loc.lat, loc.lon, prefetchedDaily);
 
         // Default focus first day
         if (this.forecastController.days.length) {

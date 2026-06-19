@@ -1,9 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WeatherService } from '../weather.js';
 import { getWeatherAtTime } from '../weather-simulation.js';
 
 // Mock fetch
 global.fetch = vi.fn();
+
+beforeEach(() => {
+    fetch.mockReset();
+});
 
 describe('WeatherService', () => {
     it('should initialize with default location if geolocation fails', async () => {
@@ -165,6 +169,103 @@ describe('WeatherService', () => {
             expect(data.isCached).toBe(true);
             expect(data.cachedAt).toBeDefined();
         });
+    });
+});
+
+describe('Daily Forecast', () => {
+    it('should fetch and normalize a 10-day daily forecast', async () => {
+        const service = new WeatherService();
+        service.setManualLocation(40.71, -74.01, 'Test City');
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                daily: {
+                    time: Array.from({ length: 10 }, (_, i) => {
+                        const d = new Date('2026-06-18T00:00:00Z');
+                        d.setDate(d.getDate() + i);
+                        return d.toISOString().split('T')[0];
+                    }),
+                    weather_code: Array(10).fill(0),
+                    temperature_2m_max: Array(10).fill(25),
+                    temperature_2m_min: Array(10).fill(15),
+                    apparent_temperature_max: Array(10).fill(26),
+                    apparent_temperature_min: Array(10).fill(16),
+                    precipitation_sum: Array(10).fill(0),
+                    rain_sum: Array(10).fill(0),
+                    showers_sum: Array(10).fill(0),
+                    snowfall_sum: Array(10).fill(0),
+                    precipitation_probability_max: Array(10).fill(0),
+                    wind_speed_10m_max: Array(10).fill(10),
+                    wind_direction_10m_dominant: Array(10).fill(180)
+                },
+                daily_units: {
+                    temperature_2m_max: '°C',
+                    wind_speed_10m_max: 'km/h',
+                    precipitation_sum: 'mm'
+                },
+                hourly: {
+                    time: Array.from({ length: 10 * 24 }, (_, i) => {
+                        const d = new Date('2026-06-18T00:00:00Z');
+                        d.setHours(d.getHours() + i);
+                        return d.toISOString().replace('T', ' ').substring(0, 19);
+                    }),
+                    cloud_cover: Array(10 * 24).fill(20),
+                    visibility: Array(10 * 24).fill(10000)
+                }
+            })
+        });
+
+        const forecast = await service.getDailyForecast(40.71, -74.01, 10);
+
+        expect(forecast).toHaveLength(10);
+        expect(forecast[0]).toHaveProperty('date');
+        expect(forecast[0]).toHaveProperty('weatherCode');
+        expect(forecast[0]).toHaveProperty('tMax');
+        expect(forecast[0]).toHaveProperty('tMin');
+        expect(forecast[0]).toHaveProperty('condition');
+        expect(forecast[0]).toHaveProperty('cloudCover');
+        expect(forecast[0]).toHaveProperty('visibility');
+    });
+
+    it('should fall back to stale cache when daily forecast fetch fails', async () => {
+        const service = new WeatherService();
+        service.setManualLocation(40.71, -74.01, 'Test City');
+        const key = service.getCacheKey(40.71, -74.01, 'daily_10');
+        const dummyData = [{ date: '2026-06-18', weatherCode: 0, tMax: 20, tMin: 10, condition: 'clear' }];
+
+        service.setCache(key, dummyData);
+        fetch.mockRejectedValueOnce(new Error('Network disconnected'));
+
+        const forecast = await service.getDailyForecast(40.71, -74.01, 10);
+
+        expect(forecast).toEqual(dummyData);
+    });
+
+    it('should clamp requested days to valid range', async () => {
+        const service = new WeatherService();
+        service.setManualLocation(40.71, -74.01, 'Test City');
+
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                daily: {
+                    time: ['2026-06-18'],
+                    weather_code: [0],
+                    temperature_2m_max: [20],
+                    temperature_2m_min: [10]
+                },
+                hourly: {
+                    time: ['2026-06-18T00:00:00Z'],
+                    cloud_cover: [0],
+                    visibility: [10000]
+                }
+            })
+        });
+
+        // Requesting 0 days should be clamped to 1
+        const forecast = await service.getDailyForecast(40.71, -74.01, 0);
+        expect(forecast).toHaveLength(1);
     });
 });
 

@@ -161,6 +161,7 @@ async function bootstrap() {
                     updateWeatherDisplay(data, weatherService);
                     drawSparkline(state.simulationTime, data, weatherService);
                     savePreferences();
+                    await loadDailyForecast();
 
                     if (data && data.isCached) {
                         const timeStr = new Date(data.cachedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -215,6 +216,7 @@ async function bootstrap() {
                         updateWeatherDisplay(data, weatherService);
                         drawSparkline(state.simulationTime, data, weatherService);
                         savePreferences();
+                        await loadDailyForecast();
 
                         const searchInput = document.getElementById('location-search');
                         if (searchInput) searchInput.value = '';
@@ -301,6 +303,24 @@ async function bootstrap() {
         };
     }
 
+    // Load daily 10-day forecast and attach it to the weather data object.
+    // This is intentionally non-blocking: a failure here should not break the clock.
+    async function loadDailyForecast() {
+        if (!weatherService.latitude || !weatherService.longitude) return;
+        try {
+            const daily = await weatherService.getDailyForecast(
+                weatherService.latitude,
+                weatherService.longitude,
+                10
+            );
+            if (state.weatherData) {
+                state.weatherData.dailyForecast = daily;
+            }
+        } catch (error) {
+            console.warn('Failed to load daily forecast:', error);
+        }
+    }
+
     // Weather fetch
     async function fetchAndDisplayWeather() {
         if (state.isDebugMode) return;
@@ -322,6 +342,9 @@ async function bootstrap() {
             state.weatherData = data;
             updateWeatherDisplay(data, weatherService);
             drawSparkline(state.simulationTime, data, weatherService);
+
+            // Load 10-day daily forecast in the background
+            await loadDailyForecast();
 
             if (data && data.isCached) {
                 const timeStr = new Date(data.cachedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });

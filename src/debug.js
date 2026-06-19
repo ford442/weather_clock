@@ -1,6 +1,7 @@
 // Debug utilities and tools
 import { updateWeatherLighting } from './weatherLighting.js';
 import { updateWeatherDisplay } from './ui.js';
+import { buildHourlyTimelineFromDay } from './dailyForecast.js';
 
 /**
  * Generate debug weather timeline
@@ -126,6 +127,7 @@ export function setupDebugAPI(state, services, scene3d) {
         ambientLight,
         getSimulationTime: () => state.simulationTime,
         getWeatherData: () => state.weatherData,
+        getDailyForecast: () => state.weatherData?.dailyForecast ?? null,
         getMode: () => window.modeController?.getMode?.()
     };
 
@@ -146,6 +148,70 @@ export function setupDebugAPI(state, services, scene3d) {
             }
         });
     };
+
+    // Debug: force the live scene to reflect a specific day from the 10-day forecast
+    window.setDebugDailyForecast = async (dayIndex = 0) => {
+        console.log('Debug daily forecast day:', dayIndex);
+        state.isDebugMode = true;
+
+        let daily = state.weatherData?.dailyForecast;
+        if (!daily || !daily.length) {
+            try {
+                daily = await weatherService.getDailyForecast(
+                    weatherService.latitude,
+                    weatherService.longitude,
+                    10
+                );
+                if (state.weatherData) {
+                    state.weatherData.dailyForecast = daily;
+                }
+            } catch (e) {
+                console.error('No daily forecast available and fetch failed:', e);
+                return;
+            }
+        }
+
+        if (!daily || !daily.length) {
+            console.warn('Daily forecast not loaded. Wait for the app to finish initializing.');
+            return;
+        }
+
+        const index = Math.max(0, Math.min(daily.length - 1, dayIndex));
+        const day = daily[index];
+        const repDate = weatherService.getDailyForecastRepresentativeTime(
+            day,
+            weatherService.latitude,
+            weatherService.longitude
+        );
+
+        const timeline = buildHourlyTimelineFromDay(day, repDate);
+        const currentMock = timeline.find(
+            (t) => Math.abs(t.time.getTime() - repDate.getTime()) < 3600 * 1000
+        ) || timeline[12];
+
+        state.simulationTime = new Date(repDate);
+        state.weatherData = {
+            ...(state.weatherData || {}),
+            current: currentMock,
+            past: timeline[0],
+            forecast: timeline[18],
+            timeline,
+            dailyForecast: daily,
+            location: `Debug Daily Forecast (${day.date})`
+        };
+
+        const astroData = astronomyService.update(
+            state.simulationTime,
+            weatherService.latitude,
+            weatherService.longitude,
+            20
+        );
+
+        updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, state.weatherData, astroData);
+        updateWeatherDisplay(state.weatherData, weatherService);
+
+        console.log('Daily forecast debug set to day', index, day.date, day);
+    };
 }
 
 /**
@@ -154,5 +220,7 @@ export function setupDebugAPI(state, services, scene3d) {
 export function cleanupDebugAPI() {
     delete window.setDebugWeather;
     delete window.setDebugTime;
+    delete window.setDebugDailyForecast;
+    delete window.setDebugForecastDay;
     delete window.aetherDebug;
 }

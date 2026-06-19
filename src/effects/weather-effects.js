@@ -259,7 +259,7 @@ export class WeatherEffects {
 
         // Center the curr systems around origin for vignette (they were created with zone)
         // We do not move them every frame; just feed intensity + wind. Visuals stay "local".
-        this.currRain.update(delta, wind, dir, rainI, this.raycaster, this.sundialGroup || null, this.createSplash.bind(this), lightColor);
+        this.currRain.update(delta, wind, dir, rainI, this.raycaster, this.sundialGroup || null, (pos) => this.splashSystem.spawnSplash(pos), lightColor);
         this.currSnow.update(delta, wind, dir, snowI, lightColor);
         this.currCumulus.update(delta, wind, Math.min(1, cCover / 55), cCover, code);
         this.currStratus.update(delta, wind, Math.min(1, cCover / 70), cCover, code);

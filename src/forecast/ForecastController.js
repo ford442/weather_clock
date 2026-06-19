@@ -11,10 +11,11 @@
 import { TimelineData } from '../timeline/TimelineData.js';
 
 export class ForecastController {
-    constructor(scene, camera, renderer) {
+    constructor(scene, camera, renderer, weatherService = null) {
         this.scene = scene;
         this.camera = camera;
         this.renderer = renderer;
+        this.weatherService = weatherService;
 
         this.timelineData = new TimelineData();
         this.days = [];               // DayData[] (next 10)
@@ -28,11 +29,17 @@ export class ForecastController {
         this.isLoading = false;
     }
 
-    async loadData(lat, lon) {
+    async loadData(lat, lon, prefetchedDaily = null) {
         if (this.isLoading) return;
         this.isLoading = true;
         try {
-            this.days = await this.timelineData.getForecastDays(lat, lon, 10);
+            if (prefetchedDaily && prefetchedDaily.length > 0) {
+                this.days = prefetchedDaily.slice(0, 10);
+            } else if (this.weatherService) {
+                this.days = await this.weatherService.getDailyForecast(lat, lon, 10);
+            } else {
+                this.days = await this.timelineData.getForecastDays(lat, lon, 10);
+            }
             if (this.onDataLoaded) this.onDataLoaded(this.days);
             // default focus first (today or soonest forecast)
             if (this.days.length > 0 && this.focusedIndex >= this.days.length) {
@@ -56,7 +63,9 @@ export class ForecastController {
         if (!this.days[index]) return;
         this.focusedIndex = index;
         const day = this.days[index];
-        const repDate = this.timelineData.getRepresentativeTimeForDay(day, /*lat,lon passed later if needed*/);
+        const repDate = this.weatherService
+            ? this.weatherService.getDailyForecastRepresentativeTime(day)
+            : this.timelineData.getRepresentativeTimeForDay(day);
         if (this.onDayFocus) {
             this.onDayFocus(index, day, repDate);
         }

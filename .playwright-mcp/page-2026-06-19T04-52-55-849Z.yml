@@ -1,0 +1,109 @@
+- generic:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: New York, USA (default)
+        - button "Retry Location" [ref=e7] [cursor=pointer]:
+          - img [ref=e8]
+      - textbox "City name…" [ref=e11]
+      - button [ref=e12] [cursor=pointer]:
+        - img [ref=e13]
+    - generic [ref=e16]:
+      - button "Switch to Timeline View (T)" [active] [ref=e17] [cursor=pointer]:
+        - img [ref=e18]
+      - button "Toggle unit — currently Fahrenheit" [ref=e21]:
+        - button "°C"
+        - button "°F" [ref=e22] [cursor=pointer]
+        - button "km/h"
+        - button "mph" [ref=e23] [cursor=pointer]
+  - generic:
+    - generic [ref=e24]: 6:52 AM
+    - generic [ref=e25]: Fri, Jun 19
+    - generic [ref=e26]: 77°
+    - generic [ref=e27]: Clear sky
+  - generic:
+    - generic:
+      - img
+      - generic: PREVIOUS
+    - generic:
+      - heading "Previous 3:52 AM" [level=3]
+      - generic: Partly cloudy
+      - generic:
+        - generic: Temp
+        - generic: 71°
+      - generic:
+        - generic: Feels Like
+        - generic: 69°
+      - generic:
+        - generic: Wind
+        - generic: 7 mph
+      - generic:
+        - generic: Humidity
+        - generic: 55%
+      - generic:
+        - generic: Cloud Cover
+        - generic: 51%
+      - generic:
+        - generic: Precip. Prob.
+        - generic: 0%
+  - generic:
+    - generic:
+      - img
+      - generic: FORECAST
+    - generic:
+      - heading "Forecast 9:52 AM" [level=3]
+      - generic: Overcast
+      - generic:
+        - generic: Temp
+        - generic: 75°
+      - generic:
+        - generic: Feels Like
+        - generic: 71°
+      - generic:
+        - generic: Wind
+        - generic: 20 km/h
+      - generic:
+        - generic: Humidity
+        - generic: 43%
+      - generic:
+        - generic: Cloud Cover
+        - generic: 100%
+      - generic:
+        - generic: Precip. Prob.
+        - generic: 0%
+  - generic:
+    - generic:
+      - img
+      - generic: 18 km/h
+      - text: km/h
+    - generic:
+      - img
+      - generic: "--%"
+    - generic:
+      - img
+      - generic: Waxing Crescent 🌒
+    - generic:
+      - img
+      - generic: 11:25 AM
+      - text: –
+      - generic: 2:31 AM
+    - generic: UV 0
+  - generic:
+    - generic:
+      - generic: History • Accuracy • Nearby
+    - generic:
+      - button "History"
+      - button "Nearby"
+    - generic:
+      - generic:
+        - generic:
+          - heading "1 Year Ago" [level=3]
+          - generic: 74°
+          - generic: Clear sky
+  - generic:
+    - button "Play/Pause (W)" [ref=e117] [cursor=pointer]:
+      - img [ref=e118]
+    - generic [ref=e121]:
+      - generic [ref=e122]: 6:52 AM
+      - button "60×" [ref=e123] [cursor=pointer]
+  - generic: "` — toggle stats"
