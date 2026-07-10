@@ -51,20 +51,35 @@ export async function createPostProcessingPipeline(
     }
 
     if (isWebGPU) {
-        const { PostProcessing } = await import('three/webgpu');
-        const { pass, bloom, toneMapping } = await import('three/tsl');
+        try {
+            const { PostProcessing } = await import('three/webgpu');
+            const { pass } = await import('three/tsl');
+            const { bloom } = await import('three/addons/tsl/display/BloomNode.js');
 
-        const pp = new PostProcessing(renderer);
-        const bloomNode = bloom(pass(scene, camera), { strength, radius, threshold });
-        pp.outputNode = toneMapping(bloomNode, THREE.ACESFilmicToneMapping, 1.0);
+            const pp = new PostProcessing(renderer);
+            const scenePass = pass(scene, camera);
+            const scenePassColor = scenePass.getTextureNode('output');
+            const bloomPass = bloom(scenePassColor, strength, radius, threshold);
+            pp.outputNode = scenePassColor.add(bloomPass);
 
-        return {
-            render: () => pp.render(),
-            setSize: (w, h) => pp.setSize(w, h),
-            dispose: () => {
-                pp.dispose();
-            }
-        };
+            return {
+                render: () => pp.render(),
+                setSize: (w, h) => {
+                    renderer.setSize(w, h);
+                    pp.needsUpdate = true;
+                },
+                dispose: () => {
+                    pp.dispose();
+                }
+            };
+        } catch (err) {
+            console.warn('[PostProcessingPipeline] WebGPU bloom setup failed, using direct render:', err);
+            return {
+                render: () => renderer.render(scene, camera),
+                setSize: (w, h) => renderer.setSize(w, h),
+                dispose: () => {}
+            };
+        }
     }
 
     // WebGL path — EffectComposer + UnrealBloomPass
