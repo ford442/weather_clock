@@ -1,6 +1,6 @@
 /**
  * TimelineUI.js - UI overlay for the 3D timeline visualization
- * 
+ *
  * Handles:
  * - Day detail panels
  * - Timeline legend and info
@@ -8,19 +8,21 @@
  * - Weather condition indicators
  */
 
+// @ts-nocheck
+// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 export class TimelineUI {
     constructor(container) {
         this.container = container;
         this.currentPanel = null;
-        
+
         this.init();
     }
-    
+
     init() {
         this.createBaseStructure();
         this.injectStyles();
     }
-    
+
     /**
      * Create base HTML structure
      */
@@ -77,11 +79,11 @@ export class TimelineUI {
                 </div>
             </div>
         `;
-        
+
         this.cacheElements();
         this.bindEvents();
     }
-    
+
     /**
      * Cache DOM element references
      */
@@ -96,7 +98,7 @@ export class TimelineUI {
         this.accuracyValue = this.container.querySelector('#accuracy-value');
         this.detailClose = this.container.querySelector('#detail-close');
     }
-    
+
     /**
      * Bind event listeners
      */
@@ -107,7 +109,7 @@ export class TimelineUI {
                 this.hideDayDetails();
             });
         }
-        
+
         // Close on escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -115,7 +117,7 @@ export class TimelineUI {
             }
         });
     }
-    
+
     /**
      * Inject CSS styles
      */
@@ -123,7 +125,7 @@ export class TimelineUI {
         if (document.getElementById('timeline-ui-styles')) {
             return;
         }
-        
+
         const styles = document.createElement('style');
         styles.id = 'timeline-ui-styles';
         styles.textContent = `
@@ -367,16 +369,16 @@ export class TimelineUI {
                 }
             }
         `;
-        
+
         document.head.appendChild(styles);
     }
-    
+
     /**
      * Show day details panel
      */
     showDayDetails(dayData) {
         if (!dayData) return;
-        
+
         // Format date
         const date = new Date(dayData.date);
         const dateStr = date.toLocaleDateString('en-US', {
@@ -385,19 +387,19 @@ export class TimelineUI {
             month: 'long',
             day: 'numeric'
         });
-        
+
         // Update content
         this.detailDate.textContent = dateStr;
         this.detailHigh.textContent = `${Math.round(dayData.tempMax)}°`;
         this.detailLow.textContent = `${Math.round(dayData.tempMin)}°`;
         this.detailCondition.textContent = this.formatCondition(dayData.condition);
-        
+
         // Anomaly display
         const anomaly = dayData.tempAnomaly;
         const anomalySign = anomaly > 0 ? '+' : '';
         this.detailAnomaly.textContent = `${anomalySign}${anomaly.toFixed(1)}° from normal`;
         this.detailAnomaly.className = 'detail-anomaly' + (anomaly > 0 ? ' positive' : anomaly < 0 ? ' negative' : '');
-        
+
         // Accuracy (only for historical days with predictions)
         if (dayData.accuracy) {
             this.detailAccuracy.style.display = 'block';
@@ -407,11 +409,11 @@ export class TimelineUI {
         } else {
             this.detailAccuracy.style.display = 'none';
         }
-        
+
         // Show panel
         this.detailPanel.classList.add('visible');
     }
-    
+
     /**
      * Hide day details panel
      */
@@ -420,7 +422,7 @@ export class TimelineUI {
             this.detailPanel.classList.remove('visible');
         }
     }
-    
+
     /**
      * Format condition for display
      */
@@ -428,16 +430,16 @@ export class TimelineUI {
         if (!condition) return 'Unknown';
         return condition.charAt(0).toUpperCase() + condition.slice(1);
     }
-    
+
     /**
      * Get color based on accuracy percentage
      */
     getAccuracyColor(percent) {
-        if (percent >= 90) return '#22c55e';  // Green
-        if (percent >= 70) return '#eab308';  // Yellow
-        return '#ef4444';  // Red
+        if (percent >= 90) return '#22c55e'; // Green
+        if (percent >= 70) return '#eab308'; // Yellow
+        return '#ef4444'; // Red
     }
-    
+
     /**
      * Update location display
      */
@@ -447,7 +449,7 @@ export class TimelineUI {
             subtitle.textContent = `${locationName} — Past 10 days → Today ← Next 10 days`;
         }
     }
-    
+
     /**
      * Show/hide loading indicator
      */
@@ -461,7 +463,7 @@ export class TimelineUI {
             }
         }
     }
-    
+
     /**
      * Dispose and cleanup
      */

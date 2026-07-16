@@ -3,8 +3,8 @@ import { getSeverity } from './weatherLighting.js';
 
 /**
  * Ensure weather data object has rainIntensity, snowIntensity, and fogIntensity
- * @param {Object} data - Weather data point
- * @returns {Object} Data point with intensities populated
+ * @param {WeatherSnapshot|null|undefined} data - Weather data point
+ * @returns {WeatherSnapshot|null} Data point with intensities populated
  */
 export function ensureIntensities(data) {
     if (!data) return null;
@@ -66,8 +66,8 @@ export function ensureIntensities(data) {
 /**
  * Interpolate weather data from a timeline at a specific time
  * @param {Date} time - The time to get weather for
- * @param {Array} timeline - Array of weather data points
- * @returns {Object|null} Interpolated weather data
+ * @param {WeatherSnapshot[]} timeline - Array of weather data points
+ * @returns {WeatherSnapshot|null} Interpolated weather data
  */
 export function getWeatherAtTime(time, timeline) {
     if (!timeline || timeline.length === 0) return null;
@@ -151,8 +151,8 @@ export function getWeatherAtTime(time, timeline) {
 /**
  * Get weather data for current, past, and forecast times
  * @param {Date} simulationTime - Current simulation time
- * @param {Object} weatherData - Full weather data object
- * @returns {Object} Active weather data with current, past, and forecast
+ * @param {{timeline?: WeatherSnapshot[], current?: WeatherSnapshot, past?: WeatherSnapshot, forecast?: WeatherSnapshot}|null} weatherData
+ * @returns {{current: WeatherSnapshot, past: WeatherSnapshot, forecast: WeatherSnapshot}|null}
  */
 export function getActiveWeatherData(simulationTime, weatherData) {
     if (!weatherData) return null;
@@ -171,11 +171,11 @@ export function getActiveWeatherData(simulationTime, weatherData) {
 
     const simPast = weatherData.timeline
         ? getWeatherAtTime(new Date(simulationTime.getTime() - 3 * 3600 * 1000), weatherData.timeline)
-        : (weatherData.past || simWeather);
+        : weatherData.past || simWeather;
 
     const simForecast = weatherData.timeline
         ? getWeatherAtTime(new Date(simulationTime.getTime() + 3 * 3600 * 1000), weatherData.timeline)
-        : (weatherData.forecast || simWeather);
+        : weatherData.forecast || simWeather;
 
     return {
         current: ensureIntensities(simWeather),

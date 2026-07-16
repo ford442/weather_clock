@@ -4,8 +4,8 @@
     --panel-border: rgba(255, 255, 255, 0.08);
     --text-primary: rgba(255, 255, 255, 0.92);
     --text-secondary: rgba(255, 255, 255, 0.55);
-    --accent-warm: #E8A838;
-    --accent-cool: #5AACB8;
+    --accent-warm: #e8a838;
+    --accent-cool: #5aacb8;
     --accent: 232, 168, 56;
     --glow: rgba(232, 168, 56, 0.4);
     --transition-base: cubic-bezier(0.16, 1, 0.3, 1);
@@ -38,8 +38,8 @@ body {
     width: 100%;
     height: 56px;
     backdrop-filter: blur(20px);
-    background: linear-gradient(to bottom, rgba(0,0,0,0.4), transparent);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.4), transparent);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -50,7 +50,8 @@ body {
     color: var(--text-primary);
 }
 
-.top-bar-left, .top-bar-right {
+.top-bar-left,
+.top-bar-right {
     display: flex;
     align-items: center;
     gap: 16px;
@@ -82,8 +83,8 @@ body {
 }
 
 #top-bar .search-input {
-    background: rgba(0,0,0,0.4);
-    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 16px;
     padding: 0 14px;
     color: white;
@@ -92,16 +93,18 @@ body {
     font-family: inherit;
     font-size: 13px;
     height: 28px;
-    transition: width 0.3s var(--transition-base), border-color 0.2s;
+    transition:
+        width 0.3s var(--transition-base),
+        border-color 0.2s;
 }
 
 #top-bar .search-input:focus {
     width: 200px;
-    border-color: rgba(255,255,255,0.4);
+    border-color: rgba(255, 255, 255, 0.4);
 }
 
 #top-bar .search-btn {
-    background: rgba(255,255,255,0.12);
+    background: rgba(255, 255, 255, 0.12);
     border: none;
     border-radius: 16px;
     padding: 0 10px;
@@ -118,7 +121,9 @@ body {
     justify-content: center;
 }
 
-#top-bar .search-btn:hover { background: rgba(255,255,255,0.22); }
+#top-bar .search-btn:hover {
+    background: rgba(255, 255, 255, 0.22);
+}
 
 /* Mode toggle inside top bar */
 #top-bar .mode-toggle-btn {
@@ -126,8 +131,8 @@ body {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(10px);
     color: white;
     font-size: 18px;
@@ -142,8 +147,8 @@ body {
 
 #top-bar .mode-toggle-btn:hover {
     transform: scale(1.1);
-    background: rgba(255,255,255,0.15);
-    border-color: rgba(255,255,255,0.4);
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.4);
 }
 
 #top-bar .mode-toggle-btn:disabled {
@@ -157,7 +162,7 @@ body {
     display: inline-flex;
     height: 32px;
     border-radius: 16px;
-    background: rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.1);
     overflow: hidden;
     align-items: center;
     flex-shrink: 0;
@@ -173,7 +178,9 @@ body {
     cursor: pointer;
     height: 100%;
     font-family: inherit;
-    transition: background 0.2s, color 0.2s;
+    transition:
+        background 0.2s,
+        color 0.2s;
 }
 
 .unit-segmented[data-unit='metric'] .segment[data-segment='celsius'],
@@ -196,7 +203,9 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    transition: opacity 0.5s ease, transform 0.5s var(--transition-base);
+    transition:
+        opacity 0.5s ease,
+        transform 0.5s var(--transition-base);
 }
 
 body.drawers-open #center-overlay {
@@ -214,7 +223,9 @@ body.drawers-open #center-overlay {
     letter-spacing: 0;
     color: var(--text-primary);
     line-height: 1;
-    text-shadow: 0 0 40px var(--glow), 0 2px 4px rgba(0,0,0,0.5);
+    text-shadow:
+        0 0 40px var(--glow),
+        0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 #center-overlay #date-display {
@@ -264,8 +275,8 @@ body.drawers-open #center-overlay {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
     color: white;
     cursor: pointer;
     display: flex;
@@ -277,7 +288,7 @@ body.drawers-open #center-overlay {
 }
 
 .scrubber-btn:hover {
-    background: rgba(255,255,255,0.15);
+    background: rgba(255, 255, 255, 0.15);
     transform: scale(1.1);
 }
 
@@ -310,7 +321,7 @@ body.drawers-open #center-overlay {
     font-size: 11px;
     font-weight: 500;
     color: var(--text-secondary);
-    background: rgba(0,0,0,0.3);
+    background: rgba(0, 0, 0, 0.3);
     padding: 2px 8px;
     border-radius: 8px;
     backdrop-filter: blur(4px);
@@ -339,7 +350,7 @@ body.drawers-open #center-overlay {
     position: relative;
     width: 100%;
     height: 2px;
-    background: rgba(255,255,255,0.15);
+    background: rgba(255, 255, 255, 0.15);
     border-radius: 1px;
     cursor: pointer;
 }
@@ -355,7 +366,9 @@ body.drawers-open #center-overlay {
     box-shadow: 0 0 10px rgb(var(--accent));
     transform: translate(-50%, -50%);
     cursor: grab;
-    transition: transform 0.15s ease, box-shadow 0.2s;
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.2s;
 }
 
 .scrubber-playhead:active {
@@ -367,11 +380,14 @@ body.drawers-open #center-overlay {
 /* Time warping state */
 body.time-warping .time-display {
     color: #ffcc88;
-    text-shadow: 0 0 20px rgba(255, 170, 68, 0.5), 0 0 40px rgba(255, 100, 100, 0.2);
+    text-shadow:
+        0 0 20px rgba(255, 170, 68, 0.5),
+        0 0 40px rgba(255, 100, 100, 0.2);
 }
 
 /* ── Edge Drawers ── */
-#panel-left, #panel-right {
+#panel-left,
+#panel-right {
     position: fixed;
     top: 56px;
     height: calc(100vh - 56px);
@@ -401,11 +417,13 @@ body.time-warping .time-display {
     transform: translateX(276px);
 }
 
-#panel-left:hover, #panel-left.expanded {
+#panel-left:hover,
+#panel-left.expanded {
     transform: translateX(0);
 }
 
-#panel-right:hover, #panel-right.expanded {
+#panel-right:hover,
+#panel-right.expanded {
     transform: translateX(0);
 }
 
@@ -420,7 +438,7 @@ body.time-warping .time-display {
     top: 0;
     width: 32px;
     height: 100%;
-    background: rgba(255,255,255,0.08);
+    background: rgba(255, 255, 255, 0.08);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -433,7 +451,7 @@ body.time-warping .time-display {
 }
 
 .drawer-handle:hover {
-    background: rgba(255,255,255,0.15);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .drawer-handle svg {
@@ -446,7 +464,7 @@ body.time-warping .time-display {
     font-size: 9px;
     font-weight: 600;
     letter-spacing: 0.5px;
-    color: rgba(255,255,255,0.6);
+    color: rgba(255, 255, 255, 0.6);
     text-align: center;
     writing-mode: vertical-rl;
     text-orientation: mixed;
@@ -455,17 +473,17 @@ body.time-warping .time-display {
 }
 
 .drawer-handle:hover .drawer-handle-label {
-    color: rgba(255,255,255,0.9);
+    color: rgba(255, 255, 255, 0.9);
 }
 
 #panel-left .drawer-handle {
     right: 0;
-    border-right: 1px solid rgba(255,255,255,0.06);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 #panel-right .drawer-handle {
     left: 0;
-    border-left: 1px solid rgba(255,255,255,0.06);
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* ── Icon SVGs ── */
@@ -491,7 +509,7 @@ body.time-warping .time-display {
     align-items: center;
     background: rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 24px;
     padding: 10px 24px;
     font-size: 13px;
@@ -530,7 +548,7 @@ body.time-warping .time-display {
 }
 
 .day-arc-track {
-    stroke: rgba(255,255,255,0.2);
+    stroke: rgba(255, 255, 255, 0.2);
     fill: none;
     stroke-width: 1.5;
     stroke-linecap: round;
@@ -556,4 +574,3 @@ body.time-warping .time-display {
     color: #ffd060;
     font-weight: 600;
 }
-

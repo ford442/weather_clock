@@ -66,12 +66,18 @@ export class StarField {
         }
 
         if (targetOpacity > 0.01) {
-             const time = Date.now() * 0.001;
-             this.mesh.material.uniforms.uTime.value = time;
-             this.mesh.material.uniforms.uOpacity.value = targetOpacity;
-             this.mesh.visible = true;
+            const time = Date.now() * 0.001;
+            this.mesh.material.uniforms.uTime.value = time;
+            this.mesh.material.uniforms.uOpacity.value = targetOpacity;
+            this.mesh.visible = true;
         } else {
-             this.mesh.visible = false;
+            this.mesh.visible = false;
         }
+    }
+
+    dispose() {
+        this.scene.remove(this.mesh);
+        this.mesh.geometry.dispose();
+        this.mesh.material.dispose();
     }
 }

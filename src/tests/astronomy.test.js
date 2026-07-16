@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { AstronomyService } from '../astronomy.js';
 import * as THREE from 'three';
 
@@ -7,7 +7,7 @@ describe('AstronomyService', () => {
         const service = new AstronomyService();
         const date = new Date('2023-10-27T12:00:00Z'); // Noon
         const lat = 40.7128;
-        const lon = -74.0060;
+        const lon = -74.006;
 
         const result = service.update(date, lat, lon, 20);
 
@@ -26,7 +26,7 @@ describe('AstronomyService', () => {
         // but let's just check it's above horizon.
         const date = new Date('2023-06-21T17:00:00Z'); // Summer Solstice Noonish
         const lat = 40.7128;
-        const lon = -74.0060;
+        const lon = -74.006;
 
         const result = service.update(date, lat, lon, 20);
 
@@ -38,7 +38,7 @@ describe('AstronomyService', () => {
         const service = new AstronomyService();
         const date = new Date('2023-06-21T05:00:00Z'); // Midnightish
         const lat = 40.7128;
-        const lon = -74.0060;
+        const lon = -74.006;
 
         const result = service.update(date, lat, lon, 20);
 
@@ -48,7 +48,7 @@ describe('AstronomyService', () => {
 
     it('should calculate future-day positions at a requested local hour', () => {
         const service = new AstronomyService();
-        const result = service.getPositionsForDateAtHour('2026-06-21', 12, 40.7128, -74.0060, 20);
+        const result = service.getPositionsForDateAtHour('2026-06-21', 12, 40.7128, -74.006, 20);
 
         expect(result.sunPosition).toBeInstanceOf(THREE.Vector3);
         expect(result.moonPosition).toBeInstanceOf(THREE.Vector3);

@@ -58,17 +58,17 @@ export function createSundial() {
     for (let i = 0; i < 12; i++) {
         const angle = (i * Math.PI) / 6;
         const radius = 2.3;
-        
+
         // Create marker
         const markerGeometry = new THREE.BoxGeometry(0.1, 0.2, 0.05);
         const markerMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
         const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-        
+
         marker.position.x = Math.sin(angle) * radius;
         marker.position.z = Math.cos(angle) * radius;
         marker.position.y = 0.25;
         marker.rotation.y = -angle;
-        
+
         markerGroup.add(marker);
 
         // Add hour numbers
@@ -86,20 +86,20 @@ export function createSundial() {
         const numberMaterial = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
         const numberGeometry = new THREE.PlaneGeometry(0.3, 0.3);
         const number = new THREE.Mesh(numberGeometry, numberMaterial);
-        
+
         const numRadius = 2.0;
         number.position.x = Math.sin(angle) * numRadius;
         number.position.z = Math.cos(angle) * numRadius;
         number.position.y = 0.26;
         number.rotation.x = -Math.PI / 2;
-        
+
         markerGroup.add(number);
     }
     group.add(markerGroup);
 
     // Create gnomon (the pointer that casts shadow)
     const gnomonGroup = new THREE.Group();
-    
+
     const gnomonGeometry = new THREE.ConeGeometry(0.1, 2, 8);
     const gnomonMaterial = new THREE.MeshStandardMaterial({
         color: 0x4a4a4a,

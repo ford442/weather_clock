@@ -1,5 +1,4 @@
 // Scene objects: sky, sundial, moon, weather effects
-import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { createSundial } from './sundial.js';
 import { calculateMoonPhase, createMoon } from './moonPhase.js';
@@ -11,7 +10,7 @@ const SKY_CONFIG = {
     turbidity: 10,
     rayleigh: 3,
     mieCoefficient: 0.005,
-    mieDirectionalG: 0.7,
+    mieDirectionalG: 0.7
 };
 
 export function setupSky() {

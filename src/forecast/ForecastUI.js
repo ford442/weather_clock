@@ -7,6 +7,7 @@ export class ForecastUI {
     constructor(container, controller) {
         this.container = container;
         this.controller = controller;
+        /** @type {HTMLDivElement[]} */
         this.cards = [];
         this.scrubberEl = null;
         this.currentIndex = 0;
@@ -72,8 +73,9 @@ export class ForecastUI {
         }
         if (playBtn) {
             playBtn.addEventListener('click', () => {
-                const reducedMotion = document.body.classList.contains('reduced-motion')
-                    || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+                const reducedMotion =
+                    document.body.classList.contains('reduced-motion') ||
+                    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
                 const playing = reducedMotion ? false : this.controller?.toggleDayPlayback?.();
                 playBtn.textContent = playing ? 'Pause day' : 'Play day';
                 this.container.dispatchEvent(new CustomEvent('vignetteplaytoggle', { detail: { playing } }));
@@ -139,7 +141,9 @@ export class ForecastUI {
                         ? this.controller.timelineData.getRepresentativeTimeForDay(day)
                         : null;
                     renderDailyPreview(cv, day, rep);
-                } catch (e) { /* non-fatal */ }
+                } catch (e) {
+                    /* non-fatal */
+                }
             }
 
             el.addEventListener('click', () => {
@@ -264,8 +268,9 @@ export class ForecastUI {
         }
 
         const animate = (timeMs) => {
-            const reducedMotion = document.body.classList.contains('reduced-motion')
-                || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+            const reducedMotion =
+                document.body.classList.contains('reduced-motion') ||
+                window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
             if (!document.hidden && !reducedMotion && timeMs - this.lastPreviewDraw > 100) {
                 this.lastPreviewDraw = timeMs;
                 let drawn = 0;
@@ -303,17 +308,24 @@ export class ForecastUI {
     ensureVisibilityObserver() {
         this.visibilityObserver?.disconnect?.();
         if (typeof IntersectionObserver === 'undefined') {
-            this.cards.forEach((card) => { card.dataset.visible = 'true'; });
+            this.cards.forEach((card) => {
+                card.dataset.visible = 'true';
+            });
             return;
         }
-        this.visibilityObserver = new IntersectionObserver((entries) => {
-            entries.forEach((entry) => {
-                entry.target.dataset.visible = entry.isIntersecting ? 'true' : 'false';
-            });
-        }, {
-            root: this.cardsContainer,
-            threshold: 0.05
-        });
+        this.visibilityObserver = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (entry.target instanceof HTMLElement) {
+                        entry.target.dataset.visible = entry.isIntersecting ? 'true' : 'false';
+                    }
+                });
+            },
+            {
+                root: this.cardsContainer,
+                threshold: 0.05
+            }
+        );
         this.cards.forEach((card) => this.visibilityObserver.observe(card));
     }
 }

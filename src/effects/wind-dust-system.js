@@ -19,7 +19,7 @@ export class WindDustSystem extends ParticleSystemBase {
         // Use a small, subtle particle (similar to Snow but smaller/fainter)
         const material = new THREE.PointsMaterial({
             color: 0xcccccc, // Dust color
-            size: 0.1,       // Tiny
+            size: 0.1, // Tiny
             transparent: true,
             opacity: 0.0,
             map: ResourceManager.getCloudTexture('cumulus'), // Reuse noise texture for softness
@@ -62,7 +62,7 @@ export class WindDustSystem extends ParticleSystemBase {
         // Logic: Show dust if wind is decent (>5) AND NOT heavy rain (rain washes dust out)
         let targetIntensity = 0;
         if (windSpeed > 5 && rainIntensity < 2.0) {
-             targetIntensity = Math.min(1.0, (windSpeed - 5) / 20.0);
+            targetIntensity = Math.min(1.0, (windSpeed - 5) / 20.0);
         }
 
         // Smooth transition
@@ -89,7 +89,7 @@ export class WindDustSystem extends ParticleSystemBase {
         const positions = this.mesh.geometry.attributes.position.array;
         const time = Date.now() * 0.001;
 
-        const rad = (90 - windDir) * Math.PI / 180;
+        const rad = ((90 - windDir) * Math.PI) / 180;
         const speedScale = 0.003; // Dust is light, moves easily
         const wX = Math.cos(rad) * windSpeed * speedScale;
         const wZ = -Math.sin(rad) * windSpeed * speedScale;
@@ -108,8 +108,8 @@ export class WindDustSystem extends ParticleSystemBase {
             positions[i3 + 2] += wZ + curl.z * 0.02;
 
             // Wrap around
-            if (positions[i3] > this.zone.maxX) positions[i3] -= (this.zone.maxX - this.zone.minX);
-            if (positions[i3] < this.zone.minX) positions[i3] += (this.zone.maxX - this.zone.minX);
+            if (positions[i3] > this.zone.maxX) positions[i3] -= this.zone.maxX - this.zone.minX;
+            if (positions[i3] < this.zone.minX) positions[i3] += this.zone.maxX - this.zone.minX;
 
             // Height clamp/wrap
             if (positions[i3 + 1] > 8) positions[i3 + 1] = 0;

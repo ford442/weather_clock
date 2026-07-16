@@ -4,3 +4,13 @@ dist
 *.log
 .vite
 .cache
+.playwright-mcp/
+__pycache__/
+.env
+.env.*
+!.env.example
+deploy.config.json
+deploy.config.*.json
+!deploy.config.example.json
+verification/suite/current/
+verification/suite/diffs/

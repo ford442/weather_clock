@@ -1,6 +1,6 @@
 # weather_clock WGSL Compute Shaders
 
-These shaders are WebGPU compute-pipeline variants of the existing GLSL shaders in `src/shaders.js` and `src/weatherEffects.js`. They are designed to be compatible with the `image_video_effects` WGSL compute pipeline and use the standard 13-binding header.
+These are standalone WebGPU compute-pipeline experiments related to the active GLSL shaders in `src/shaders.js` and weather systems under `src/effects/`. They use the `image_video_effects` 13-binding layout, but they are not wired into the Weather Clock runtime.
 
 ## Files
 
@@ -14,7 +14,7 @@ These shaders are WebGPU compute-pipeline variants of the existing GLSL shaders 
 
 ## Usage
 
-These shaders are intended for future WebGPU support. The existing GLSL shaders in `src/shaders.js` remain the primary render path for WebGL/Three.js.
+The active dual-renderer implementation lives under `src/webgpu/`: WebGPU uses Three.js TSL/material adapters, while WebGL uses the GLSL strings in `src/shaders.js`. Issue #87 owns the decision to adapt these standalone compute files or replace them with TSL compute nodes.
 
 All shaders use the standard `image_video_effects` binding layout:
 ```wgsl

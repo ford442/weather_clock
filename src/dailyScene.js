@@ -3,7 +3,7 @@ import { updateSingleWeatherLighting, getSeverity, deriveDailyAtmosphere } from 
 import { AstronomyService } from './astronomy.js';
 import { buildWeatherEffectConfig } from './effects/weather-effects.js';
 
-const DEFAULT_LOCATION = { lat: 40.7128, lon: -74.0060 };
+const DEFAULT_LOCATION = { lat: 40.7128, lon: -74.006 };
 
 const QUALITY_PRESETS = {
     thumbnail: {
@@ -72,15 +72,16 @@ export function getRepresentativeTimeForDailyScene(day, astronomyService, lat, l
 export function buildDailySceneSnapshot(day, representativeTime = null) {
     const source = day || {};
     const hour = representativeTime instanceof Date ? representativeTime.getHours() : 12;
-    const hourly = Array.isArray(source.hourly) && source.hourly.length
-        ? source.hourly.reduce((best, item) => {
-            const itemDate = item?.time ? new Date(item.time) : null;
-            const itemHour = itemDate && Number.isFinite(itemDate.getTime()) ? itemDate.getHours() : hour;
-            const bestDate = best?.time ? new Date(best.time) : null;
-            const bestHour = bestDate && Number.isFinite(bestDate.getTime()) ? bestDate.getHours() : hour;
-            return Math.abs(itemHour - hour) < Math.abs(bestHour - hour) ? item : best;
-        }, source.hourly[0])
-        : {};
+    const hourly =
+        Array.isArray(source.hourly) && source.hourly.length
+            ? source.hourly.reduce((best, item) => {
+                  const itemDate = item?.time ? new Date(item.time) : null;
+                  const itemHour = itemDate && Number.isFinite(itemDate.getTime()) ? itemDate.getHours() : hour;
+                  const bestDate = best?.time ? new Date(best.time) : null;
+                  const bestHour = bestDate && Number.isFinite(bestDate.getTime()) ? bestDate.getHours() : hour;
+                  return Math.abs(itemHour - hour) < Math.abs(bestHour - hour) ? item : best;
+              }, source.hourly[0])
+            : {};
 
     const weatherCode = source.weatherCode ?? hourly.weatherCode ?? 0;
     const cloudCover = clamp(hourly.cloudCover ?? source.cloudCover ?? source.meanCloudCover ?? 35, 0, 100);
@@ -94,9 +95,7 @@ export function buildDailySceneSnapshot(day, representativeTime = null) {
 
     const rainIntensity = clamp((rain + showers) / 8 + (weatherCodeImpliesRain(weatherCode) ? 0.18 : 0), 0, 1);
     const snowIntensity = clamp(snowfall / 4 + (weatherCodeImpliesSnow(weatherCode) ? 0.25 : 0), 0, 1);
-    const fogIntensity = weatherCode === 45 || weatherCode === 48
-        ? 1
-        : clamp(1 - visibility / 2000, 0, 1);
+    const fogIntensity = weatherCode === 45 || weatherCode === 48 ? 1 : clamp(1 - visibility / 2000, 0, 1);
 
     return {
         weatherCode,

@@ -172,7 +172,7 @@ export function estimateCloudAndVisibility(code) {
  * @param {Object} apiResponse - Raw Open-Meteo /v1/forecast response
  * @param {Object} [options]
  * @param {number} [options.expectedDays=10] - Number of days requested
- * @returns {Array<Object>} Normalized daily forecast objects
+ * @returns {DailyForecastDay[]} Normalized daily forecast objects
  */
 export function parseDailyForecast(apiResponse, options = {}) {
     const { expectedDays = 10 } = options;
@@ -230,14 +230,16 @@ export function parseDailyForecast(apiResponse, options = {}) {
             cloudCover,
             visibility,
             // Minimal hourly snapshot for 2D vignette renderers
-            hourly: [{
-                time: `${dateStr}T12:00:00`,
-                temp: (tMax != null && tMin != null) ? (tMax + tMin) / 2 : null,
-                weatherCode: code,
-                cloudCover,
-                windSpeed: windSpeedMax,
-                precipitation: precipSum
-            }],
+            hourly: [
+                {
+                    time: `${dateStr}T12:00:00`,
+                    temp: tMax != null && tMin != null ? (tMax + tMin) / 2 : null,
+                    weatherCode: code,
+                    cloudCover,
+                    windSpeed: windSpeedMax,
+                    precipitation: precipSum
+                }
+            ],
             units: {
                 temperature: dailyUnits.temperature_2m_max || '°C',
                 speed: dailyUnits.wind_speed_10m_max || 'km/h',
@@ -278,9 +280,9 @@ export function getRepresentativeTimeForDay(dateStr, lat, lon) {
  * Build a representative hourly timeline for a single day from its daily summary.
  * Useful for debug modes and vignette rendering when only daily data is available.
  *
- * @param {Object} day - Normalized daily forecast object
+ * @param {DailyForecastDay} day - Normalized daily forecast object
  * @param {Date} repDate - Representative date/time for the day
- * @returns {Array<Object>} 24 hourly-like snapshots
+ * @returns {WeatherSnapshot[]} 24 hourly-like snapshots
  */
 export function buildHourlyTimelineFromDay(day, repDate) {
     const timeline = [];
@@ -296,9 +298,10 @@ export function buildHourlyTimelineFromDay(day, repDate) {
         const t = new Date(base.getTime() + h * 3600 * 1000);
         // Simple diurnal temperature curve peaking at 15:00
         const hourFactor = Math.sin(((h - 9) / 24) * Math.PI * 2);
-        const temp = (day.tMax != null && day.tMin != null)
-            ? (day.tMax + day.tMin) / 2 + hourFactor * (day.tMax - day.tMin) / 2
-            : 15;
+        const temp =
+            day.tMax != null && day.tMin != null
+                ? (day.tMax + day.tMin) / 2 + (hourFactor * (day.tMax - day.tMin)) / 2
+                : 15;
 
         timeline.push({
             time: t,
@@ -310,9 +313,9 @@ export function buildHourlyTimelineFromDay(day, repDate) {
             windSpeed: day.windSpeedMax ?? 10,
             windDirection: day.windDir ?? 0,
             visibility: day.visibility ?? 10000,
-            rain: isRain || isStorm ? (day.rainSum / 24) : 0,
-            showers: isStorm ? (day.showersSum / 24) : 0,
-            snowfall: isSnow ? (day.snowfallSum / 24) : 0,
+            rain: isRain || isStorm ? day.rainSum / 24 : 0,
+            showers: isStorm ? day.showersSum / 24 : 0,
+            snowfall: isSnow ? day.snowfallSum / 24 : 0,
             precipProb: day.precipProbabilityMax ?? 0,
             pressure: 1013.25
         });

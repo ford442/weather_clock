@@ -1,6 +1,8 @@
+// @ts-nocheck
+// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 /**
  * TimelineData.js - Data fetching service for the 21-day weather timeline
- * 
+ *
  * Handles:
  * - Historical data (past 10 days) from Open-Meteo Archive API
  * - Forecast data (next 10 days) from Open-Meteo Forecast API
@@ -53,7 +55,7 @@ export class TimelineData {
     /**
      * Fetch complete timeline data for a location
      * Fetches historical, forecast, and climatology in parallel
-     * 
+     *
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
      * @returns {Promise<DayData[]>} Array of 21 DayData objects (-10 to +10 days)
@@ -69,30 +71,30 @@ export class TimelineData {
 
             // Process and merge data
             const allDays = this.mergeTimelineData(historical, forecast, climatology);
-            
+
             // Calculate accuracy metrics for historical days that have predictions
             this.enrichWithAccuracy(allDays);
-            
+
             return allDays;
         } catch (error) {
             console.error('Failed to fetch timeline data:', error);
-            
+
             // Fallback to cached data if available
             const cacheKey = this.getCacheKey(lat, lon, 'timeline');
             const cached = this.getFromCache(cacheKey);
-            
+
             if (cached) {
                 console.warn('Using cached timeline data due to fetch error');
                 return cached.data;
             }
-            
+
             throw error;
         }
     }
 
     /**
      * Fetch historical observations from Open-Meteo Archive API
-     * 
+     *
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude  
      * @param {number} days - Number of days to fetch (default 10)
@@ -101,7 +103,7 @@ export class TimelineData {
     async fetchHistorical(lat, lon, days = 10) {
         const cacheKey = this.getCacheKey(lat, lon, `historical_${days}`);
         const cached = this.getFromCache(cacheKey);
-        
+
         if (cached) {
             return cached.data;
         }
@@ -120,27 +122,30 @@ export class TimelineData {
         url.searchParams.append('longitude', lon);
         url.searchParams.append('start_date', startStr);
         url.searchParams.append('end_date', endStr);
-        url.searchParams.append('daily', 'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum');
+        url.searchParams.append(
+            'daily',
+            'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum'
+        );
         url.searchParams.append('hourly', 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation');
         url.searchParams.append('timezone', 'auto');
 
         try {
             const response = await fetch(url.toString());
-            
+
             if (!response.ok) {
                 throw new Error(`Archive API error: ${response.status} ${response.statusText}`);
             }
-            
+
             const data = await response.json();
             this.setCache(cacheKey, data);
             return data;
         } catch (error) {
             console.error('Historical fetch failed:', error);
-            
+
             // Return cached data even if expired, or throw
             const stale = this.getFromCache(cacheKey, true);
             if (stale) return stale.data;
-            
+
             throw error;
         }
     }
@@ -148,7 +153,7 @@ export class TimelineData {
     /**
      * Fetch forecast data from Open-Meteo Forecast API
      * Uses past_days to get recent forecast history for comparison
-     * 
+     *
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
      * @param {number} days - Number of forecast days (default 10)
@@ -157,7 +162,7 @@ export class TimelineData {
     async fetchForecast(lat, lon, days = 10) {
         const cacheKey = this.getCacheKey(lat, lon, `forecast_${days}`);
         const cached = this.getFromCache(cacheKey);
-        
+
         if (cached) {
             return cached.data;
         }
@@ -167,26 +172,29 @@ export class TimelineData {
         url.searchParams.append('longitude', lon);
         url.searchParams.append('forecast_days', days);
         url.searchParams.append('past_days', 10); // Include past forecast data for comparison
-        url.searchParams.append('daily', 'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum');
+        url.searchParams.append(
+            'daily',
+            'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum'
+        );
         url.searchParams.append('hourly', 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation');
         url.searchParams.append('timezone', 'auto');
 
         try {
             const response = await fetch(url.toString());
-            
+
             if (!response.ok) {
                 throw new Error(`Forecast API error: ${response.status} ${response.statusText}`);
             }
-            
+
             const data = await response.json();
             this.setCache(cacheKey, data);
             return data;
         } catch (error) {
             console.error('Forecast fetch failed:', error);
-            
+
             const stale = this.getFromCache(cacheKey, true);
             if (stale) return stale.data;
-            
+
             throw error;
         }
     }
@@ -194,7 +202,7 @@ export class TimelineData {
     /**
      * Fetch 30-year climatology normals (1991-2020) from Open-Meteo Climate API
      * Uses ERA5 reanalysis data for consistent long-term averages
-     * 
+     *
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
      * @returns {Promise<Object>} Processed climatology data by day-of-year
@@ -207,7 +215,7 @@ export class TimelineData {
 
         const cacheKey = this.getCacheKey(lat, lon, 'climatology');
         const cached = this.getFromCache(cacheKey);
-        
+
         if (cached) {
             this.climatologyCache = cached.data;
             return cached.data;
@@ -226,29 +234,29 @@ export class TimelineData {
 
         try {
             const response = await fetch(url.toString());
-            
+
             if (!response.ok) {
                 // Climate API may not be available everywhere, use fallback
                 console.warn('Climate API unavailable, using fallback estimation');
                 return this.generateFallbackClimatology(lat, lon);
             }
-            
+
             const data = await response.json();
             const processed = this.processClimatologyData(data);
-            
+
             this.climatologyCache = processed;
             this.setCache(cacheKey, processed);
-            
+
             return processed;
         } catch (error) {
             console.error('Climatology fetch failed:', error);
-            
+
             const stale = this.getFromCache(cacheKey, true);
             if (stale) {
                 this.climatologyCache = stale.data;
                 return stale.data;
             }
-            
+
             return this.generateFallbackClimatology(lat, lon);
         }
     }
@@ -256,43 +264,43 @@ export class TimelineData {
     /**
      * Generate fallback climatology based on latitude
      * Used when climate API is unavailable
-     * 
+     *
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
      * @returns {Object} Estimated climatology data
      */
-    generateFallbackClimatology(lat, lon) {
+    generateFallbackClimatology(lat, _lon) {
         const absLat = Math.abs(lat);
         const isNorthern = lat >= 0;
-        
+
         // Simple latitude-based temperature estimation
         // Mean annual temp decreases ~0.6°C per degree latitude
-        const baseTemp = 27 - (absLat * 0.6); // ~27°C at equator
+        const baseTemp = 27 - absLat * 0.6; // ~27°C at equator
         const seasonalAmp = absLat > 23.5 ? 15 : 5; // Higher seasonality at mid-high latitudes
-        
+
         const dailyData = {};
-        
+
         for (let doy = 1; doy <= 366; doy++) {
             // Simplified seasonal cycle
-            const dayOfYear = isNorthern ? doy : ((doy + 182) % 366);
+            const dayOfYear = isNorthern ? doy : (doy + 182) % 366;
             const angle = ((dayOfYear - 15) / 365) * 2 * Math.PI; // Peak around July 15 (N hem)
-            
+
             const meanTemp = baseTemp - seasonalAmp * Math.cos(angle);
-            
+
             dailyData[doy] = {
                 mean: meanTemp,
                 max: meanTemp + 5,
                 min: meanTemp - 5,
-                stdDev: 3 + (absLat / 30) // Higher variability at higher latitudes
+                stdDev: 3 + absLat / 30 // Higher variability at higher latitudes
             };
         }
-        
+
         return { daily: dailyData, isFallback: true };
     }
 
     /**
      * Process raw climatology API response into day-of-year lookup
-     * 
+     *
      * @param {Object} rawData - Raw API response
      * @returns {Object} Processed climatology with daily means and std devs
      */
@@ -302,29 +310,29 @@ export class TimelineData {
         }
 
         const { time, temperature_2m_mean, temperature_2m_max, temperature_2m_min } = rawData.daily;
-        
+
         // Group by day of year across all 30 years
         const dayOfYearData = {};
-        
+
         for (let i = 0; i < time.length; i++) {
             const date = new Date(time[i]);
             const doy = this.getDayOfYear(date);
-            
+
             if (!dayOfYearData[doy]) {
                 dayOfYearData[doy] = { means: [], maxes: [], mins: [] };
             }
-            
+
             if (temperature_2m_mean?.[i] != null) dayOfYearData[doy].means.push(temperature_2m_mean[i]);
             if (temperature_2m_max?.[i] != null) dayOfYearData[doy].maxes.push(temperature_2m_max[i]);
             if (temperature_2m_min?.[i] != null) dayOfYearData[doy].mins.push(temperature_2m_min[i]);
         }
-        
+
         // Calculate statistics for each day of year
         const dailyStats = {};
-        
+
         for (let doy = 1; doy <= 366; doy++) {
             const data = dayOfYearData[doy];
-            
+
             if (data && data.means.length > 0) {
                 dailyStats[doy] = {
                     mean: this.calculateMean(data.means),
@@ -337,13 +345,13 @@ export class TimelineData {
                 dailyStats[doy] = this.interpolateClimatology(dailyStats, doy);
             }
         }
-        
+
         return { daily: dailyStats, isFallback: false };
     }
 
     /**
      * Merge historical and forecast data into unified DayData array
-     * 
+     *
      * @param {Object} historical - Raw historical API response
      * @param {Object} forecast - Raw forecast API response  
      * @param {Object} climatology - Processed climatology data
@@ -353,7 +361,7 @@ export class TimelineData {
         const days = [];
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
+
         // Process historical days
         if (historical.daily?.time) {
             for (let i = 0; i < historical.daily.time.length; i++) {
@@ -361,41 +369,41 @@ export class TimelineData {
                 days.push(dayData);
             }
         }
-        
+
         // Process forecast days (including today and future)
         // The forecast API returns past_days + forecast_days range
         // We need to filter to get today + next 10 days
         if (forecast.daily?.time) {
             const forecastDays = [];
-            
+
             for (let i = 0; i < forecast.daily.time.length; i++) {
                 const dateStr = forecast.daily.time[i];
                 const date = new Date(dateStr);
                 date.setHours(0, 0, 0, 0);
-                
+
                 // Skip if already in historical (yesterday and earlier)
-                const isHistorical = days.some(d => d.date === dateStr);
-                
+                const isHistorical = days.some((d) => d.date === dateStr);
+
                 if (!isHistorical) {
                     const dayData = this.transformToDayData(forecast, i, 'forecast', climatology);
                     forecastDays.push(dayData);
                 }
             }
-            
+
             // Add forecast days (limit to 10 days from today)
             days.push(...forecastDays.slice(0, 11)); // Today + 10 future = 11 days
         }
-        
+
         // Sort by date
         days.sort((a, b) => new Date(a.date) - new Date(b.date));
-        
+
         // Cache the merged result
         return days;
     }
 
     /**
      * Transform raw API data into DayData structure
-     * 
+     *
      * @param {Object} rawData - Raw API response
      * @param {number} index - Index in the daily arrays
      * @param {'historical'|'forecast'} type - Data type
@@ -406,31 +414,31 @@ export class TimelineData {
         const daily = rawData.daily;
         const dateStr = daily.time[index];
         const date = new Date(dateStr);
-        
+
         const tempMax = daily.temperature_2m_max?.[index] ?? null;
         const tempMin = daily.temperature_2m_min?.[index] ?? null;
-        const tempAvg = daily.temperature_2m_mean?.[index] ?? 
-                       (tempMax != null && tempMin != null ? (tempMax + tempMin) / 2 : null);
-        
+        const tempAvg =
+            daily.temperature_2m_mean?.[index] ?? (tempMax != null && tempMin != null ? (tempMax + tempMin) / 2 : null);
+
         const weatherCode = daily.weather_code?.[index] ?? 0;
-        
+
         // Calculate anomaly and z-score
         let tempAnomaly = 0;
         let zScore = 0;
-        
+
         if (tempAvg != null && climatology?.daily) {
             const doy = this.getDayOfYear(date);
             const normal = climatology.daily[doy];
-            
+
             if (normal) {
                 tempAnomaly = tempAvg - normal.mean;
                 zScore = normal.stdDev > 0 ? tempAnomaly / normal.stdDev : 0;
             }
         }
-        
+
         // Extract hourly data for this day
         const hourly = this.extractHourlyData(rawData.hourly, dateStr);
-        
+
         return {
             date: dateStr,
             type,
@@ -441,26 +449,26 @@ export class TimelineData {
             zScore,
             weatherCode,
             condition: this.simplifyWeatherCondition(weatherCode),
-            hourly,
+            hourly
             // Prediction and accuracy may be added by enrichWithAccuracy() when real archived forecast data is available
         };
     }
 
     /**
      * Extract hourly data points for a specific day
-     * 
+     *
      * @param {Object} hourlyData - Raw hourly data from API
      * @param {string} dateStr - Date string to filter (YYYY-MM-DD)
      * @returns {HourlyData[]} Hourly data for the day
      */
     extractHourlyData(hourlyData, dateStr) {
         if (!hourlyData?.time) return [];
-        
+
         const hourly = [];
-        
+
         for (let i = 0; i < hourlyData.time.length; i++) {
             const timeStr = hourlyData.time[i];
-            
+
             if (timeStr.startsWith(dateStr)) {
                 hourly.push({
                     time: timeStr,
@@ -472,17 +480,17 @@ export class TimelineData {
                 });
             }
         }
-        
+
         return hourly;
     }
 
     /**
      * Enrich historical days with prediction data and accuracy metrics
      * Compares what was forecasted X days ago with what actually happened
-     * 
+     *
      * @param {DayData[]} days - Array of day data
      */
-    enrichWithAccuracy(days) {
+    enrichWithAccuracy(_days) {
         // Forecast accuracy requires archived forecast runs (Previous Runs API).
         // This is not yet implemented. Accuracy rings and detail panels will
         // naturally be hidden when day.accuracy is undefined.
@@ -490,7 +498,7 @@ export class TimelineData {
 
     /**
      * Calculate accuracy metrics between actual and predicted values
-     * 
+     *
      * @param {number[]} actual - Array of actual values
      * @param {number[]} predicted - Array of predicted values
      * @returns {Object} Accuracy metrics (MAE, RMSE, Skill)
@@ -499,21 +507,19 @@ export class TimelineData {
         if (actual.length !== predicted.length || actual.length === 0) {
             return { mae: null, rmse: null, skill: null };
         }
-        
+
         const n = actual.length;
-        
+
         // Mean Absolute Error
         const mae = actual.reduce((sum, act, i) => sum + Math.abs(act - predicted[i]), 0) / n;
-        
+
         // Root Mean Square Error
-        const rmse = Math.sqrt(
-            actual.reduce((sum, act, i) => sum + Math.pow(act - predicted[i], 2), 0) / n
-        );
-        
+        const rmse = Math.sqrt(actual.reduce((sum, act, i) => sum + Math.pow(act - predicted[i], 2), 0) / n);
+
         // Skill score vs persistence (using actual[0] as reference)
         const persistenceError = actual.reduce((sum, act) => sum + Math.abs(act - actual[0]), 0) / n;
         const skill = (persistenceError - mae) / persistenceError;
-        
+
         return {
             mae: parseFloat(mae.toFixed(2)),
             rmse: parseFloat(rmse.toFixed(2)),
@@ -525,7 +531,7 @@ export class TimelineData {
 
     /**
      * Get day of year (1-366)
-     * 
+     *
      * @param {Date} date - Date object
      * @returns {number} Day of year
      */
@@ -538,7 +544,7 @@ export class TimelineData {
 
     /**
      * Calculate mean of array
-     * 
+     *
      * @param {number[]} arr - Array of numbers
      * @returns {number} Mean value
      */
@@ -549,7 +555,7 @@ export class TimelineData {
 
     /**
      * Calculate standard deviation
-     * 
+     *
      * @param {number[]} arr - Array of numbers
      * @returns {number} Standard deviation
      */
@@ -562,7 +568,7 @@ export class TimelineData {
 
     /**
      * Interpolate missing climatology data
-     * 
+     *
      * @param {Object} dailyStats - Existing daily statistics
      * @param {number} doy - Day of year to interpolate
      * @returns {Object} Interpolated stats
@@ -571,19 +577,19 @@ export class TimelineData {
         // Find nearest valid days
         let prev = doy - 1;
         let next = doy + 1;
-        
+
         while (prev >= 1 && !dailyStats[prev]) prev--;
         while (next <= 366 && !dailyStats[next]) next++;
-        
+
         const prevStats = dailyStats[prev];
         const nextStats = dailyStats[next];
-        
+
         if (!prevStats) return nextStats || { mean: 15, max: 20, min: 10, stdDev: 3 };
         if (!nextStats) return prevStats;
-        
+
         // Linear interpolation
         const t = (doy - prev) / (next - prev);
-        
+
         return {
             mean: prevStats.mean + t * (nextStats.mean - prevStats.mean),
             max: prevStats.max + t * (nextStats.max - prevStats.max),
@@ -594,7 +600,7 @@ export class TimelineData {
 
     /**
      * Simplify WMO weather code to condition category
-     * 
+     *
      * @param {number} code - WMO weather code
      * @returns {'clear'|'cloudy'|'rain'|'snow'|'storm'} Simplified condition
      */
@@ -621,7 +627,7 @@ export class TimelineData {
     async getForecastDays(lat, lon, count = 10) {
         const all = await this.fetchTimelineData(lat, lon);
         // Return only forecast-typed days, up to count
-        const forecastDays = all.filter(d => d.type === 'forecast').slice(0, count);
+        const forecastDays = all.filter((d) => d.type === 'forecast').slice(0, count);
         return forecastDays;
     }
 
@@ -685,7 +691,7 @@ export class TimelineData {
 
     /**
      * Get forecast issued date (simulated)
-     * 
+     *
      * @param {string} targetDate - Target forecast date
      * @param {number} daysAhead - How many days ahead the forecast was
      * @returns {string} Issued date string
@@ -700,7 +706,7 @@ export class TimelineData {
 
     /**
      * Generate cache key
-     * 
+     *
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
      * @param {string} type - Data type identifier
@@ -715,30 +721,30 @@ export class TimelineData {
 
     /**
      * Get data from cache if not expired
-     * 
+     *
      * @param {string} key - Cache key
      * @param {boolean} allowExpired - Return even if expired (stale-while-revalidate)
      * @returns {Object|null} Cached data or null
      */
     getFromCache(key, allowExpired = false) {
         const cached = this.cache.get(key);
-        
+
         if (!cached) return null;
-        
+
         const now = Date.now();
         const isExpired = now - cached.timestamp > CACHE_TTL;
-        
+
         if (isExpired && !allowExpired) {
             this.cache.delete(key);
             return null;
         }
-        
+
         return cached;
     }
 
     /**
      * Store data in cache
-     * 
+     *
      * @param {string} key - Cache key
      * @param {Object} data - Data to cache
      */
@@ -747,7 +753,7 @@ export class TimelineData {
             data,
             timestamp: Date.now()
         });
-        
+
         // Clean up old cache entries periodically
         if (this.cache.size > 50) {
             this.cleanupCache();

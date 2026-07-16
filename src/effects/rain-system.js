@@ -32,7 +32,9 @@ export class RainSystem extends ParticleSystemBase {
     }
 
     async initWebGPU() {
+        const oldMaterial = this.mesh.material;
         this.mesh.material = await createRainMaterialWebGPU();
+        oldMaterial?.dispose?.();
     }
 
     resetParticle(i, randomY = false) {
@@ -41,7 +43,7 @@ export class RainSystem extends ParticleSystemBase {
         const positions = this.mesh.geometry.attributes.position.array;
 
         const x = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
-        const y = randomY ? (Math.random() * 20 - 5) : (15 + Math.random() * 5);
+        const y = randomY ? Math.random() * 20 - 5 : 15 + Math.random() * 5;
         const z = Math.random() * 10 - 5;
 
         this.velocities[i3] = 0;
@@ -89,7 +91,7 @@ export class RainSystem extends ParticleSystemBase {
         this.mesh.geometry.setDrawRange(0, activeCount * 2);
 
         const positions = this.mesh.geometry.attributes.position.array;
-        const rad = (90 - windDir) * Math.PI / 180;
+        const rad = ((90 - windDir) * Math.PI) / 180;
         const speedScale = 0.005;
         const targetWindX = Math.cos(rad) * windSpeed * speedScale;
         const targetWindZ = -Math.sin(rad) * windSpeed * speedScale;
@@ -118,10 +120,12 @@ export class RainSystem extends ParticleSystemBase {
 
                 if (positions[i6 + 3] > this.zone.maxX) {
                     const w = this.zone.maxX - this.zone.minX;
-                    positions[i6 + 3] -= w; positions[i6] -= w;
+                    positions[i6 + 3] -= w;
+                    positions[i6] -= w;
                 } else if (positions[i6 + 3] < this.zone.minX) {
                     const w = this.zone.maxX - this.zone.minX;
-                    positions[i6 + 3] += w; positions[i6] += w;
+                    positions[i6 + 3] += w;
+                    positions[i6] += w;
                 }
 
                 const headY = positions[i6 + 4];

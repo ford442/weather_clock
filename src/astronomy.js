@@ -20,7 +20,7 @@ export class AstronomyService {
     update(date, lat, lon, distance = 20) {
         // Default to New York if no location
         const latitude = lat || 40.7128;
-        const longitude = lon || -74.0060;
+        const longitude = lon || -74.006;
 
         // Get Sun position
         const sunPos = SunCalc.getPosition(date, latitude, longitude);
@@ -66,7 +66,7 @@ export class AstronomyService {
      */
     getSolarNoon(date, lat, lon) {
         const latitude = lat || 40.7128;
-        const longitude = lon || -74.0060;
+        const longitude = lon || -74.006;
         const base = date instanceof Date ? date : new Date(date);
         const times = SunCalc.getTimes(base, latitude, longitude);
         if (times.solarNoon instanceof Date && Number.isFinite(times.solarNoon.getTime())) {
@@ -84,12 +84,7 @@ export class AstronomyService {
     getDateAtHour(date, hour = 12) {
         const base = date instanceof Date ? new Date(date) : new Date(date);
         const clampedHour = Math.max(0, Math.min(23.99, Number(hour) || 0));
-        base.setHours(
-            Math.floor(clampedHour),
-            Math.floor((clampedHour % 1) * 60),
-            0,
-            0
-        );
+        base.setHours(Math.floor(clampedHour), Math.floor((clampedHour % 1) * 60), 0, 0);
         return base;
     }
 
@@ -97,12 +92,7 @@ export class AstronomyService {
      * Convenience wrapper for future-day forecast scrubbing.
      */
     getPositionsForDateAtHour(date, hour, lat, lon, distance = 20) {
-        return this.getPositionsForDate(
-            this.getDateAtHour(date, hour),
-            lat,
-            lon,
-            distance
-        );
+        return this.getPositionsForDate(this.getDateAtHour(date, hour), lat, lon, distance);
     }
 
     /**
@@ -132,9 +122,6 @@ export class AstronomyService {
         // X = -radius * sin(azimuth) * cos(altitude)
         // If az=PI/2 (West), sin=1 -> X = -radius (West). Correct.
         // If az=-PI/2 (East), sin=-1 -> X = radius (East). Correct.
-
-        const phi = (Math.PI / 2) - altitude; // Polar angle from Y-up (Zenith)
-        // Actually, easier to just use the direct mapping derived:
 
         const x = -radius * Math.sin(azimuth) * Math.cos(altitude);
         const y = radius * Math.sin(altitude);

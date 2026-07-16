@@ -18,13 +18,13 @@ export class ForecastController {
         this.weatherService = weatherService;
 
         this.timelineData = new TimelineData();
-        this.days = [];               // DayData[] (next 10)
-        this.focusedIndex = 0;        // which day is expanded in main view
-        this.vignetteHour = 12;       // 0-23.99 for scrubber
+        this.days = []; // DayData[] (next 10)
+        this.focusedIndex = 0; // which day is expanded in main view
+        this.vignetteHour = 12; // 0-23.99 for scrubber
         this.isPlayingDay = false;
         this.playHoursPerSecond = 0.75;
 
-        this.onDayFocus = null;       // (index, dayData, repDate) => void
+        this.onDayFocus = null; // (index, dayData, repDate) => void
         this.onDataLoaded = null;
         this.onHourChange = null;
 
@@ -75,7 +75,7 @@ export class ForecastController {
     }
 
     /** Current focused day + a computed vignette Date for the current hour */
-    getFocusedVignetteTime(lat = null, lon = null) {
+    getFocusedVignetteTime(_lat = null, _lon = null) {
         const day = this.days[this.focusedIndex];
         if (!day) return new Date();
         const base = new Date(day.date + 'T00:00:00');

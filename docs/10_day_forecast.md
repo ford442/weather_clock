@@ -639,7 +639,7 @@ class TimelineController {
 ### Current State
 - `src/main.js`: Scene setup, render loop
 - `src/weather.js`: API calls to Open-Meteo
-- `src/weatherEffects.js`: Rain/snow particles
+- `src/effects/weather-effects.js`: Weather-effect coordinator and pooled particle systems
 - `src/weatherLighting.js`: Sun/moon lighting
 
 ### Integration Points
@@ -650,7 +650,7 @@ class TimelineController {
    - Shared particle system pools
 
 2. **Reuse Particle Systems**: 
-   - Extract base `ParticleSystem` class from `weatherEffects.js`
+   - Reuse the particle-system base and coordinator under `src/effects/`
    - `DayColumn` instantiates scaled-down versions
 
 3. **Enhanced Lighting**:

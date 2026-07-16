@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WeatherService } from '../weather.js';
 import { getWeatherAtTime } from '../weather-simulation.js';
 
@@ -7,6 +7,11 @@ global.fetch = vi.fn();
 
 beforeEach(() => {
     fetch.mockReset();
+});
+
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
 });
 
 describe('WeatherService', () => {
@@ -63,7 +68,7 @@ describe('WeatherService', () => {
         });
         // Mock fetch for historical year ago
         fetch.mockResolvedValueOnce({
-             json: async () => ({
+            json: async () => ({
                 hourly: {
                     time: [],
                     temperature_2m: [],
@@ -81,7 +86,7 @@ describe('WeatherService', () => {
         await service.initialize();
 
         expect(service.latitude).toBe(40.7128); // Default NY
-        expect(service.longitude).toBe(-74.0060);
+        expect(service.longitude).toBe(-74.006);
     });
 
     it('should convert temperature correctly', () => {
@@ -115,10 +120,10 @@ describe('WeatherService', () => {
             service.setManualLocation(40.71, -74.01, 'Test City');
             const key = service.getCacheKey(40.71, -74.01);
             const dummyData = { test: 'data' };
-            
+
             service.setCache(key, dummyData);
             const cached = service.getFromCache(key);
-            
+
             expect(cached).not.toBeNull();
             expect(cached.data).toEqual(dummyData);
             expect(cached.lat).toBe(40.71);
@@ -130,21 +135,21 @@ describe('WeatherService', () => {
             service.setManualLocation(40.71, -74.01, 'Test City');
             const key = service.getCacheKey(40.71, -74.01);
             const dummyData = { test: 'data' };
-            
+
             service.setCache(key, dummyData);
-            
+
             // Artificially expire the cache entry (more than 1 hour ago)
             const entry = service.cache.get(key);
-            entry.timestamp = Date.now() - 2 * 60 * 60 * 1000; 
-            
+            entry.timestamp = Date.now() - 2 * 60 * 60 * 1000;
+
             // Without allowExpired, it should return null
             expect(service.getFromCache(key, false)).toBeNull();
-            
+
             // Set again and expire again to test allowExpired
             service.setCache(key, dummyData);
             const entry2 = service.cache.get(key);
             entry2.timestamp = Date.now() - 2 * 60 * 60 * 1000;
-            
+
             // With allowExpired, it should return the entry
             const stale = service.getFromCache(key, true);
             expect(stale).not.toBeNull();
@@ -152,22 +157,91 @@ describe('WeatherService', () => {
         });
 
         it('should fall back to stale cached data when fetch fails', async () => {
-            const service = new WeatherService();
+            const service = new WeatherService({ retryDelaysMs: [] });
             service.setManualLocation(40.71, -74.01, 'Test City');
             const key = service.getCacheKey(40.71, -74.01);
             const dummyData = { current: { temp: 15 }, timeline: [] };
-            
+
             service.setCache(key, dummyData);
-            
+
             // Mock fetch to reject (simulate network error)
             fetch.mockRejectedValueOnce(new Error('Network disconnected'));
-            
+
             const data = await service.fetchWeather();
-            
+
             expect(data).not.toBeNull();
             expect(data.current.temp).toBe(15);
             expect(data.isCached).toBe(true);
             expect(data.cachedAt).toBeDefined();
+        });
+
+        it('should mark cached data as offline after a failed request while offline', async () => {
+            const service = new WeatherService();
+            service.setManualLocation(40.71, -74.01, 'Test City');
+            service.setCache(service.getCacheKey(40.71, -74.01), {
+                current: { temp: 15 },
+                timeline: []
+            });
+            vi.stubGlobal('navigator', { onLine: false });
+            fetch.mockRejectedValueOnce(new Error('Network disconnected'));
+
+            const data = await service.fetchWeather();
+
+            expect(data.isCached).toBe(true);
+            expect(data.isOffline).toBe(true);
+            expect(fetch).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('Request cancellation and timeouts', () => {
+        it('should abort a request that exceeds the HTTP timeout', async () => {
+            vi.useFakeTimers();
+            const service = new WeatherService({ timeoutMs: 10000 });
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            fetch.mockImplementation((_url, options) => {
+                return new Promise((_resolve, reject) => {
+                    options.signal.addEventListener('abort', () => {
+                        reject(new DOMException('Aborted', 'AbortError'));
+                    });
+                });
+            });
+
+            const request = service.searchLocation('Berlin');
+            const rejection = expect(request).rejects.toMatchObject({ code: 'TIMEOUT', status: null });
+
+            await vi.advanceTimersByTimeAsync(10000);
+            await rejection;
+            expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
+            errorSpy.mockRestore();
+        });
+
+        it('should cancel an older search when a new search starts', async () => {
+            const service = new WeatherService();
+            const firstRequest = {};
+
+            fetch.mockImplementationOnce((_url, options) => {
+                firstRequest.signal = options.signal;
+                return new Promise((_resolve, reject) => {
+                    options.signal.addEventListener('abort', () => {
+                        reject(new DOMException('Aborted', 'AbortError'));
+                    });
+                });
+            });
+            fetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => [{ display_name: 'Berlin, Germany', lat: '52.52', lon: '13.405' }]
+            });
+
+            const olderSearch = service.searchLocation('Ber');
+            const olderRejection = expect(olderSearch).rejects.toMatchObject({ code: 'ABORTED' });
+            const latestSearch = service.searchLocation('Berlin');
+
+            await olderRejection;
+            await expect(latestSearch).resolves.toEqual([
+                { display_name: 'Berlin, Germany', lat: '52.52', lon: '13.405' }
+            ]);
+            expect(firstRequest.signal.aborted).toBe(true);
         });
     });
 });

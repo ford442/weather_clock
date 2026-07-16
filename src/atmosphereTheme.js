@@ -1,23 +1,29 @@
-import * as THREE from 'three';
-
 // ── Smooth interpolation state ──
 const target = {
-    skyR: 10, skyG: 12, skyB: 18,
-    accentR: 232, accentG: 168, accentB: 56,
+    skyR: 10,
+    skyG: 12,
+    skyB: 18,
+    accentR: 232,
+    accentG: 168,
+    accentB: 56
 };
 
 const current = {
-    skyR: 10, skyG: 12, skyB: 18,
-    accentR: 232, accentG: 168, accentB: 56,
+    skyR: 10,
+    skyG: 12,
+    skyB: 18,
+    accentR: 232,
+    accentG: 168,
+    accentB: 56
 };
 
 const LERP_FACTOR = 0.05;
 
 const TEMP_ACCENTS = [
-    { max: 0,  r: 46,  g: 92,  b: 138 },   // #2E5C8A arctic
-    { max: 15, r: 90,  g: 172, b: 184 },   // #5AACB8 cool
-    { max: 25, r: 126, g: 184, b: 218 },   // #7EB8DA neutral
-    { max: 32, r: 232, g: 168, b: 56 },    // #E8A838 warm
+    { max: 0, r: 46, g: 92, b: 138 }, // #2E5C8A arctic
+    { max: 15, r: 90, g: 172, b: 184 }, // #5AACB8 cool
+    { max: 25, r: 126, g: 184, b: 218 }, // #7EB8DA neutral
+    { max: 32, r: 232, g: 168, b: 56 }, // #E8A838 warm
     { max: Infinity, r: 212, g: 114, b: 106 } // #D4726A hot
 ];
 
@@ -43,7 +49,7 @@ function deriveSkyColor(scene, weatherData) {
     }
 
     // Sample the sky object's sunPosition uniform if available
-    scene.traverse(obj => {
+    scene.traverse((obj) => {
         if (obj.isMesh && obj.material && obj.material.uniforms && obj.material.uniforms.sunPosition) {
             const sunPos = obj.material.uniforms.sunPosition.value;
             if (sunPos) sunY = sunPos.y;
@@ -55,16 +61,20 @@ function deriveSkyColor(scene, weatherData) {
 
     if (sunY < -twilight) {
         // Night — deep indigo
-        r = 5; g = 8; b = 25;
+        r = 5;
+        g = 8;
+        b = 25;
     } else if (sunY > twilight) {
         // Day — sky blue
-        r = 100; g = 180; b = 255;
+        r = 100;
+        g = 180;
+        b = 255;
     } else {
         // Twilight — night → amber → day
         const t = (sunY + twilight) / (twilight * 2);
         const night = { r: 5, g: 8, b: 25 };
-        const dawn  = { r: 255, g: 170, b: 85 };
-        const day   = { r: 100, g: 180, b: 255 };
+        const dawn = { r: 255, g: 170, b: 85 };
+        const day = { r: 100, g: 180, b: 255 };
 
         if (t < 0.5) {
             const lt = t * 2;
@@ -101,8 +111,8 @@ function deriveSkyColor(scene, weatherData) {
 
 /**
  * Sample the 3D scene atmosphere and drive CSS custom properties.
- * @param {THREE.WebGLRenderer} renderer
- * @param {THREE.Scene} scene
+ * @param {import('three').WebGLRenderer} renderer
+ * @param {import('three').Scene} scene
  * @param {Object} weatherData
  */
 export function updateAtmosphereTheme(renderer, scene, weatherData) {

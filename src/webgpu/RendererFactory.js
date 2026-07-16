@@ -15,6 +15,8 @@ import { isWebGPUSupported } from './WebGPUCapabilities.js';
 const DEFAULT_OPTIONS = {
     antialias: true,
     alpha: false,
+    powerPreference: 'high-performance',
+    stencil: false,
     clearColor: 0x000000,
     outputColorSpace: THREE.SRGBColorSpace,
     toneMapping: THREE.ACESFilmicToneMapping,
@@ -30,14 +32,17 @@ const DEFAULT_OPTIONS = {
  */
 export async function createRenderer(canvasContainer, userOptions = {}) {
     const options = { ...DEFAULT_OPTIONS, ...userOptions };
-    const hasWebGPU = await isWebGPUSupported();
+    const forceWebGL = consumeWebGLFallbackRequest();
+    const hasWebGPU = !forceWebGL && (await isWebGPUSupported());
 
     if (hasWebGPU) {
         try {
             const { WebGPURenderer } = await import('three/webgpu');
             const renderer = new WebGPURenderer({
                 antialias: options.antialias,
-                alpha: options.alpha
+                alpha: options.alpha,
+                powerPreference: options.powerPreference,
+                stencil: options.stencil
             });
 
             // Mandatory async initialisation for WebGPU
@@ -65,7 +70,9 @@ export async function createRenderer(canvasContainer, userOptions = {}) {
     // Native WebGL fallback — faster than WebGPURenderer in forced-WebGL mode
     const renderer = new THREE.WebGLRenderer({
         antialias: options.antialias,
-        alpha: options.alpha
+        alpha: options.alpha,
+        powerPreference: options.powerPreference,
+        stencil: options.stencil
     });
 
     renderer.setClearColor(options.clearColor);
@@ -82,4 +89,24 @@ export async function createRenderer(canvasContainer, userOptions = {}) {
 
     console.log('[RendererFactory] Using WebGL renderer');
     return { renderer, isWebGPU: false };
+}
+
+const FORCE_WEBGL_ONCE_KEY = 'weatherclock_force_webgl_once';
+
+function consumeWebGLFallbackRequest() {
+    if (typeof sessionStorage === 'undefined') return false;
+    try {
+        const requested = sessionStorage.getItem(FORCE_WEBGL_ONCE_KEY) === '1';
+        if (requested) sessionStorage.removeItem(FORCE_WEBGL_ONCE_KEY);
+        return requested;
+    } catch (error) {
+        console.warn('[RendererFactory] Could not read WebGL fallback request:', error);
+        return false;
+    }
+}
+
+/** Reload once with native WebGL after an unrecoverable WebGPU device loss. */
+export function requestWebGLFallback() {
+    sessionStorage.setItem(FORCE_WEBGL_ONCE_KEY, '1');
+    window.location.reload();
 }

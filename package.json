@@ -1,24 +1,35 @@
 {
-  "name": "weather_clock",
-  "version": "1.0.0",
-  "description": "A clock that shows temperature, sunlight, moonlight, weather in 3d.",
-  "main": "index.js",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "vite": "^7.2.4",
-    "vitest": "^3.2.4"
-  },
-  "dependencies": {
-    "suncalc": "^1.9.0",
-    "three": "0.181.2"
-  }
+    "name": "weather_clock",
+    "version": "1.0.0",
+    "description": "A clock that shows temperature, sunlight, moonlight, weather in 3d.",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "check:bundle-size": "node scripts/check-bundle-size.mjs",
+        "format": "prettier --write \"src/**/*.{js,ts,css}\" \"*.{js,json,html}\" \".github/workflows/*.{yml,yaml}\"",
+        "format:check": "prettier --check \"src/**/*.{js,ts,css}\" \"*.{js,json,html}\" \".github/workflows/*.{yml,yaml}\"",
+        "lint": "eslint src",
+        "preview": "vite preview",
+        "test": "vitest",
+        "typecheck": "tsc --noEmit"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/suncalc": "^1.9.2",
+        "eslint": "^10.7.0",
+        "globals": "^17.7.0",
+        "prettier": "^3.9.5",
+        "typescript": "^7.0.2",
+        "vite": "^7.2.4",
+        "vitest": "^3.2.4"
+    },
+    "dependencies": {
+        "suncalc": "^1.9.0",
+        "three": "0.181.2"
+    }
 }

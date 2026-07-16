@@ -33,7 +33,7 @@ The app has three viewing modes:
 | **Astronomy** | SunCalc | Vendored as ES module in `src/vendor/suncalc.js` |
 | **Weather Data** | Open-Meteo API | Forecast + Archive endpoints |
 | **Geocoding** | Nominatim (OpenStreetMap) | Used for search & reverse geocoding |
-| **Visual Testing** | Python + Playwright | Scripts in `verification/` |
+| **Visual Testing** | Python + Playwright + Pillow | Unified suite in `verification/suite/` |
 
 ---
 
@@ -42,29 +42,31 @@ The app has three viewing modes:
 ### Root
 - `index.html` — Entry point. Loads Three.js via an import map and mounts `src/main.js`.
 - `package.json` — NPM manifest with Vite/Vitest scripts.
-- `deploy.py` — **Security note:** Paramiko SFTP deployment script containing hardcoded server credentials.
+- `deploy.py` — Authenticated bundle deployment script. Configuration comes from environment variables or a gitignored `deploy.config.json`.
+- `docs/ROADMAP.md` — Living project roadmap; links to the open GitHub issues that own planned work.
 
 ### Source (`src/`)
 | File | Responsibility |
 |------|----------------|
 | `main.js` | Application orchestrator. Sets up state, rendering, lights, scene objects, services, animation loop, UI callbacks, mode controller, and debug API. |
-| `rendering.js` | Scene, WebGL renderer, perspective camera, `EffectComposer` + `UnrealBloomPass`, `OrbitControls`, window resize handling. |
+| `rendering.js` | Scene/camera setup, quality tiers, renderer recovery, and the shared interface to the dual WebGL/WebGPU pipeline. |
 | `lights.js` | Ambient light, directional sun light, directional moon light; shadow map configuration. |
 | `scene-objects.js` | Factory functions for the `Sky` object, sundial, moon group, and weather effects. |
 | `animation.js` | `AnimationController` class. Drives the `requestAnimationFrame` loop, advances `simulationTime`, handles time-warp, throttles UI updates. |
-| `ui.js` | All DOM manipulation: time/date displays, weather panel updates, unit toggle, search box, sparkline canvas, pressure gauge, toasts, keyboard shortcuts. |
+| `ui.js`, `ui/` | DOM-facing facade plus focused modules for time/date, weather panels, search, gauges, sparklines, toasts, shortcuts, and event listeners. |
 | `weather-simulation.js` | Weather interpolation over the hourly timeline (`getWeatherAtTime`), plus `getActiveWeatherData` for past/current/forecast snapshots. |
-| `weather.js` | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timeline, handles geolocation/search, unit conversion, and advanced analytics (historical year-ago, regional offsets, accuracy mock). |
+| `weather.js` | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timelines, handles geolocation/search, unit conversion, and advanced analytics. Forecast accuracy remains an explicit no-data placeholder. |
 | `astronomy.js` | `AstronomyService` class. Wraps SunCalc to compute sun/moon positions and illumination, converting spherical coordinates to Three.js Cartesian. |
-| `weatherEffects.js` | Particle systems: `RainSystem`, `SnowSystem`, `WindDustSystem`, `CloudSystem` (`InstancedMesh` with cumulus/stratus/cirrus types), `StarField`, splash effects, and lightning flashes. |
+| `effects/weather-effects.js`, `effects/` | Weather-effect coordinator plus pooled rain, snow, dust, cloud, fog, star, and splash systems. |
 | `weatherLighting.js` | `updateWeatherLighting()` — calculates day/night factor, weighted cloud cover, severity, fog density, sky shader uniforms, and smoothly interpolates sun/moon/ambient colors and intensities. |
 | `shaders.js` | GLSL shader strings used by rain and cloud materials. |
 | `sundial.js` | 3D sundial geometry (base, clock face, hour markers, gnomon, analog hands) with an `update(time)` method. |
 | `moonPhase.js` | Moon phase math and visual moon mesh creation. |
 | `atmosphereTheme.js` | Updates CSS custom properties (`--accent`, `--glow`, `--trend-glow`, etc.) based on time of day and weather severity. |
 | `debug.js` | Exposes `window.setDebugWeather(code)`, `window.setDebugTime(hour)`, and `window.aetherDebug` for runtime inspection. |
-| `ModeController.js` | Manages switching between Clock, Timeline, and Forecast (10-day vignette) modes, camera animations, UI visibility toggles, and browser history (`?mode=...`). |
+| `ModeController.js`, `modes/` | Mode orchestration, adapters, camera transitions, UI visibility, and browser history for Clock, Timeline, and Forecast modes. |
 | `forecast/` | ForecastController + ForecastUI + DailyPreview (2D). New mode for immersive future-day vignettes. |
+| `webgpu/` | Renderer capability detection/factory, WebGL and WebGPU post-processing adapters, and TSL/WebGPU material adapters. WebGL remains the fallback. |
 | `vendor/suncalc.js` | Vendored SunCalc library patched for ES module compatibility. |
 
 ### Timeline Subsystem (`src/timeline/`)
@@ -74,19 +76,20 @@ The app has three viewing modes:
 - `TimelineData.js` — Fetches and caches timeline weather data from Open-Meteo.
 - `AnomalyCalculator.js` — Computes weather anomalies (z-scores) for the timeline.
 - `index.js` — Re-exports.
-- `timeline.css` — Styles for timeline UI.
+- `timeline.css` — Style entry point; imports the split timeline core and overlay styles.
 
 ### Tests (`src/tests/`)
-- `astronomy.test.js` — Validates sun/moon position calculations.
-- `weather.test.js` — Validates `WeatherService` initialization, unit conversion, and description mapping.
+- Unit tests cover astronomy, weather, forecast logic, rendering quality/recovery, weather effects, and lighting.
 
 ### Shaders (`shaders/`)
-- WGSL compute shaders for future WebGPU support: `rain-compute.wgsl`, `snow-compute.wgsl`, `splash-compute.wgsl`, `cloud-post.wgsl`, `star-field.wgsl`.
-- These are secondary to the primary GLSL/WebGL render path in `src/shaders.js`. Do not modify them unless explicitly working on WebGPU migration.
+- Experimental WGSL compute shaders: `rain-compute.wgsl`, `snow-compute.wgsl`, `splash-compute.wgsl`, `cloud-post.wgsl`, `star-field.wgsl`.
+- They are not the active WebGPU path. Runtime WebGPU support lives under `src/webgpu/`; WebGL shader strings remain in `src/shaders.js`. Do not wire the standalone WGSL files into production unless explicitly working on issue #87.
 
-### Visual Verification (`verification/`)
-Python + Playwright scripts for screenshot-based regression testing:
-- `verify_weather.py`, `verify_date_display.py`, `verify_scene.py`, `verify_sky.py`, `verify_night.py`, `verify_sunny.py`, `verify_changes.py`, etc.
+### Visual Verification (`verification/suite/`)
+- `run_all.py` is the only committed visual/smoke runner.
+- `baselines/` contains the reviewed screenshots used for comparison.
+- `current/` and `diffs/` are generated locally and ignored by git.
+- The runner covers the canonical weather/time screenshots plus UI/debug readiness and forecast-mode smoke checks.
 
 ---
 
@@ -116,12 +119,12 @@ Requires the dev server to be running (`npm run dev` in another terminal) and Py
 pip install playwright
 playwright install
 
-python3 verification/verify_weather.py
-python3 verification/verify_date_display.py
-python3 verification/verify_scene.py
+python3 verification/suite/run_all.py
 ```
 
-Screenshots are saved into `verification/` for manual comparison.
+Use `VISUAL_UPDATE=1 python3 verification/suite/run_all.py` to replace reviewed baselines intentionally. Normal runs write generated images under `verification/suite/current/` and mismatch images under `verification/suite/diffs/`.
+
+Use `python3 verification/suite/run_all.py --smoke-only` for a quick browser check of app readiness, debug hooks, and forecast-mode state without screenshot comparisons.
 
 ---
 
@@ -146,8 +149,8 @@ Screenshots are saved into `verification/` for manual comparison.
 
 2. **Visual Verification**
    - Start the dev server: `npm run dev`
-   - Run the Python verification scripts in `verification/`.
-   - Inspect generated screenshots for regressions in sky color, weather effects, and UI layout.
+   - Run `python3 verification/suite/run_all.py`.
+   - Inspect generated screenshots and diffs for regressions in sky color, weather effects, forecast mode, and UI layout.
 
 3. **Interactive Debug Mode**
    - Open the browser console on `http://localhost:5173` and use:
@@ -164,7 +167,7 @@ Screenshots are saved into `verification/` for manual comparison.
 
 ## Security Considerations
 
-- **`deploy.py` contains hardcoded SFTP credentials.** Do not run this script blindly, and do not commit modified versions that expose secrets.
+- Deployment credentials must be supplied through environment variables or a gitignored `deploy.config.json`; never commit live tokens or server credentials.
 - The app fetches data from external APIs (Open-Meteo, Nominatim) over HTTPS. No API keys are required.
 - User location and unit preferences are stored in `localStorage` under the keys:
   - `weatherclock_lat`
@@ -183,7 +186,7 @@ Screenshots are saved into `verification/` for manual comparison.
 ### Weather State Pipeline
 1. `WeatherService.fetchWeather()` retrieves forecast + archive data and builds an hourly `timeline` array.
 2. `getActiveWeatherData(simulationTime, weatherData)` interpolates past, current, and forecast points from the timeline.
-3. `AnimationController.update()` passes the active weather to `updateWeatherLighting()` and `weatherEffects.update()`.
+3. `AnimationController.update()` passes the active weather to `updateWeatherLighting()` and the coordinator in `effects/weather-effects.js`.
 4. `weatherLighting.js` computes severity, cloud weighting, and smoothly transitions colors/intensities over ~5 seconds.
 
 ### Three Temporal Zones
@@ -208,7 +211,7 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 - **Splashes:** Small particle bursts spawn on the sundial surface when raindrops hit.
 
 ### Mode Switching
-`ModeController` transitions the camera between Clock mode (close-up of the sundial) and Timeline mode (elevated overview of 21-day columns). It updates browser history so `?mode=timeline` is shareable. Press `T` to toggle, `Esc` to return to Clock mode, `ArrowLeft`/`ArrowRight` to toggle edge drawers.
+`ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers.
 
 ### Known Limitations
 - **Forecast accuracy placeholder:** `WeatherService.getPredictionAccuracy()` and `TimelineData.enrichWithAccuracy()` return no data. Real forecast verification via the Open-Meteo Previous Runs API is planned but not yet implemented.

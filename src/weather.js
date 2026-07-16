@@ -7,22 +7,88 @@ import {
 } from './dailyForecast.js';
 
 export class WeatherServiceError extends Error {
-    constructor(message, status, endpoint) {
+    constructor(message, status = null, endpoint = null, options = {}) {
         super(message);
         this.name = 'WeatherServiceError';
         this.status = status;
         this.endpoint = endpoint;
+        this.code = options.code ?? null;
+        this.isOffline = options.isOffline ?? false;
+        if (options.cause) this.cause = options.cause;
     }
 }
 
 export class WeatherService {
-    constructor() {
+    constructor({ timeoutMs = 10000, retryDelaysMs = [2000, 4000, 8000] } = {}) {
         this.latitude = null;
         this.longitude = null;
         this.location = null;
         this.unit = 'imperial'; // Default to Fahrenheit
         this.windUnit = 'metric'; // 'metric' = km/h, 'imperial' = mph
         this.cache = new Map();
+        this.timeoutMs = timeoutMs;
+        this.retryDelaysMs = retryDelaysMs;
+        this.searchController = null;
+    }
+
+    /**
+     * @param {string} url
+     * @param {{timeoutMs?: number, signal?: AbortSignal}} [options]
+     */
+    async #fetchJSON(url, { timeoutMs = this.timeoutMs, signal } = {}) {
+        const controller = new AbortController();
+        let timedOut = false;
+
+        const forwardAbort = () => controller.abort(signal?.reason);
+        if (signal?.aborted) {
+            forwardAbort();
+        } else {
+            signal?.addEventListener('abort', forwardAbort, { once: true });
+        }
+
+        const timeoutId = setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+        }, timeoutMs);
+
+        try {
+            const response = await fetch(url, { signal: controller.signal });
+            if (response.ok === false) {
+                throw new WeatherServiceError(
+                    `Request failed with status ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+                    response.status,
+                    url,
+                    { code: 'HTTP_ERROR' }
+                );
+            }
+            return await response.json();
+        } catch (error) {
+            if (error instanceof WeatherServiceError) throw error;
+
+            if (timedOut) {
+                throw new WeatherServiceError(`Request timed out after ${timeoutMs}ms`, null, url, {
+                    code: 'TIMEOUT',
+                    cause: error
+                });
+            }
+
+            if (signal?.aborted) {
+                throw new WeatherServiceError('Request cancelled', null, url, {
+                    code: 'ABORTED',
+                    cause: error
+                });
+            }
+
+            const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+            throw new WeatherServiceError(isOffline ? 'Device is offline' : 'Network request failed', null, url, {
+                code: isOffline ? 'OFFLINE' : 'NETWORK_ERROR',
+                isOffline,
+                cause: error
+            });
+        } finally {
+            clearTimeout(timeoutId);
+            signal?.removeEventListener('abort', forwardAbort);
+        }
     }
 
     async initialize() {
@@ -37,7 +103,7 @@ export class WeatherService {
 
     convertTemp(celsius) {
         if (this.unit === 'metric') return celsius;
-        return (celsius * 9 / 5) + 32;
+        return (celsius * 9) / 5 + 32;
     }
 
     setWindUnit(unit) {
@@ -52,28 +118,31 @@ export class WeatherService {
     }
 
     async searchLocation(query) {
+        this.searchController?.abort();
+        const controller = new AbortController();
+        this.searchController = controller;
+
         try {
-            const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(query)}`
+            return await this.#fetchJSON(
+                `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(query)}`,
+                { signal: controller.signal }
             );
-            if (response.ok === false) {
-                throw new WeatherServiceError(
-                    `Search failed with status ${response.status}`,
-                    response.status,
-                    'nominatim_search'
-                );
-            }
-            const data = await response.json();
-            return data;
         } catch (error) {
-            console.error('Search location failed:', error);
+            if (error.code !== 'ABORTED') console.error('Search location failed:', error);
             throw error;
+        } finally {
+            if (this.searchController === controller) this.searchController = null;
         }
     }
 
+    /**
+     * @param {number|string} lat
+     * @param {number|string} lon
+     * @param {string} name
+     */
     setManualLocation(lat, lon, name) {
-        this.latitude = parseFloat(lat);
-        this.longitude = parseFloat(lon);
+        this.latitude = Number(lat);
+        this.longitude = Number(lon);
         this.location = name;
     }
 
@@ -81,7 +150,7 @@ export class WeatherService {
         return new Promise((resolve) => {
             if (!navigator.geolocation) {
                 this.setDefaultLocation();
-                resolve();
+                resolve(undefined);
                 return;
             }
 
@@ -89,7 +158,7 @@ export class WeatherService {
             const timeoutId = setTimeout(() => {
                 console.warn('Geolocation timeout (5s), using fallback location');
                 this.setDefaultLocation();
-                resolve();
+                resolve(undefined);
             }, 5000);
 
             navigator.geolocation.getCurrentPosition(
@@ -105,13 +174,13 @@ export class WeatherService {
                         this.location = `${this.latitude.toFixed(2)}, ${this.longitude.toFixed(2)}`;
                     }
 
-                    resolve();
+                    resolve(undefined);
                 },
                 (error) => {
                     clearTimeout(timeoutId);
                     console.warn('Geolocation failed, using fallback location:', error.message);
                     this.setFallbackLocation();
-                    resolve();
+                    resolve(undefined);
                 }
             );
         });
@@ -123,24 +192,16 @@ export class WeatherService {
 
     setDefaultLocation() {
         this.latitude = 40.7128;
-        this.longitude = -74.0060;
+        this.longitude = -74.006;
         this.location = 'New York, USA (default)';
         this.windUnit = 'imperial'; // NYC default is US
     }
 
     async reverseGeocode(lat, lon) {
         try {
-            const response = await fetch(
+            const data = await this.#fetchJSON(
                 `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`
             );
-            if (response.ok === false) {
-                throw new WeatherServiceError(
-                    `Reverse geocoding failed with status ${response.status}`,
-                    response.status,
-                    'nominatim_reverse'
-                );
-            }
-            const data = await response.json();
 
             if (data.address) {
                 const city = data.address.city || data.address.town || data.address.village;
@@ -178,162 +239,192 @@ export class WeatherService {
     }
 
     async fetchWeather() {
+        let lastError;
+
+        for (let attempt = 0; attempt <= this.retryDelaysMs.length; attempt++) {
+            try {
+                return await this._fetchWeatherOnce();
+            } catch (error) {
+                lastError = error;
+                const retryDelay = this.retryDelaysMs[attempt];
+                if (retryDelay === undefined || !this._isRetryable(error)) break;
+
+                console.warn(
+                    `Weather fetch failed. Retrying in ${retryDelay}ms (attempt ${attempt + 1}/${this.retryDelaysMs.length})...`
+                );
+                await new Promise((resolve) => setTimeout(resolve, retryDelay));
+            }
+        }
+
+        console.error('Weather fetch failed, attempting cache fallback:', lastError);
+        const cached = this.getFromCache(this.getCacheKey(this.latitude, this.longitude), true);
+        if (cached) {
+            const isOffline = lastError?.isOffline === true || this._isOffline();
+            console.warn('Serving cached weather data due to fetch error');
+            return {
+                ...cached.data,
+                isCached: true,
+                isOffline,
+                cachedAt: cached.timestamp
+            };
+        }
+        throw lastError;
+    }
+
+    _isRetryable(error) {
+        if (!(error instanceof WeatherServiceError)) return false;
+        if (error.code === 'ABORTED' || error.code === 'OFFLINE') return false;
+        if (error?.status == null) return true;
+        return error.status === 408 || error.status === 429 || error.status >= 500;
+    }
+
+    _isOffline() {
+        return typeof navigator !== 'undefined' && navigator.onLine === false;
+    }
+
+    async _fetchWeatherOnce() {
         if (!this.latitude || !this.longitude) {
             throw new Error('Location not available');
         }
 
         const cacheKey = this.getCacheKey(this.latitude, this.longitude);
 
-        try {
-            const now = new Date();
+        const now = new Date();
 
-            // Using Open-Meteo API (free, no key required)
-            // Get current and forecast weather
-            // Added 'visibility' to current params
-            // Request past_days=1 to ensure we have historical hourly data for the "Past" zone interpolation
-            // even if the current time is just after midnight.
-            const currentResponse = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&timezone=auto&past_days=1`
-            );
-            if (currentResponse.ok === false) {
-                throw new WeatherServiceError(
-                    `Forecast API error: ${currentResponse.status} ${currentResponse.statusText}`,
-                    currentResponse.status,
-                    'open_meteo_forecast'
-                );
+        // Using Open-Meteo API (free, no key required)
+        // Get current and forecast weather
+        // Added 'visibility' to current params
+        // Request past_days=1 to ensure we have historical hourly data for the "Past" zone interpolation
+        // even if the current time is just after midnight.
+        const currentData = await this.#fetchJSON(
+            `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&timezone=auto&past_days=1`
+        );
+
+        // Archive API — no UV/precipProb in archive, use apparent_temp + humidity
+        const pastDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+        const pastDateStr = pastDate.toISOString().split('T')[0];
+        const todayStr = now.toISOString().split('T')[0];
+
+        const historicalData = await this.#fetchJSON(
+            `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,rain,showers,snowfall,pressure_msl&timezone=auto`
+        );
+
+        // Build hourly timeline
+        const timeline = [];
+        const hourly = currentData.hourly;
+        if (hourly && hourly.time) {
+            for (let i = 0; i < hourly.time.length; i++) {
+                timeline.push({
+                    time: new Date(hourly.time[i]),
+                    ...this._parseHourlyPoint(hourly, i)
+                });
             }
-            const currentData = await currentResponse.json();
-
-            // Archive API — no UV/precipProb in archive, use apparent_temp + humidity
-            const pastDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-            const pastDateStr = pastDate.toISOString().split('T')[0];
-            const todayStr = now.toISOString().split('T')[0];
-
-            const historicalResponse = await fetch(
-                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,rain,showers,snowfall,pressure_msl&timezone=auto`
-            );
-            if (historicalResponse.ok === false) {
-                throw new WeatherServiceError(
-                    `Archive API error: ${historicalResponse.status} ${historicalResponse.statusText}`,
-                    historicalResponse.status,
-                    'open_meteo_archive'
-                );
-            }
-            const historicalData = await historicalResponse.json();
-
-            // Build hourly timeline
-            const timeline = [];
-            const hourly = currentData.hourly;
-            if (hourly && hourly.time) {
-                for (let i = 0; i < hourly.time.length; i++) {
-                    timeline.push({
-                        time: new Date(hourly.time[i]),
-                        ...this._parseHourlyPoint(hourly, i)
-                    });
-                }
-            }
-
-            // Current conditions
-            const cur = currentData.current;
-            const current = {
-                temp: cur.temperature_2m,
-                feelsLike: currentData.current.apparent_temperature ?? currentData.current.temperature_2m,
-                apparentTemp: cur.apparent_temperature ?? cur.temperature_2m,
-                humidity: cur.relative_humidity_2m ?? 0,
-                uvIndex: cur.uv_index ?? 0,
-                precipProb: cur.precipitation_probability ?? 0,
-                weatherCode: cur.weather_code,
-                description: this.getWeatherDescription(cur.weather_code),
-                cloudCover: cur.cloud_cover,
-                windSpeed: cur.wind_speed_10m,
-                windDirection: cur.wind_direction_10m ?? 0,
-                visibility: cur.visibility,
-                rain: cur.rain,
-                showers: cur.showers,
-                snowfall: cur.snowfall,
-                pressure: cur.pressure_msl ?? 1013.25
-            };
-
-            // Past conditions (3 h ago, from archive)
-            const hist = historicalData.hourly;
-            const pastIdx = this.findClosestHourIndex(hist.time, pastDate);
-            const past = {
-                temp: hist.temperature_2m[pastIdx] ?? current.temp,
-                feelsLike: historicalData.hourly.apparent_temperature ? (historicalData.hourly.apparent_temperature[pastIdx] ?? current.feelsLike) : current.feelsLike,
-                apparentTemp: hist.apparent_temperature ? (hist.apparent_temperature[pastIdx] ?? current.apparentTemp) : current.apparentTemp,
-                humidity: hist.relative_humidity_2m ? (hist.relative_humidity_2m[pastIdx] ?? current.humidity) : current.humidity,
-                uvIndex: 0,      // Not available in archive
-                precipProb: 0,   // Not available in archive
-                weatherCode: hist.weather_code[pastIdx] ?? current.weatherCode,
-                description: this.getWeatherDescription(hist.weather_code[pastIdx] ?? current.weatherCode),
-                cloudCover: hist.cloud_cover[pastIdx] ?? current.cloudCover,
-                windSpeed: hist.wind_speed_10m[pastIdx] ?? current.windSpeed,
-                windDirection: hist.wind_direction_10m ? (hist.wind_direction_10m[pastIdx] ?? current.windDirection) : current.windDirection,
-                rain: hist.rain ? (hist.rain[pastIdx] ?? 0) : 0,
-                showers: hist.showers ? (hist.showers[pastIdx] ?? 0) : 0,
-                snowfall: hist.snowfall ? (hist.snowfall[pastIdx] ?? 0) : 0,
-                pressure: hist.pressure_msl ? (hist.pressure_msl[pastIdx] ?? current.pressure) : current.pressure
-            };
-
-            // Forecast conditions (+3 h)
-            const futureDate = new Date(now.getTime() + 3 * 60 * 60 * 1000);
-            const futureIdx = this.findClosestHourIndex(currentData.hourly.time, futureDate);
-            const fc = currentData.hourly;
-            const forecast = {
-                temp: fc.temperature_2m[futureIdx] ?? current.temp,
-                apparentTemp: fc.apparent_temperature ? (fc.apparent_temperature[futureIdx] ?? current.apparentTemp) : current.apparentTemp,
-                feelsLike: currentData.hourly.apparent_temperature ? (currentData.hourly.apparent_temperature[futureIdx] ?? current.feelsLike) : current.feelsLike,
-                humidity: fc.relative_humidity_2m ? (fc.relative_humidity_2m[futureIdx] ?? current.humidity) : current.humidity,
-                uvIndex: fc.uv_index ? (fc.uv_index[futureIdx] ?? 0) : 0,
-                precipProb: fc.precipitation_probability ? (fc.precipitation_probability[futureIdx] ?? 0) : 0,
-                weatherCode: fc.weather_code[futureIdx] ?? current.weatherCode,
-                description: this.getWeatherDescription(fc.weather_code[futureIdx] ?? current.weatherCode),
-                cloudCover: fc.cloud_cover[futureIdx] ?? current.cloudCover,
-                windSpeed: fc.wind_speed_10m[futureIdx] ?? current.windSpeed,
-                windDirection: fc.wind_direction_10m ? (fc.wind_direction_10m[futureIdx] ?? current.windDirection) : current.windDirection,
-                rain: fc.rain ? (fc.rain[futureIdx] ?? 0) : 0,
-                showers: fc.showers ? (fc.showers[futureIdx] ?? 0) : 0,
-                snowfall: fc.snowfall ? (fc.snowfall[futureIdx] ?? 0) : 0,
-                pressure: fc.pressure_msl ? (fc.pressure_msl[futureIdx] ?? current.pressure) : current.pressure
-            };
-
-            // Sunrise/sunset via SunCalc
-            const sunTimes = SunCalc.getTimes(now, this.latitude, this.longitude);
-
-            // Advanced data
-            const historicalYearAgo = await this.fetchHistoricalYearAgo(now);
-            const regional = null; // Lazy loaded on Nearby tab open
-            const accuracy = this.getPredictionAccuracy(current);
-
-            const result = {
-                location: this.location,
-                current,
-                past,
-                forecast,
-                timeline,
-                sunrise: sunTimes.sunrise,
-                sunset: sunTimes.sunset,
-                historicalYearAgo,
-                regional,
-                accuracy
-            };
-
-            this.setCache(cacheKey, result);
-
-            return result;
-        } catch (error) {
-            console.error('Weather fetch failed, attempting cache fallback:', error);
-            const cached = this.getFromCache(this.getCacheKey(this.latitude, this.longitude), true);
-            if (cached) {
-                console.warn('Serving cached weather data due to fetch error');
-                return {
-                    ...cached.data,
-                    isCached: true,
-                    cachedAt: cached.timestamp
-                };
-            }
-            throw error;
         }
+
+        // Current conditions
+        const cur = currentData.current;
+        const current = {
+            temp: cur.temperature_2m,
+            feelsLike: currentData.current.apparent_temperature ?? currentData.current.temperature_2m,
+            apparentTemp: cur.apparent_temperature ?? cur.temperature_2m,
+            humidity: cur.relative_humidity_2m ?? 0,
+            uvIndex: cur.uv_index ?? 0,
+            precipProb: cur.precipitation_probability ?? 0,
+            weatherCode: cur.weather_code,
+            description: this.getWeatherDescription(cur.weather_code),
+            cloudCover: cur.cloud_cover,
+            windSpeed: cur.wind_speed_10m,
+            windDirection: cur.wind_direction_10m ?? 0,
+            visibility: cur.visibility,
+            rain: cur.rain,
+            showers: cur.showers,
+            snowfall: cur.snowfall,
+            pressure: cur.pressure_msl ?? 1013.25
+        };
+
+        // Past conditions (3 h ago, from archive)
+        const hist = historicalData.hourly;
+        const pastIdx = this.findClosestHourIndex(hist.time, pastDate);
+        const past = {
+            temp: hist.temperature_2m[pastIdx] ?? current.temp,
+            feelsLike: historicalData.hourly.apparent_temperature
+                ? (historicalData.hourly.apparent_temperature[pastIdx] ?? current.feelsLike)
+                : current.feelsLike,
+            apparentTemp: hist.apparent_temperature
+                ? (hist.apparent_temperature[pastIdx] ?? current.apparentTemp)
+                : current.apparentTemp,
+            humidity: hist.relative_humidity_2m
+                ? (hist.relative_humidity_2m[pastIdx] ?? current.humidity)
+                : current.humidity,
+            uvIndex: 0, // Not available in archive
+            precipProb: 0, // Not available in archive
+            weatherCode: hist.weather_code[pastIdx] ?? current.weatherCode,
+            description: this.getWeatherDescription(hist.weather_code[pastIdx] ?? current.weatherCode),
+            cloudCover: hist.cloud_cover[pastIdx] ?? current.cloudCover,
+            windSpeed: hist.wind_speed_10m[pastIdx] ?? current.windSpeed,
+            windDirection: hist.wind_direction_10m
+                ? (hist.wind_direction_10m[pastIdx] ?? current.windDirection)
+                : current.windDirection,
+            rain: hist.rain ? (hist.rain[pastIdx] ?? 0) : 0,
+            showers: hist.showers ? (hist.showers[pastIdx] ?? 0) : 0,
+            snowfall: hist.snowfall ? (hist.snowfall[pastIdx] ?? 0) : 0,
+            pressure: hist.pressure_msl ? (hist.pressure_msl[pastIdx] ?? current.pressure) : current.pressure
+        };
+
+        // Forecast conditions (+3 h)
+        const futureDate = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+        const futureIdx = this.findClosestHourIndex(currentData.hourly.time, futureDate);
+        const fc = currentData.hourly;
+        const forecast = {
+            temp: fc.temperature_2m[futureIdx] ?? current.temp,
+            apparentTemp: fc.apparent_temperature
+                ? (fc.apparent_temperature[futureIdx] ?? current.apparentTemp)
+                : current.apparentTemp,
+            feelsLike: currentData.hourly.apparent_temperature
+                ? (currentData.hourly.apparent_temperature[futureIdx] ?? current.feelsLike)
+                : current.feelsLike,
+            humidity: fc.relative_humidity_2m
+                ? (fc.relative_humidity_2m[futureIdx] ?? current.humidity)
+                : current.humidity,
+            uvIndex: fc.uv_index ? (fc.uv_index[futureIdx] ?? 0) : 0,
+            precipProb: fc.precipitation_probability ? (fc.precipitation_probability[futureIdx] ?? 0) : 0,
+            weatherCode: fc.weather_code[futureIdx] ?? current.weatherCode,
+            description: this.getWeatherDescription(fc.weather_code[futureIdx] ?? current.weatherCode),
+            cloudCover: fc.cloud_cover[futureIdx] ?? current.cloudCover,
+            windSpeed: fc.wind_speed_10m[futureIdx] ?? current.windSpeed,
+            windDirection: fc.wind_direction_10m
+                ? (fc.wind_direction_10m[futureIdx] ?? current.windDirection)
+                : current.windDirection,
+            rain: fc.rain ? (fc.rain[futureIdx] ?? 0) : 0,
+            showers: fc.showers ? (fc.showers[futureIdx] ?? 0) : 0,
+            snowfall: fc.snowfall ? (fc.snowfall[futureIdx] ?? 0) : 0,
+            pressure: fc.pressure_msl ? (fc.pressure_msl[futureIdx] ?? current.pressure) : current.pressure
+        };
+
+        // Sunrise/sunset via SunCalc
+        const sunTimes = SunCalc.getTimes(now, this.latitude, this.longitude);
+
+        // Advanced data
+        const historicalYearAgo = await this.fetchHistoricalYearAgo(now);
+        const regional = null; // Lazy loaded on Nearby tab open
+        const accuracy = this.getPredictionAccuracy(current);
+
+        const result = {
+            location: this.location,
+            current,
+            past,
+            forecast,
+            timeline,
+            sunrise: sunTimes.sunrise,
+            sunset: sunTimes.sunset,
+            historicalYearAgo,
+            regional,
+            accuracy
+        };
+
+        this.setCache(cacheKey, result);
+
+        return result;
     }
 
     async fetchHistoricalYearAgo(now) {
@@ -342,17 +433,9 @@ export class WeatherService {
         const dateStr = lastYear.toISOString().split('T')[0];
 
         try {
-            const response = await fetch(
+            const data = await this.#fetchJSON(
                 `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
             );
-            if (response.ok === false) {
-                throw new WeatherServiceError(
-                    `Historical year-ago fetch failed with status ${response.status}`,
-                    response.status,
-                    'open_meteo_archive_year_ago'
-                );
-            }
-            const data = await response.json();
             const index = this.findClosestHourIndex(data.hourly.time, lastYear);
             return {
                 temp: data.hourly.temperature_2m[index],
@@ -378,17 +461,9 @@ export class WeatherService {
             const rLat = this.latitude + offset.lat;
             const rLon = this.longitude + offset.lon;
             try {
-                const response = await fetch(
+                const data = await this.#fetchJSON(
                     `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(rLat)}&longitude=${encodeURIComponent(rLon)}&current=temperature_2m,weather_code&timezone=auto`
                 );
-                if (response.ok === false) {
-                    throw new WeatherServiceError(
-                        `Regional fetch failed for ${offset.name} with status ${response.status}`,
-                        response.status,
-                        `open_meteo_regional_${offset.name.toLowerCase()}`
-                    );
-                }
-                const data = await response.json();
                 return {
                     name: offset.name,
                     temp: data.current.temperature_2m,
@@ -402,7 +477,7 @@ export class WeatherService {
         });
 
         const results = await Promise.all(promises);
-        return results.filter(r => r !== null);
+        return results.filter((r) => r !== null);
     }
 
     /**
@@ -412,7 +487,7 @@ export class WeatherService {
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
      * @param {number} days - Number of forecast days (default 10, max 16)
-     * @returns {Promise<Array<Object>>} Normalized daily forecast array
+     * @returns {Promise<DailyForecastDay[]>} Normalized daily forecast array
      */
     async getDailyForecast(lat, lon, days = 10) {
         const latitude = lat ?? this.latitude;
@@ -432,25 +507,15 @@ export class WeatherService {
             }
 
             const url = new URL('https://api.open-meteo.com/v1/forecast');
-            url.searchParams.append('latitude', latitude);
-            url.searchParams.append('longitude', longitude);
-            url.searchParams.append('forecast_days', clampedDays);
+            url.searchParams.append('latitude', String(latitude));
+            url.searchParams.append('longitude', String(longitude));
+            url.searchParams.append('forecast_days', String(clampedDays));
             url.searchParams.append('daily', DAILY_FORECAST_PARAMS);
             url.searchParams.append('hourly', DAILY_HOURLY_PARAMS);
             url.searchParams.append('daily_units', ''); // Request units metadata
             url.searchParams.append('timezone', 'auto');
 
-            const response = await fetch(url.toString());
-
-            if (response.ok === false) {
-                throw new WeatherServiceError(
-                    `Daily forecast API error: ${response.status} ${response.statusText}`,
-                    response.status,
-                    'open_meteo_daily_forecast'
-                );
-            }
-
-            const data = await response.json();
+            const data = await this.#fetchJSON(url.toString());
             const forecast = parseDailyForecast(data, { expectedDays: clampedDays });
 
             if (!forecast || forecast.length === 0) {
@@ -478,7 +543,7 @@ export class WeatherService {
 
     /**
      * Get a representative Date for a daily forecast day (solar noon preferred).
-     * @param {Object} day - Normalized daily forecast object
+     * @param {DailyForecastDay} day - Normalized daily forecast object
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
      * @returns {Date}
@@ -556,7 +621,7 @@ export class WeatherService {
         }
     }
 
-    getPredictionAccuracy(current) {
+    getPredictionAccuracy(_current) {
         // Forecast accuracy requires archived forecast runs (Previous Runs API).
         // This is not yet implemented. Returning null signals "no data" to the UI.
         return null;

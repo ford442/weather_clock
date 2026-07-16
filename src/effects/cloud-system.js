@@ -18,12 +18,33 @@ export class CloudSystem extends ParticleSystemBase {
 
         // Puff counts and scale ranges per cloud type
         const typeConfig = {
-            cumulus: { puffsPerCloud: 10, scaleMin: 2.0, scaleMax: 4.0,
-                       yMin: 6,  yRange: 4,  windMult: 1.0, bobAmp: 0.07 },
-            stratus: { puffsPerCloud: 5,  scaleMin: 4.5, scaleMax: 7.5,
-                       yMin: 4,  yRange: 2,  windMult: 0.6, bobAmp: 0.04 },
-            cirrus:  { puffsPerCloud: 4,  scaleMin: 3.5, scaleMax: 5.5,
-                       yMin: 12, yRange: 4,  windMult: 1.8, bobAmp: 0.015 }
+            cumulus: {
+                puffsPerCloud: 10,
+                scaleMin: 2.0,
+                scaleMax: 4.0,
+                yMin: 6,
+                yRange: 4,
+                windMult: 1.0,
+                bobAmp: 0.07
+            },
+            stratus: {
+                puffsPerCloud: 5,
+                scaleMin: 4.5,
+                scaleMax: 7.5,
+                yMin: 4,
+                yRange: 2,
+                windMult: 0.6,
+                bobAmp: 0.04
+            },
+            cirrus: {
+                puffsPerCloud: 4,
+                scaleMin: 3.5,
+                scaleMax: 5.5,
+                yMin: 12,
+                yRange: 4,
+                windMult: 1.8,
+                bobAmp: 0.015
+            }
         };
         const cfg = typeConfig[cloudType] || typeConfig.cumulus;
         this.cfg = cfg;
@@ -92,7 +113,7 @@ export class CloudSystem extends ParticleSystemBase {
             scale: scaleMin + Math.random() * (scaleMax - scaleMin),
             indices,
             puffs: this._createPuffs(),
-            floatOffset: Math.random() * Math.PI * 2   // for gentle vertical bob
+            floatOffset: Math.random() * Math.PI * 2 // for gentle vertical bob
         };
         this.clouds.push(cloud);
     }
@@ -104,17 +125,18 @@ export class CloudSystem extends ParticleSystemBase {
         if (this.cloudType === 'cumulus') {
             // Dome arrangement: 3 tiers — base ring, middle ring, top cap
             // Tier 0: 3 puffs at base, wide spread
-            const tier0 = [[0, 120, 240], 0.90, 0.00, [0.65, 0.85]];
+            const tier0 = [[0, 120, 240], 0.9, 0.0, [0.65, 0.85]];
             // Tier 1: 4 puffs in middle, medium spread
             const tier1 = [[30, 120, 210, 300], 0.62, 0.35, [0.72, 0.95]];
             // Tier 2: 2 puffs upper, tighter
-            const tier2 = [[60, 220], 0.35, 0.60, [0.55, 0.72]];
+            const tier2 = [[60, 220], 0.35, 0.6, [0.55, 0.72]];
             // Tier 3: 1 apex puff
-            const tier3 = [[0], 0.00, 0.80, [0.45, 0.62]];
+            const tier3 = [[0], 0.0, 0.8, [0.45, 0.62]];
 
-            for (const [angles, radius, yOff, [sMin, sMax]] of [tier0, tier1, tier2, tier3]) {
+            const tiers = /** @type {[number[], number, number, [number, number]][]} */ ([tier0, tier1, tier2, tier3]);
+            for (const [angles, radius, yOff, [sMin, sMax]] of tiers) {
                 for (const deg of angles) {
-                    const a = (deg + (Math.random() - 0.5) * 25) * Math.PI / 180;
+                    const a = ((deg + (Math.random() - 0.5) * 25) * Math.PI) / 180;
                     puffs.push({
                         x: Math.cos(a) * radius + (Math.random() - 0.5) * 0.15,
                         y: yOff + (Math.random() - 0.5) * 0.18,
@@ -130,7 +152,7 @@ export class CloudSystem extends ParticleSystemBase {
         } else if (this.cloudType === 'stratus') {
             // Wide, flat arrangement: 5 puffs in a horizontal strip
             for (let i = 0; i < count; i++) {
-                const t = (i / (count - 1)) - 0.5; // -0.5 to +0.5
+                const t = i / (count - 1) - 0.5; // -0.5 to +0.5
                 puffs.push({
                     x: t * 2.8 + (Math.random() - 0.5) * 0.4,
                     y: (Math.random() - 0.5) * 0.15,
@@ -138,21 +160,21 @@ export class CloudSystem extends ParticleSystemBase {
                     scale: 1.0 + Math.random() * 0.65,
                     rotation: Math.random() * Math.PI,
                     rotSpeed: (Math.random() - 0.5) * 0.015,
-                    colorT: 0.45 + Math.random() * 0.25  // stratus is mid-grey, darker at bottom
+                    colorT: 0.45 + Math.random() * 0.25 // stratus is mid-grey, darker at bottom
                 });
             }
         } else if (this.cloudType === 'cirrus') {
             // Elongated streak: 4 puffs in a diagonal line
             for (let i = 0; i < count; i++) {
-                const t = (i / (count - 1)) - 0.5; // -0.5 to +0.5
+                const t = i / (count - 1) - 0.5; // -0.5 to +0.5
                 puffs.push({
                     x: t * 3.8 + (Math.random() - 0.5) * 0.25,
-                    y: t * 0.12 + (Math.random() - 0.5) * 0.08,  // slight diagonal
+                    y: t * 0.12 + (Math.random() - 0.5) * 0.08, // slight diagonal
                     z: (Math.random() - 0.5) * 0.22,
                     scale: 0.28 + Math.random() * 0.38,
                     rotation: Math.random() * Math.PI,
                     rotSpeed: (Math.random() - 0.5) * 0.025,
-                    colorT: 0.80 + Math.random() * 0.20  // cirrus is near-white, very bright
+                    colorT: 0.8 + Math.random() * 0.2 // cirrus is near-white, very bright
                 });
             }
         }
@@ -160,17 +182,28 @@ export class CloudSystem extends ParticleSystemBase {
         return puffs;
     }
 
-    update(delta, windSpeed, cloudCover, lightColor, sunPos, moonPos, sunColor, moonColor, weatherCode = 0, windDir = 90) {
+    update(
+        delta,
+        windSpeed,
+        cloudCover,
+        lightColor,
+        sunPos,
+        moonPos,
+        sunColor,
+        moonColor,
+        weatherCode = 0,
+        windDir = 90
+    ) {
         // Update global lighting uniforms (shared across all cloud systems)
         if (lightColor) cloudShaderInjection.uniforms.uAmbientColor.value.copy(lightColor);
-        if (sunPos)     cloudShaderInjection.uniforms.uSunPosition.value.copy(sunPos);
-        if (moonPos)    cloudShaderInjection.uniforms.uMoonPosition.value.copy(moonPos);
-        if (sunColor)   cloudShaderInjection.uniforms.uSunColor.value.copy(sunColor);
-        if (moonColor)  cloudShaderInjection.uniforms.uMoonColor.value.copy(moonColor);
+        if (sunPos) cloudShaderInjection.uniforms.uSunPosition.value.copy(sunPos);
+        if (moonPos) cloudShaderInjection.uniforms.uMoonPosition.value.copy(moonPos);
+        if (sunColor) cloudShaderInjection.uniforms.uSunColor.value.copy(sunColor);
+        if (moonColor) cloudShaderInjection.uniforms.uMoonColor.value.copy(moonColor);
 
         // Derive a storm darkness factor (0=clear, 1=heavy storm)
         const isStorm = weatherCode >= 95;
-        const isRain  = weatherCode >= 51 && weatherCode < 95;
+        const isRain = weatherCode >= 51 && weatherCode < 95;
         const stormFactor = isStorm ? 1.0 : isRain ? 0.5 : 0.0;
 
         // Smooth cloud cover transition
@@ -203,7 +236,7 @@ export class CloudSystem extends ParticleSystemBase {
         const camQuat = this.camera.quaternion;
         const time = Date.now() * 0.001;
         const { windMult } = this.cfg;
-        const rad = (90 - windDir) * Math.PI / 180;
+        const rad = ((90 - windDir) * Math.PI) / 180;
         const moveSpeed = (0.05 + windSpeed * 0.01) * delta * windMult;
         const targetWindX = Math.cos(rad) * moveSpeed;
         const targetWindZ = -Math.sin(rad) * moveSpeed;
@@ -216,10 +249,10 @@ export class CloudSystem extends ParticleSystemBase {
         // Instance color: top = white, bottom = shadow tinted by stormFactor
         // Storm tops are darker overall
         const topR = 1.0 - stormFactor * 0.35;
-        const topG = 1.0 - stormFactor * 0.30;
-        const topB = 1.0 - stormFactor * 0.20;
-        const botR = (this.cloudType === 'stratus' ? 0.62 : 0.70) - stormFactor * 0.22;
-        const botG = (this.cloudType === 'stratus' ? 0.65 : 0.73) - stormFactor * 0.20;
+        const topG = 1.0 - stormFactor * 0.3;
+        const topB = 1.0 - stormFactor * 0.2;
+        const botR = (this.cloudType === 'stratus' ? 0.62 : 0.7) - stormFactor * 0.22;
+        const botG = (this.cloudType === 'stratus' ? 0.65 : 0.73) - stormFactor * 0.2;
         const botB = (this.cloudType === 'stratus' ? 0.78 : 0.85) - stormFactor * 0.18;
 
         let instanceColorDirty = false;

@@ -1,358 +1,361 @@
 /* ==================== TOOLTIP ==================== */
 .timeline-tooltip {
-  position: fixed;
-  background: var(--panel-bg);
-  backdrop-filter: var(--blur-heavy);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
-  padding: var(--space-md);
-  min-width: 160px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  z-index: 1000;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(8px);
-  transition: opacity var(--transition-fast), 
-              visibility var(--transition-fast),
-              transform var(--transition-fast);
-  pointer-events: none;
+    position: fixed;
+    background: var(--panel-bg);
+    backdrop-filter: var(--blur-heavy);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: var(--space-md);
+    min-width: 160px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition:
+        opacity var(--transition-fast),
+        visibility var(--transition-fast),
+        transform var(--transition-fast);
+    pointer-events: none;
 }
 
 .timeline-tooltip.is-visible {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
 }
 
 .tooltip-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-sm);
-  padding-bottom: var(--space-xs);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-sm);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .tooltip-date {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: white;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: white;
 }
 
 .tooltip-type {
-  font-size: var(--font-size-xs);
-  padding: 2px 8px;
-  border-radius: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+    font-size: var(--font-size-xs);
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .tooltip-type.type-historical {
-  background: rgba(79, 195, 247, 0.2);
-  color: var(--color-historical);
+    background: rgba(79, 195, 247, 0.2);
+    color: var(--color-historical);
 }
 
 .tooltip-type.type-today {
-  background: rgba(255, 241, 118, 0.2);
-  color: var(--color-today);
+    background: rgba(255, 241, 118, 0.2);
+    color: var(--color-today);
 }
 
 .tooltip-type.type-forecast {
-  background: rgba(129, 199, 132, 0.2);
-  color: var(--color-forecast);
+    background: rgba(129, 199, 132, 0.2);
+    color: var(--color-forecast);
 }
 
 .tooltip-temp {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-sm);
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-sm);
 }
 
 .temp-high {
-  font-size: var(--font-size-xxl);
-  font-weight: 700;
-  color: white;
+    font-size: var(--font-size-xxl);
+    font-weight: 700;
+    color: white;
 }
 
 .temp-divider {
-  color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.4);
 }
 
 .temp-low {
-  font-size: var(--font-size-lg);
-  color: rgba(255, 255, 255, 0.7);
+    font-size: var(--font-size-lg);
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .tooltip-condition {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-sm);
-  font-size: var(--font-size-sm);
-  color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+    font-size: var(--font-size-sm);
+    color: rgba(255, 255, 255, 0.8);
 }
 
 .condition-icon {
-  font-size: 20px;
+    font-size: 20px;
 }
 
 .tooltip-anomaly {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.6);
-  padding-top: var(--space-xs);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--font-size-xs);
+    color: rgba(255, 255, 255, 0.6);
+    padding-top: var(--space-xs);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .anomaly-value {
-  font-weight: 600;
+    font-weight: 600;
 }
 
 .anomaly-value.hot {
-  color: var(--color-hot);
+    color: var(--color-hot);
 }
 
 .anomaly-value.cold {
-  color: var(--color-cold);
+    color: var(--color-cold);
 }
 
 .anomaly-value.normal {
-  color: var(--color-normal);
+    color: var(--color-normal);
 }
 
 .tooltip-accuracy {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.6);
-  padding-top: var(--space-xs);
-  margin-top: var(--space-xs);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--font-size-xs);
+    color: rgba(255, 255, 255, 0.6);
+    padding-top: var(--space-xs);
+    margin-top: var(--space-xs);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.tooltip-accuracy[data-has-accuracy="false"] {
-  display: none;
+.tooltip-accuracy[data-has-accuracy='false'] {
+    display: none;
 }
 
 /* ==================== KEYBOARD HINTS ==================== */
 .keyboard-hints {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: var(--space-lg);
-  padding: var(--space-sm) var(--space-lg);
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: var(--blur-light);
-  border-radius: 20px 20px 0 0;
-  font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.4);
-  white-space: nowrap;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: var(--space-lg);
+    padding: var(--space-sm) var(--space-lg);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: var(--blur-light);
+    border-radius: 20px 20px 0 0;
+    font-size: var(--font-size-xs);
+    color: rgba(255, 255, 255, 0.4);
+    white-space: nowrap;
 }
 
 .keyboard-hints span {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
 }
 
 /* ==================== RESPONSIVE BREAKPOINTS ==================== */
 
 /* Tablet */
 @media (max-width: 768px) {
-  .timeline-panel {
-    padding: var(--space-md);
-    border-radius: var(--panel-radius) var(--panel-radius) 0 0;
-  }
-  
-  .timeline-nav {
-    gap: var(--space-sm);
-  }
-  
-  .nav-btn {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .day-marker {
-    padding: 6px 2px;
-  }
-  
-  .marker-label {
-    font-size: 10px;
-  }
-  
-  .timeline-legend {
-    gap: var(--space-md);
-  }
-  
-  .context-ribbon {
-    flex-direction: column;
-    gap: var(--space-md);
-    text-align: center;
-    padding: var(--space-md);
-  }
-  
-  .ribbon-narrative {
-    max-width: none;
-    order: -1;
-  }
-  
-  .keyboard-hints {
-    display: none;
-  }
+    .timeline-panel {
+        padding: var(--space-md);
+        border-radius: var(--panel-radius) var(--panel-radius) 0 0;
+    }
+
+    .timeline-nav {
+        gap: var(--space-sm);
+    }
+
+    .nav-btn {
+        width: 36px;
+        height: 36px;
+    }
+
+    .day-marker {
+        padding: 6px 2px;
+    }
+
+    .marker-label {
+        font-size: 10px;
+    }
+
+    .timeline-legend {
+        gap: var(--space-md);
+    }
+
+    .context-ribbon {
+        flex-direction: column;
+        gap: var(--space-md);
+        text-align: center;
+        padding: var(--space-md);
+    }
+
+    .ribbon-narrative {
+        max-width: none;
+        order: -1;
+    }
+
+    .keyboard-hints {
+        display: none;
+    }
 }
 
 /* Mobile */
 @media (max-width: 480px) {
-  .timeline-panel {
-    padding: var(--space-sm);
-  }
-  
-  .timeline-title {
-    font-size: var(--font-size-md);
-  }
-  
-  .timeline-nav {
-    gap: var(--space-xs);
-  }
-  
-  .nav-btn {
-    width: 32px;
-    height: 32px;
-  }
-  
-  .day-marker:nth-child(odd) .marker-label {
-    display: none;
-  }
-  
-  .marker-dot {
-    width: 6px;
-    height: 6px;
-  }
-  
-  .day-marker.is-today .marker-dot {
-    width: 10px;
-    height: 10px;
-  }
-  
-  .timeline-legend {
-    gap: var(--space-sm);
-  }
-  
-  .legend-label {
-    font-size: 10px;
-  }
-  
-  .pattern-indicator {
-    padding: 2px 8px;
-  }
-  
-  .pattern-name {
-    display: none;
-  }
-  
-  .ribbon-accuracy {
-    font-size: 10px;
-  }
+    .timeline-panel {
+        padding: var(--space-sm);
+    }
+
+    .timeline-title {
+        font-size: var(--font-size-md);
+    }
+
+    .timeline-nav {
+        gap: var(--space-xs);
+    }
+
+    .nav-btn {
+        width: 32px;
+        height: 32px;
+    }
+
+    .day-marker:nth-child(odd) .marker-label {
+        display: none;
+    }
+
+    .marker-dot {
+        width: 6px;
+        height: 6px;
+    }
+
+    .day-marker.is-today .marker-dot {
+        width: 10px;
+        height: 10px;
+    }
+
+    .timeline-legend {
+        gap: var(--space-sm);
+    }
+
+    .legend-label {
+        font-size: 10px;
+    }
+
+    .pattern-indicator {
+        padding: 2px 8px;
+    }
+
+    .pattern-name {
+        display: none;
+    }
+
+    .ribbon-accuracy {
+        font-size: 10px;
+    }
 }
 
 /* ==================== PREFERS REDUCED MOTION ==================== */
 @media (prefers-reduced-motion: reduce) {
-  .timeline-ui,
-  .timeline-ui.is-closing,
-  .scrubber-fill,
-  .scrubber-thumb,
-  .day-marker,
-  .marker-dot,
-  .marker-label,
-  .timeline-loading,
-  .timeline-tooltip,
-  .nav-btn,
-  .zoom-btn,
-  .timeline-close,
-  .pattern-indicator,
-  .loading-spinner {
-    animation: none !important;
-    transition: none !important;
-  }
-  
-  .loading-spinner {
-    border-top-color: rgba(255, 255, 255, 0.5);
-  }
+    .timeline-ui,
+    .timeline-ui.is-closing,
+    .scrubber-fill,
+    .scrubber-thumb,
+    .day-marker,
+    .marker-dot,
+    .marker-label,
+    .timeline-loading,
+    .timeline-tooltip,
+    .nav-btn,
+    .zoom-btn,
+    .timeline-close,
+    .pattern-indicator,
+    .loading-spinner {
+        animation: none !important;
+        transition: none !important;
+    }
+
+    .loading-spinner {
+        border-top-color: rgba(255, 255, 255, 0.5);
+    }
 }
 
 /* ==================== HIGH CONTRAST MODE ==================== */
 @media (prefers-contrast: high) {
-  :root {
-    --panel-bg: rgba(0, 0, 0, 0.95);
-    --panel-border: rgba(255, 255, 255, 0.5);
-    --color-historical: #80deea;
-    --color-today: #fff59d;
-    --color-forecast: #a5d6a7;
-  }
-  
-  .timeline-panel {
-    border-width: 2px;
-  }
-  
-  .nav-btn,
-  .zoom-btn {
-    border-width: 2px;
-    background: rgba(0, 0, 0, 0.8);
-  }
-  
-  .marker-dot {
-    width: 10px;
-    height: 10px;
-    background: white;
-  }
-  
-  .day-marker.is-active .marker-dot {
-    box-shadow: 0 0 0 3px black, 0 0 0 5px white;
-  }
-  
-  .scrubber-thumb {
-    box-shadow: 0 0 0 3px black;
-    border: 2px solid white;
-  }
-  
-  .timeline-tooltip {
-    border-width: 2px;
-  }
-  
-  .pattern-indicator {
-    border-width: 2px;
-  }
-  
-  /* Focus indicators */
-  .nav-btn:focus-visible,
-  .zoom-btn:focus-visible,
-  .timeline-close:focus-visible,
-  .day-marker:focus-visible,
-  .timeline-scrubber:focus-visible {
-    outline: 3px solid white;
-    outline-offset: 3px;
-  }
+    :root {
+        --panel-bg: rgba(0, 0, 0, 0.95);
+        --panel-border: rgba(255, 255, 255, 0.5);
+        --color-historical: #80deea;
+        --color-today: #fff59d;
+        --color-forecast: #a5d6a7;
+    }
+
+    .timeline-panel {
+        border-width: 2px;
+    }
+
+    .nav-btn,
+    .zoom-btn {
+        border-width: 2px;
+        background: rgba(0, 0, 0, 0.8);
+    }
+
+    .marker-dot {
+        width: 10px;
+        height: 10px;
+        background: white;
+    }
+
+    .day-marker.is-active .marker-dot {
+        box-shadow:
+            0 0 0 3px black,
+            0 0 0 5px white;
+    }
+
+    .scrubber-thumb {
+        box-shadow: 0 0 0 3px black;
+        border: 2px solid white;
+    }
+
+    .timeline-tooltip {
+        border-width: 2px;
+    }
+
+    .pattern-indicator {
+        border-width: 2px;
+    }
+
+    /* Focus indicators */
+    .nav-btn:focus-visible,
+    .zoom-btn:focus-visible,
+    .timeline-close:focus-visible,
+    .day-marker:focus-visible,
+    .timeline-scrubber:focus-visible {
+        outline: 3px solid white;
+        outline-offset: 3px;
+    }
 }
 
 /* ==================== DARK MODE (System Preference) ==================== */
 @media (prefers-color-scheme: light) {
-  /* Keep dark UI regardless of system preference since this is an overlay */
-  /* These styles ensure consistency with the 3D scene */
+    /* Keep dark UI regardless of system preference since this is an overlay */
+    /* These styles ensure consistency with the 3D scene */
 }
 
 /* ==================== PRINT STYLES ==================== */
 @media print {
-  .timeline-ui {
-    display: none;
-  }
+    .timeline-ui {
+        display: none;
+    }
 }
 
 /* ==================== FOCUS VISIBLE POLYFILL ==================== */
 .js-focus-visible :focus:not(.focus-visible) {
-  outline: none;
+    outline: none;
 }

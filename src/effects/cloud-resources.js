@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // --- Shared Resources Manager ---
 const ResourceManager = {
     cloudTextures: {},
-    getCloudTexture: function(type = 'cumulus') {
+    getCloudTexture: function (type = 'cumulus') {
         if (!this.cloudTextures[type]) {
             if (type === 'stratus') this.cloudTextures[type] = createStratusTexture();
             else if (type === 'cirrus') this.cloudTextures[type] = createCirrusTexture();
@@ -24,7 +24,8 @@ export function createCumulusTexture() {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, size, size);
 
-    const cx = size / 2, cy = size / 2;
+    const cx = size / 2,
+        cy = size / 2;
 
     // Base elliptical shape: bottom-flat, top-rounded
     const baseGrad = ctx.createRadialGradient(cx, cy * 0.88, size * 0.06, cx, cy * 0.88, size * 0.48);
@@ -41,7 +42,7 @@ export function createCumulusTexture() {
         const dist = Math.pow(Math.random(), 0.55) * (size * 0.38);
         // Bias puffs toward the top half
         const px = cx + Math.cos(angle) * dist;
-        const py = (cy * 0.85) + Math.sin(angle) * dist * (Math.sin(angle) < 0 ? 0.6 : 1.05);
+        const py = cy * 0.85 + Math.sin(angle) * dist * (Math.sin(angle) < 0 ? 0.6 : 1.05);
 
         const r = size * (0.04 + Math.random() * 0.14);
         // Brighter on top, cooler on bottom

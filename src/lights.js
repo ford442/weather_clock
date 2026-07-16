@@ -12,25 +12,19 @@ const LIGHTS_CONFIG = {
     moonColor: 0x8899cc,
     moonIntensity: 0.5,
     moonShadowMapSize: 1024,
-    moonShadowCameraSize: 10,
+    moonShadowCameraSize: 10
 };
 
 export function setupLights(scene, quality = 'high') {
     // Ambient light
-    const ambientLight = new THREE.AmbientLight(
-        LIGHTS_CONFIG.ambientColor,
-        LIGHTS_CONFIG.ambientIntensity
-    );
+    const ambientLight = new THREE.AmbientLight(LIGHTS_CONFIG.ambientColor, LIGHTS_CONFIG.ambientIntensity);
     scene.add(ambientLight);
 
     const shadowMapSize = quality === 'low' ? 1024 : 2048;
     const moonShadowSize = quality === 'low' ? 512 : 1024;
 
     // Sun light (directional light)
-    const sunLight = new THREE.DirectionalLight(
-        LIGHTS_CONFIG.sunColor,
-        LIGHTS_CONFIG.sunIntensity
-    );
+    const sunLight = new THREE.DirectionalLight(LIGHTS_CONFIG.sunColor, LIGHTS_CONFIG.sunIntensity);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = shadowMapSize;
     sunLight.shadow.mapSize.height = shadowMapSize;
@@ -44,10 +38,7 @@ export function setupLights(scene, quality = 'high') {
     scene.add(sunLight);
 
     // Moon light (directional light)
-    const moonLight = new THREE.DirectionalLight(
-        LIGHTS_CONFIG.moonColor,
-        LIGHTS_CONFIG.moonIntensity
-    );
+    const moonLight = new THREE.DirectionalLight(LIGHTS_CONFIG.moonColor, LIGHTS_CONFIG.moonIntensity);
     moonLight.castShadow = true;
     moonLight.shadow.mapSize.width = moonShadowSize;
     moonLight.shadow.mapSize.height = moonShadowSize;

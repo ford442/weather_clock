@@ -52,11 +52,13 @@ export class FogEffect {
         this.currentOpacity += diff * Math.min(delta * 0.5, 1);
 
         if (this.currentOpacity < 0.005) {
-            this.planes.forEach(p => { p.mesh.visible = false; });
+            this.planes.forEach((p) => {
+                p.mesh.visible = false;
+            });
             return;
         }
 
-        const windRad = ((windDir || 0) - 180) * Math.PI / 180;
+        const windRad = (((windDir || 0) - 180) * Math.PI) / 180;
         const speed = (windSpeed || 2) * 0.00015 + 0.0008;
         const wx = Math.sin(windRad) * speed;
         const wz = Math.cos(windRad) * speed;

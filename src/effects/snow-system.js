@@ -78,7 +78,7 @@ export class SnowSystem extends ParticleSystemBase {
         const positions = this.mesh.geometry.attributes.position.array;
         const time = Date.now() * 0.001;
 
-        const rad = (90 - windDir) * Math.PI / 180;
+        const rad = ((90 - windDir) * Math.PI) / 180;
         const speedScale = 0.002;
         const wX = Math.cos(rad) * windSpeed * speedScale;
         const wZ = -Math.sin(rad) * windSpeed * speedScale;
@@ -95,8 +95,8 @@ export class SnowSystem extends ParticleSystemBase {
             positions[i3 + 1] += this.velocities[i3 + 1] + curl.y * 0.05;
             positions[i3 + 2] += this.velocities[i3 + 2] + wZ + curl.z * 0.05;
 
-            if (positions[i3] > this.zone.maxX) positions[i3] -= (this.zone.maxX - this.zone.minX);
-            if (positions[i3] < this.zone.minX) positions[i3] += (this.zone.maxX - this.zone.minX);
+            if (positions[i3] > this.zone.maxX) positions[i3] -= this.zone.maxX - this.zone.minX;
+            if (positions[i3] < this.zone.minX) positions[i3] += this.zone.maxX - this.zone.minX;
 
             if (positions[i3 + 1] < -5) {
                 positions[i3 + 1] = 15;

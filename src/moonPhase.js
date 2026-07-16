@@ -6,7 +6,7 @@ export function calculateMoonPhase(date = new Date()) {
     let year = date.getFullYear();
     let month = date.getMonth() + 1;
     const day = date.getDate();
-    
+
     let c, e, jd, b;
 
     if (month < 3) {
@@ -91,7 +91,7 @@ void main() {
 }
 `;
 
-export function createMoon(phase = 0) {
+export function createMoon(_phase = 0) {
     const moonGroup = new THREE.Group();
 
     // Create moon sphere
@@ -125,18 +125,18 @@ export async function initMoonWebGPU(moonGroup) {
 export function positionMoon(moonGroup, sundialPosition, time = new Date()) {
     // Position moon in orbit around sundial
     const hours = time.getHours() + time.getMinutes() / 60;
-    
+
     // Moon rises in the evening and sets in the morning
     // Opposite schedule to sun
     const moonAngle = ((hours + 12) / 24) * Math.PI * 2;
-    
+
     const orbitRadius = 6;
     const moonHeight = 4;
-    
+
     moonGroup.position.x = sundialPosition.x + Math.cos(moonAngle) * orbitRadius;
     moonGroup.position.y = sundialPosition.y + moonHeight + Math.sin(moonAngle) * 2;
     moonGroup.position.z = sundialPosition.z + Math.sin(moonAngle) * orbitRadius;
-    
+
     // Make moon look at sundial
     moonGroup.lookAt(sundialPosition.x, sundialPosition.y, sundialPosition.z);
 }

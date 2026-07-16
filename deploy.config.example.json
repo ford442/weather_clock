@@ -1,0 +1,7 @@
+{
+    "base_url": "https://deploy.example.com",
+    "token": "replace-with-a-newly-rotated-token",
+    "project_name": "weather-clock",
+    "build_dir": "dist",
+    "target_folder": "weather-clock"
+}

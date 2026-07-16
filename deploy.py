@@ -1,46 +1,53 @@
 #!/usr/bin/env python3
-"""
-project_deploy_template.py
+"""Build and upload the production bundle through the deployment service.
 
-Copy this file into your project as `deploy.py` (or deploy_contabo.py).
-Customize the constants at the top for your project.
-
-Usage:
-  1. Build your project:  npm run build   (or python build, etc.)
-  2. python deploy.py
-
-This script contacts https://storage.noahcohn.com (your Contabo storage manager)
-to upload your entire build as a single zip archive.  The server extracts it and
-pushes all files over one persistent SFTP connection — much faster than uploading
-files individually.
-
-Actual FTP/SFTP credentials never leave the VPS.
-
-Requirements:
-  pip install requests
+Configuration is read from environment variables first, then from the JSON file
+named by DEPLOY_CONFIG (defaults to ``deploy.config.json``). Secret values must
+never be committed to this repository.
 """
 
 import io
+import json
 import os
 import sys
 import zipfile
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import requests
 
-# ============================================================
-# PER-PROJECT CONFIGURATION - EDIT THESE
-# ============================================================
-PROJECT_NAME: str = 'weather-clock'
-BUILD_DIR: str = 'dist'
-CONTABO_BASE_URL: str = "https://storage.noahcohn.com"
-DEPLOY_FOLDER: str = ""  # override remote target folder; empty = use PROJECT_NAME
 
-# Optional deploy token (recommended for security).
-# Set via environment: export DEPLOY_TOKEN="your_long_token_from_vps_env"
-DEPLOY_TOKEN: Optional[str] = "6de44dca5425348f2e2ef9456fc820bfe56a5ace68bddeb6da4a1c2a9d9cadc0"
-# ============================================================
+CONFIG_PATH = Path(os.environ.get("DEPLOY_CONFIG", "deploy.config.json"))
+
+
+def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
+    """Load optional local configuration without logging secret values."""
+    if not path.exists():
+        return {}
+
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Could not read deployment config '{path}': {exc}") from exc
+
+    if not isinstance(config, dict):
+        raise RuntimeError(f"Deployment config '{path}' must contain a JSON object")
+    return config
+
+
+def setting(config: dict[str, Any], env_name: str, config_name: str, default: str = "") -> str:
+    """Return an environment override, JSON value, or default as a string."""
+    value = os.environ.get(env_name, config.get(config_name, default))
+    return str(value).strip() if value is not None else ""
+
+
+def required_setting(config: dict[str, Any], env_name: str, config_name: str) -> str:
+    value = setting(config, env_name, config_name)
+    if not value:
+        raise RuntimeError(
+            f"Missing deployment setting: set {env_name} or '{config_name}' in {CONFIG_PATH}"
+        )
+    return value
 
 
 def build_zip(build_path: Path) -> bytes:
@@ -51,22 +58,23 @@ def build_zip(build_path: Path) -> bytes:
             if file.is_dir():
                 continue
             rel = file.relative_to(build_path)
-            # Skip common junk
-            parts = rel.parts
-            if any(p in (".git", "node_modules", "__pycache__") for p in parts):
+            if any(part in (".git", "node_modules", "__pycache__") for part in rel.parts):
                 continue
             zf.write(file, str(rel))
             print(f"  + {rel}")
     return buf.getvalue()
 
 
-def deploy_bundle(build_path: Path) -> bool:
-    """Zip the build and upload it as a single bundle."""
-    target_folder = DEPLOY_FOLDER or PROJECT_NAME
-    url = f"{CONTABO_BASE_URL}/api/deploy/{PROJECT_NAME}/bundle"
-    headers = {}
-    if DEPLOY_TOKEN:
-        headers["X-Deploy-Token"] = DEPLOY_TOKEN
+def deploy_bundle(
+    build_path: Path,
+    base_url: str,
+    project_name: str,
+    target_folder: str,
+    deploy_token: str,
+) -> bool:
+    """Zip the build and upload it as a single authenticated bundle."""
+    url = f"{base_url.rstrip('/')}/api/deploy/{project_name}/bundle"
+    headers = {"X-Deploy-Token": deploy_token}
 
     print("Building zip archive...")
     zip_bytes = build_zip(build_path)
@@ -81,42 +89,43 @@ def deploy_bundle(build_path: Path) -> bool:
             headers=headers,
             timeout=300,
         )
-    except Exception as exc:
-        print(f"  \u2717 Upload exception: {exc}")
+    except requests.RequestException as exc:
+        print(f"  Upload exception: {exc}")
         return False
 
     if response.status_code == 200:
         data = response.json()
-        print(f"  \u2713 {data.get('uploaded', 0)} files uploaded")
+        print(f"  {data.get('uploaded', 0)} files uploaded")
         if data.get("failed"):
             print("  Failures:")
-            for f in data["failed"]:
-                print(f"    \u2717 {f['path']}: {f['error']}")
+            for failure in data["failed"]:
+                print(f"    {failure['path']}: {failure['error']}")
         return not data.get("failed")
-    else:
-        print(f"  \u2717 {response.status_code}: {response.text[:400]}")
-        return False
+
+    print(f"  Upload failed with HTTP {response.status_code}: {response.text[:400]}")
+    return False
 
 
-def main():
-    print(f"\n=== Deploying '{PROJECT_NAME}' via Contabo -> storage.1ink.us ===\n")
+def main() -> None:
+    try:
+        config = load_config()
+        base_url = required_setting(config, "DEPLOY_BASE_URL", "base_url")
+        deploy_token = required_setting(config, "DEPLOY_TOKEN", "token")
+        project_name = setting(config, "DEPLOY_PROJECT_NAME", "project_name", "weather-clock")
+        build_dir = setting(config, "DEPLOY_BUILD_DIR", "build_dir", "dist")
+        target_folder = setting(config, "DEPLOY_FOLDER", "target_folder", project_name)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(2)
 
-    build_path = Path(BUILD_DIR)
-    if not build_path.exists() or not build_path.is_dir():
-        print(f"ERROR: Build directory '{BUILD_DIR}/' does not exist.")
-        print("Please run your build command first (e.g. `npm run build`).")
+    build_path = Path(build_dir)
+    if not build_path.is_dir():
+        print(f"ERROR: Build directory '{build_dir}/' does not exist.", file=sys.stderr)
+        print("Run the production build before deploying.", file=sys.stderr)
         sys.exit(1)
 
-    try:
-        health = requests.get(f"{CONTABO_BASE_URL}/api/deploy/health", timeout=10)
-        if health.status_code == 200:
-            print(f"Contabo deploy service: {health.json().get('status', 'unknown')}")
-    except Exception:
-        print("Warning: Could not contact storage.noahcohn.com (continuing anyway).")
-
-    print()
-    success = deploy_bundle(build_path)
-
+    print(f"\n=== Deploying '{project_name}' ===\n")
+    success = deploy_bundle(build_path, base_url, project_name, target_folder, deploy_token)
     print(f"\n=== {'Deployment complete' if success else 'Deployment finished with errors'} ===")
     sys.exit(0 if success else 1)
 

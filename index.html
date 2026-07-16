@@ -1,345 +1,451 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Weather Clock</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/src/styles/main.css">
-</head>
-<body>
-    <div id="canvas-container"></div>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>3D Weather Clock</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;700&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="/src/styles/main.css" />
+    </head>
+    <body>
+        <div id="canvas-container"></div>
 
-    <!-- Top Bar -->
-    <div id="top-bar">
-        <div class="top-bar-left">
-            <div class="location-display">
-                <span id="location">Detecting Location...</span>
-                <button id="retry-location" class="retry-btn" title="Retry Location">
+        <!-- Top Bar -->
+        <div id="top-bar">
+            <div class="top-bar-left">
+                <div class="location-display">
+                    <span id="location">Detecting Location...</span>
+                    <button id="retry-location" class="retry-btn" title="Retry Location">
+                        <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                            <path
+                                d="M2,8 A6,6 0 1,0 8,2"
+                                stroke="currentColor"
+                                fill="none"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                            />
+                            <polyline
+                                points="2,4 2,8 6,8"
+                                stroke="currentColor"
+                                fill="none"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
+                    </button>
+                </div>
+                <div class="search-container">
+                    <input type="text" id="location-search" class="search-input" placeholder="City name…" />
+                </div>
+                <button id="search-btn" class="search-btn">
                     <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                        <path d="M2,8 A6,6 0 1,0 8,2" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/>
-                        <polyline points="2,4 2,8 6,8" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="7" cy="7" r="5" stroke="currentColor" fill="none" stroke-width="1.5" />
+                        <line
+                            x1="11"
+                            y1="11"
+                            x2="14"
+                            y2="14"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                        />
                     </svg>
                 </button>
             </div>
-            <div class="search-container">
-                <input type="text" id="location-search" class="search-input" placeholder="City name…" />
+            <div class="top-bar-right">
+                <button id="mode-toggle" class="mode-toggle-btn" title="Switch to Timeline View (T)">
+                    <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                        <circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5" />
+                        <line
+                            x1="8"
+                            y1="8"
+                            x2="8"
+                            y2="4"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                        />
+                        <line
+                            x1="8"
+                            y1="8"
+                            x2="11"
+                            y2="10"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                        />
+                    </svg>
+                </button>
+                <div
+                    id="unit-toggle"
+                    class="unit-segmented"
+                    data-unit="metric"
+                    role="button"
+                    tabindex="0"
+                    aria-label="Toggle temperature unit"
+                >
+                    <button class="segment" data-segment="celsius">°C</button>
+                    <button class="segment" data-segment="fahrenheit">°F</button>
+                    <button class="segment" data-segment="kmh">km/h</button>
+                    <button class="segment" data-segment="mph">mph</button>
+                </div>
             </div>
-            <button id="search-btn" class="search-btn">
+        </div>
+
+        <!-- Center Overlay -->
+        <div id="center-overlay">
+            <div id="time-display" class="time-display">--:--</div>
+            <div id="date-display">--</div>
+            <div id="current-temp">--°</div>
+            <div id="current-description">Loading...</div>
+        </div>
+
+        <!-- Left Drawer -->
+        <div id="panel-left" class="panel drawer">
+            <div class="drawer-handle">
                 <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <circle cx="7" cy="7" r="5" stroke="currentColor" fill="none" stroke-width="1.5"/>
-                    <line x1="11" y1="11" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <polyline
+                        points="6,3 11,8 6,13"
+                        stroke="currentColor"
+                        fill="none"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+                <span class="drawer-handle-label">PREVIOUS</span>
+            </div>
+            <div class="drawer-content">
+                <h3>Previous <span id="past-time-display" style="font-size: 0.8em; opacity: 0.8"></span></h3>
+                <div id="past-description" class="description">--</div>
+                <div class="stat-row">
+                    <span class="stat-label">Temp</span>
+                    <span id="past-temp" class="stat-value">--°</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Feels Like</span>
+                    <span id="past-feels-like" class="stat-value">--°</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Wind</span>
+                    <span id="past-wind" class="stat-value">-- km/h</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Humidity</span>
+                    <span id="past-humidity" class="stat-value">--%</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Cloud Cover</span>
+                    <span id="past-cloud" class="stat-value">--%</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Precip. Prob.</span>
+                    <span id="past-precip-prob" class="stat-value">--%</span>
+                </div>
+                <canvas id="sparkline" width="280" height="60"></canvas>
+            </div>
+        </div>
+
+        <!-- Right Drawer -->
+        <div id="panel-right" class="panel drawer">
+            <div class="drawer-handle">
+                <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <polyline
+                        points="10,3 5,8 10,13"
+                        stroke="currentColor"
+                        fill="none"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+                <span class="drawer-handle-label">FORECAST</span>
+            </div>
+            <div class="drawer-content">
+                <h3>Forecast <span id="forecast-time-display" style="font-size: 0.8em; opacity: 0.8"></span></h3>
+                <div id="forecast-description" class="description">--</div>
+                <div class="stat-row">
+                    <span class="stat-label">Temp</span>
+                    <span id="forecast-temp" class="stat-value">--°</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Feels Like</span>
+                    <span id="forecast-feels-like" class="stat-value">--°</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Wind</span>
+                    <span id="forecast-wind" class="stat-value">-- km/h</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Humidity</span>
+                    <span id="forecast-humidity" class="stat-value">--%</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Cloud Cover</span>
+                    <span id="forecast-cloud" class="stat-value">--%</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Precip. Prob.</span>
+                    <span id="forecast-precip-prob" class="stat-value">--%</span>
+                </div>
+                <canvas id="pressure-gauge" width="140" height="140"></canvas>
+            </div>
+        </div>
+
+        <!-- Bottom Mini Bar -->
+        <div id="bottom-mini-bar" class="center-stats">
+            <span class="cs-item">
+                <svg id="wind-compass" class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5" />
+                    <g
+                        id="wind-arrow"
+                        style="transform-origin: 8px 8px; transform: rotate(0deg); transition: transform 0.5s ease"
+                    >
+                        <path
+                            d="M8,2 L5,10 L8,8 L11,10 Z"
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-width="1.5"
+                            stroke-linejoin="round"
+                        />
+                    </g>
+                </svg>
+                <span id="current-wind" class="stat-value">--</span> km/h
+            </span>
+            <span class="cs-item">
+                <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                        d="M8,2 C8,2 4,7 4,10 A4,4 0 0,0 12,10 C12,7 8,2 8,2Z"
+                        stroke="currentColor"
+                        fill="none"
+                        stroke-width="1.5"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+                <span id="current-humidity" class="stat-value">--%</span>
+            </span>
+            <span class="cs-item">
+                <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                        d="M10,2 A6,6 0 1,1 6,14 A5,5 0 1,0 10,2Z"
+                        stroke="currentColor"
+                        fill="none"
+                        stroke-width="1.5"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+                <span id="moon-phase" class="stat-value">--</span>
+            </span>
+            <span class="cs-item day-progress-arc">
+                <svg width="40" height="20" viewBox="0 0 40 20" aria-hidden="true">
+                    <path class="day-arc-track" d="M 2,20 A 18,18 0 0,1 38,20" stroke-width="1.5" />
+                    <path
+                        class="day-arc-active"
+                        d="M 2,20 A 18,18 0 0,1 38,20"
+                        stroke-width="1.5"
+                        stroke-dasharray="28.27 56.55"
+                    />
+                    <circle class="day-arc-dot" cx="20" cy="2" r="2" />
+                </svg>
+                <span id="sunrise-time" class="stat-value">--:--</span> –
+                <span id="sunset-time" class="stat-value">--:--</span>
+            </span>
+            <span id="current-uv" class="uv-badge">UV --</span>
+        </div>
+
+        <!-- Advanced Drawer -->
+        <div id="panel-advanced" class="advanced-drawer">
+            <div class="drawer-handle-grip">
+                <span class="drawer-handle-grip-label">History • Accuracy • Nearby</span>
+            </div>
+            <div class="drawer-tabs">
+                <button class="tab-btn active" data-tab="history">History</button>
+                <button class="tab-btn" data-tab="accuracy">Accuracy</button>
+                <button class="tab-btn" data-tab="nearby">Nearby</button>
+            </div>
+            <div class="tab-panels">
+                <div class="tab-content active" id="tab-history">
+                    <div class="adv-section">
+                        <h3>1 Year Ago</h3>
+                        <div id="history-temp" class="adv-val-big">--°</div>
+                        <div id="history-desc" class="adv-sub">--</div>
+                    </div>
+                </div>
+                <div class="tab-content" id="tab-accuracy">
+                    <div class="adv-section">
+                        <h3>Forecast Accuracy</h3>
+                        <div id="accuracy-delta" class="adv-val-big">--</div>
+                        <div id="accuracy-score" class="adv-sub">Score: --%</div>
+                    </div>
+                </div>
+                <div class="tab-content" id="tab-nearby">
+                    <div class="adv-section">
+                        <h3>Nearby Regions</h3>
+                        <div id="regional-list" class="regional-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timeline Scrubber -->
+        <div id="timeline-scrubber">
+            <button id="scrubber-play-btn" class="scrubber-btn" title="Play/Pause (W)">
+                <svg id="scrubber-play-icon" viewBox="0 0 16 16" aria-hidden="true">
+                    <polygon
+                        points="5,3 13,8 5,13"
+                        stroke="currentColor"
+                        fill="none"
+                        stroke-width="1.5"
+                        stroke-linejoin="round"
+                    />
                 </svg>
             </button>
-        </div>
-        <div class="top-bar-right">
-            <button id="mode-toggle" class="mode-toggle-btn" title="Switch to Timeline View (T)">
-                <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/>
-                    <line x1="8" y1="8" x2="8" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    <line x1="8" y1="8" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-            </button>
-            <div id="unit-toggle" class="unit-segmented" data-unit="metric" role="button" tabindex="0" aria-label="Toggle temperature unit">
-                <button class="segment" data-segment="celsius">°C</button>
-                <button class="segment" data-segment="fahrenheit">°F</button>
-                <button class="segment" data-segment="kmh">km/h</button>
-                <button class="segment" data-segment="mph">mph</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Center Overlay -->
-    <div id="center-overlay">
-        <div id="time-display" class="time-display">--:--</div>
-        <div id="date-display">--</div>
-        <div id="current-temp">--°</div>
-        <div id="current-description">Loading...</div>
-    </div>
-
-    <!-- Left Drawer -->
-    <div id="panel-left" class="panel drawer">
-        <div class="drawer-handle">
-            <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                <polyline points="6,3 11,8 6,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span class="drawer-handle-label">PREVIOUS</span>
-        </div>
-        <div class="drawer-content">
-            <h3>Previous <span id="past-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
-            <div id="past-description" class="description">--</div>
-            <div class="stat-row">
-                <span class="stat-label">Temp</span>
-                <span id="past-temp" class="stat-value">--°</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Feels Like</span>
-                <span id="past-feels-like" class="stat-value">--°</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Wind</span>
-                <span id="past-wind" class="stat-value">-- km/h</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Humidity</span>
-                <span id="past-humidity" class="stat-value">--%</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Cloud Cover</span>
-                <span id="past-cloud" class="stat-value">--%</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Precip. Prob.</span>
-                <span id="past-precip-prob" class="stat-value">--%</span>
-            </div>
-            <canvas id="sparkline" width="280" height="60"></canvas>
-        </div>
-    </div>
-
-    <!-- Right Drawer -->
-    <div id="panel-right" class="panel drawer">
-        <div class="drawer-handle">
-            <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                <polyline points="10,3 5,8 10,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span class="drawer-handle-label">FORECAST</span>
-        </div>
-        <div class="drawer-content">
-            <h3>Forecast <span id="forecast-time-display" style="font-size:0.8em;opacity:0.8;"></span></h3>
-            <div id="forecast-description" class="description">--</div>
-            <div class="stat-row">
-                <span class="stat-label">Temp</span>
-                <span id="forecast-temp" class="stat-value">--°</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Feels Like</span>
-                <span id="forecast-feels-like" class="stat-value">--°</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Wind</span>
-                <span id="forecast-wind" class="stat-value">-- km/h</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Humidity</span>
-                <span id="forecast-humidity" class="stat-value">--%</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Cloud Cover</span>
-                <span id="forecast-cloud" class="stat-value">--%</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Precip. Prob.</span>
-                <span id="forecast-precip-prob" class="stat-value">--%</span>
-            </div>
-            <canvas id="pressure-gauge" width="140" height="140"></canvas>
-        </div>
-    </div>
-
-    <!-- Bottom Mini Bar -->
-    <div id="bottom-mini-bar" class="center-stats">
-        <span class="cs-item">
-            <svg id="wind-compass" class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                <circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/>
-                <g id="wind-arrow" style="transform-origin:8px 8px;transform:rotate(0deg);transition:transform 0.5s ease;">
-                    <path d="M8,2 L5,10 L8,8 L11,10 Z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>
-                </g>
-            </svg>
-            <span id="current-wind" class="stat-value">--</span> km/h
-        </span>
-        <span class="cs-item">
-            <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                <path d="M8,2 C8,2 4,7 4,10 A4,4 0 0,0 12,10 C12,7 8,2 8,2Z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>
-            </svg>
-            <span id="current-humidity" class="stat-value">--%</span>
-        </span>
-        <span class="cs-item">
-            <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                <path d="M10,2 A6,6 0 1,1 6,14 A5,5 0 1,0 10,2Z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>
-            </svg>
-            <span id="moon-phase" class="stat-value">--</span>
-        </span>
-        <span class="cs-item day-progress-arc">
-            <svg width="40" height="20" viewBox="0 0 40 20" aria-hidden="true">
-                <path class="day-arc-track" d="M 2,20 A 18,18 0 0,1 38,20" stroke-width="1.5"/>
-                <path class="day-arc-active" d="M 2,20 A 18,18 0 0,1 38,20" stroke-width="1.5" stroke-dasharray="28.27 56.55"/>
-                <circle class="day-arc-dot" cx="20" cy="2" r="2"/>
-            </svg>
-            <span id="sunrise-time" class="stat-value">--:--</span> – <span id="sunset-time" class="stat-value">--:--</span>
-        </span>
-        <span id="current-uv" class="uv-badge">UV --</span>
-    </div>
-
-    <!-- Advanced Drawer -->
-    <div id="panel-advanced" class="advanced-drawer">
-        <div class="drawer-handle-grip">
-            <span class="drawer-handle-grip-label">History • Accuracy • Nearby</span>
-        </div>
-        <div class="drawer-tabs">
-            <button class="tab-btn active" data-tab="history">History</button>
-            <button class="tab-btn" data-tab="accuracy">Accuracy</button>
-            <button class="tab-btn" data-tab="nearby">Nearby</button>
-        </div>
-        <div class="tab-panels">
-            <div class="tab-content active" id="tab-history">
-                <div class="adv-section">
-                    <h3>1 Year Ago</h3>
-                    <div id="history-temp" class="adv-val-big">--°</div>
-                    <div id="history-desc" class="adv-sub">--</div>
+            <div class="scrubber-main">
+                <div class="scrubber-chips">
+                    <span class="scrubber-chip" id="scrubber-time-chip">--:--</span>
+                    <button class="speed-chip" id="scrubber-speed-chip" data-speed="60">60×</button>
                 </div>
-            </div>
-            <div class="tab-content" id="tab-accuracy">
-                <div class="adv-section">
-                    <h3>Forecast Accuracy</h3>
-                    <div id="accuracy-delta" class="adv-val-big">--</div>
-                    <div id="accuracy-score" class="adv-sub">Score: --%</div>
-                </div>
-            </div>
-            <div class="tab-content" id="tab-nearby">
-                <div class="adv-section">
-                    <h3>Nearby Regions</h3>
-                    <div id="regional-list" class="regional-list"></div>
+                <div class="scrubber-track" id="scrubber-track">
+                    <div class="scrubber-playhead" id="scrubber-playhead"></div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Timeline Scrubber -->
-    <div id="timeline-scrubber">
-        <button id="scrubber-play-btn" class="scrubber-btn" title="Play/Pause (W)">
-            <svg id="scrubber-play-icon" viewBox="0 0 16 16" aria-hidden="true">
-                <polygon points="5,3 13,8 5,13" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/>
-            </svg>
-        </button>
-        <div class="scrubber-main">
-            <div class="scrubber-chips">
-                <span class="scrubber-chip" id="scrubber-time-chip">--:--</span>
-                <button class="speed-chip" id="scrubber-speed-chip" data-speed="60">60×</button>
-            </div>
-            <div class="scrubber-track" id="scrubber-track">
-                <div class="scrubber-playhead" id="scrubber-playhead"></div>
-            </div>
-        </div>
-    </div>
+        <!-- Timeline UI Container (hidden by default) -->
+        <div id="timeline-ui-container"></div>
 
-    <!-- Timeline UI Container (hidden by default) -->
-    <div id="timeline-ui-container"></div>
-    
-    <!-- DEV hint -->
-    <div id="dev-hint">` — toggle stats</div>
-    <div id="toast-container"></div>
+        <!-- DEV hint -->
+        <div id="dev-hint">` — toggle stats</div>
+        <div id="toast-container"></div>
 
-    <script type="module" src="/src/main.js"></script>
-    <script>
-        // Minimal delegation for mode-toggle since ModeController skips attaching when element already exists
-        document.addEventListener('click', function (e) {
-            if (e.target.closest('#mode-toggle') && window.modeController) {
-                window.modeController.toggleMode();
-            }
-        });
-
-        // Tab switching for advanced drawer
-        document.querySelectorAll('#panel-advanced .tab-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                var tab = btn.dataset.tab;
-                document.querySelectorAll('#panel-advanced .tab-btn').forEach(function (b) { b.classList.remove('active'); });
-                document.querySelectorAll('#panel-advanced .tab-content').forEach(function (c) { c.classList.remove('active'); });
-                btn.classList.add('active');
-                document.getElementById('tab-' + tab).classList.add('active');
+        <script type="module" src="/src/main.js"></script>
+        <script>
+            // Minimal delegation for mode-toggle since ModeController skips attaching when element already exists
+            document.addEventListener('click', function (e) {
+                if (e.target.closest('#mode-toggle') && window.modeController) {
+                    window.modeController.toggleMode();
+                }
             });
-        });
 
-        // Expand/collapse advanced drawer via drag handle click
-        var advDrawer = document.getElementById('panel-advanced');
-        var dragHandle = advDrawer.querySelector('.drawer-handle-grip');
-        if (dragHandle) {
-            dragHandle.addEventListener('click', function () {
-                advDrawer.classList.toggle('expanded');
-            });
-        }
-
-        // Drawer interaction listeners
-        document.getElementById('panel-left')?.addEventListener('click', function (e) {
-            if (e.target.closest('.drawer-handle')) {
-                this.classList.toggle('expanded');
-            }
-        });
-
-        document.getElementById('panel-right')?.addEventListener('click', function (e) {
-            if (e.target.closest('.drawer-handle')) {
-                this.classList.toggle('expanded');
-            }
-        });
-
-        // DOM Binding Validator
-        window.DOMBindingValidator = {
-            validate: function () {
-                var results = {
-                    elements: {},
-                    issues: []
-                };
-                var requiredElements = ['panel-left', 'panel-right', 'panel-advanced', 'center-overlay', 'timeline-scrubber', 'canvas-container', 'top-bar'];
-                requiredElements.forEach(function (id) {
-                    var el = document.getElementById(id);
-                    results.elements[id] = !!el;
-                    if (!el) results.issues.push('Missing element: #' + id);
+            // Tab switching for advanced drawer
+            document.querySelectorAll('#panel-advanced .tab-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var tab = btn.dataset.tab;
+                    document.querySelectorAll('#panel-advanced .tab-btn').forEach(function (b) {
+                        b.classList.remove('active');
+                    });
+                    document.querySelectorAll('#panel-advanced .tab-content').forEach(function (c) {
+                        c.classList.remove('active');
+                    });
+                    btn.classList.add('active');
+                    document.getElementById('tab-' + tab).classList.add('active');
                 });
-                console.log('DOM Binding Validation:', results);
-                return results;
-            }
-        };
+            });
 
-        // Z-Index Manager
-        window.ZIndexManager = {
-            verify: function () {
-                var elements = {
-                    'canvas-container': document.getElementById('canvas-container'),
-                    'center-overlay': document.getElementById('center-overlay'),
-                    'bottom-mini-bar': document.getElementById('bottom-mini-bar'),
-                    'panel-advanced': document.getElementById('panel-advanced'),
-                    'panel-left': document.getElementById('panel-left'),
-                    'panel-right': document.getElementById('panel-right'),
-                    'timeline-scrubber': document.getElementById('timeline-scrubber'),
-                    'top-bar': document.getElementById('top-bar')
-                };
-                var zIndices = {};
-                for (var key in elements) {
-                    if (elements[key]) {
-                        zIndices[key] = window.getComputedStyle(elements[key]).zIndex || 'auto';
-                    }
+            // Expand/collapse advanced drawer via drag handle click
+            var advDrawer = document.getElementById('panel-advanced');
+            var dragHandle = advDrawer.querySelector('.drawer-handle-grip');
+            if (dragHandle) {
+                dragHandle.addEventListener('click', function () {
+                    advDrawer.classList.toggle('expanded');
+                });
+            }
+
+            // Drawer interaction listeners
+            document.getElementById('panel-left')?.addEventListener('click', function (e) {
+                if (e.target.closest('.drawer-handle')) {
+                    this.classList.toggle('expanded');
                 }
-                console.log('Z-Index Stacking:', zIndices);
-                return zIndices;
-            }
-        };
+            });
 
-        // Debug API
-        window.aetherDebug = {
-            getLocation: function () {
-                if (window.weatherService) {
-                    return {
-                        latitude: window.weatherService.latitude,
-                        longitude: window.weatherService.longitude,
-                        location: window.weatherService.location
+            document.getElementById('panel-right')?.addEventListener('click', function (e) {
+                if (e.target.closest('.drawer-handle')) {
+                    this.classList.toggle('expanded');
+                }
+            });
+
+            // DOM Binding Validator
+            window.DOMBindingValidator = {
+                validate: function () {
+                    var results = {
+                        elements: {},
+                        issues: []
                     };
+                    var requiredElements = [
+                        'panel-left',
+                        'panel-right',
+                        'panel-advanced',
+                        'center-overlay',
+                        'timeline-scrubber',
+                        'canvas-container',
+                        'top-bar'
+                    ];
+                    requiredElements.forEach(function (id) {
+                        var el = document.getElementById(id);
+                        results.elements[id] = !!el;
+                        if (!el) results.issues.push('Missing element: #' + id);
+                    });
+                    console.log('DOM Binding Validation:', results);
+                    return results;
                 }
-                return null;
-            },
-            toggleDrawer: function (side) {
-                var panel = document.getElementById('panel-' + side);
-                if (panel) {
-                    panel.classList.toggle('expanded');
+            };
+
+            // Z-Index Manager
+            window.ZIndexManager = {
+                verify: function () {
+                    var elements = {
+                        'canvas-container': document.getElementById('canvas-container'),
+                        'center-overlay': document.getElementById('center-overlay'),
+                        'bottom-mini-bar': document.getElementById('bottom-mini-bar'),
+                        'panel-advanced': document.getElementById('panel-advanced'),
+                        'panel-left': document.getElementById('panel-left'),
+                        'panel-right': document.getElementById('panel-right'),
+                        'timeline-scrubber': document.getElementById('timeline-scrubber'),
+                        'top-bar': document.getElementById('top-bar')
+                    };
+                    var zIndices = {};
+                    for (var key in elements) {
+                        if (elements[key]) {
+                            zIndices[key] = window.getComputedStyle(elements[key]).zIndex || 'auto';
+                        }
+                    }
+                    console.log('Z-Index Stacking:', zIndices);
+                    return zIndices;
                 }
-            },
-            validateAll: function () {
-                console.log('=== Aether Clock Debug Report ===');
-                DOMBindingValidator.validate();
-                ZIndexManager.verify();
-                console.log('Location:', this.getLocation());
-            }
-        };
-    </script>
-    <span id="current-feels-like" style="display:none;">--</span>
-</body>
+            };
+
+            // Debug API
+            window.aetherDebug = {
+                getLocation: function () {
+                    if (window.weatherService) {
+                        return {
+                            latitude: window.weatherService.latitude,
+                            longitude: window.weatherService.longitude,
+                            location: window.weatherService.location
+                        };
+                    }
+                    return null;
+                },
+                toggleDrawer: function (side) {
+                    var panel = document.getElementById('panel-' + side);
+                    if (panel) {
+                        panel.classList.toggle('expanded');
+                    }
+                },
+                validateAll: function () {
+                    console.log('=== Aether Clock Debug Report ===');
+                    DOMBindingValidator.validate();
+                    ZIndexManager.verify();
+                    console.log('Location:', this.getLocation());
+                }
+            };
+        </script>
+        <span id="current-feels-like" style="display: none">--</span>
+    </body>
 </html>

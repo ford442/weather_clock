@@ -72,7 +72,7 @@ The goal: make time *visible* and *tactile*—a living, breathing environment in
 
 ### For Developers
 
-See **[claude.md](./claude.md)** for:
+See **[AGENTS.md](./AGENTS.md)** for:
 - Project architecture and file structure
 - How to modify shaders, effects, and simulation
 - Debugging hooks and development commands
@@ -105,17 +105,17 @@ Ensure the dev server is running (`npm run dev`), then run the consolidated veri
 
 ```bash
 # Run all visual tests and compare against baselines
-python3 verification/run_all.py
+python3 verification/suite/run_all.py
 
-# Run the 10-day forecast focused-view smoke and capture representative days
-python3 verification/verify_forecast_view.py
+# Run the fast app/forecast smoke checks without pixel comparisons
+python3 verification/suite/run_all.py --smoke-only
 ```
 
 If visual regressions are expected or intended (e.g., after updating shaders or lighting), you can update the committed baseline images locally using the `VISUAL_UPDATE` environment flag:
 
 ```bash
 # Update committed baseline screenshots
-VISUAL_UPDATE=1 python3 verification/run_all.py
+VISUAL_UPDATE=1 python3 verification/suite/run_all.py
 ```
 
 On CI, if the visual regression job fails, PR diffs showing highlighted mismatches are automatically saved and uploaded as a workflow run artifact (`visual-regression-diffs`).
@@ -174,8 +174,8 @@ Perfect for quickly testing edge cases (midnight snow, sunset storms, etc.) with
 
 We welcome contributions! Here's how to get started:
 
-1. **Read [claude.md](./claude.md)** for architecture and development guidelines
-2. **Run tests locally:** `npm test` and visual verification with `python3 verification/*.py`
+1. **Read [AGENTS.md](./AGENTS.md)** for architecture and development guidelines
+2. **Run tests locally:** `npm test` and visual verification with `python3 verification/suite/run_all.py`
 3. **Test your changes** across the development, testing, and production workflows
 4. **Follow the code style** in existing modules—keep shaders modular, use object pooling for particles, comment complex math
 
@@ -188,7 +188,7 @@ Areas we're looking for help:
 
 ## 📚 Learn More
 
-- **Development Setup:** [claude.md](./claude.md) — Architecture, file structure, and contributor guide
+- **Development Setup:** [AGENTS.md](./AGENTS.md) — Architecture, file structure, and contributor guide
 - **Three.js Docs:** [threejs.org/docs](https://threejs.org/docs/)
 - **SunCalc Calculations:** [suncalc.org](https://suncalc.org/)
 - **GLSL Shader Guide:** [Khronos OpenGL/GLSL](https://www.khronos.org/opengl/wiki/OpenGL_Shading_Language)

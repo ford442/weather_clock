@@ -23,12 +23,14 @@ export function generateDebugTimeline(simulationTime, weatherCode) {
         if (weatherCode === -1) {
             const cycle = 6; // Hours per phase
             const phase = Math.floor((i + 3) / cycle) % 3;
-            if (phase === 0) code = 0; // Clear
-            else if (phase === 1) code = 63; // Rain
+            if (phase === 0)
+                code = 0; // Clear
+            else if (phase === 1)
+                code = 63; // Rain
             else code = 71; // Snow
         }
 
-        const isRain = (code >= 50 && code < 70) || (code >= 80 && code < 83) || (code >= 95);
+        const isRain = (code >= 50 && code < 70) || (code >= 80 && code < 83) || code >= 95;
         const isSnow = (code >= 70 && code < 80) || (code >= 85 && code < 87);
         const isCloudy = code > 0;
 
@@ -57,9 +59,8 @@ export function generateDebugTimeline(simulationTime, weatherCode) {
  * @returns {Object} Mock weather data object
  */
 export function createDebugWeatherData(simulationTime, weatherCode, timeline) {
-    const currentMock = timeline.find(
-        (t) => Math.abs(t.time.getTime() - simulationTime.getTime()) < 3600 * 1000
-    ) || timeline[3];
+    const currentMock =
+        timeline.find((t) => Math.abs(t.time.getTime() - simulationTime.getTime()) < 3600 * 1000) || timeline[3];
 
     return {
         current: currentMock,
@@ -159,11 +160,7 @@ export function setupDebugAPI(state, services, scene3d) {
         let daily = state.weatherData?.dailyForecast;
         if (!daily || !daily.length) {
             try {
-                daily = await weatherService.getDailyForecast(
-                    weatherService.latitude,
-                    weatherService.longitude,
-                    10
-                );
+                daily = await weatherService.getDailyForecast(weatherService.latitude, weatherService.longitude, 10);
                 if (state.weatherData) {
                     state.weatherData.dailyForecast = daily;
                 }
@@ -187,9 +184,8 @@ export function setupDebugAPI(state, services, scene3d) {
         );
 
         const timeline = buildHourlyTimelineFromDay(day, repDate);
-        const currentMock = timeline.find(
-            (t) => Math.abs(t.time.getTime() - repDate.getTime()) < 3600 * 1000
-        ) || timeline[12];
+        const currentMock =
+            timeline.find((t) => Math.abs(t.time.getTime() - repDate.getTime()) < 3600 * 1000) || timeline[12];
 
         state.simulationTime = new Date(repDate);
         state.weatherData = {

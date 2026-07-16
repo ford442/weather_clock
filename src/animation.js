@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { updateMoonVisuals } from './moonPhase.js';
 import { updateWeatherLighting } from './weatherLighting.js';
 import { getActiveWeatherData } from './weather-simulation.js';
-import { DailyScene } from './dailyScene.js';
 import {
     updateTimeDisplay,
     updateWeatherDisplay,
@@ -11,18 +10,17 @@ import {
     updateWindCompass,
     updatePanelTheme,
     drawSparkline,
-    updateTimelineScrubber,
-    showToast
+    updateTimelineScrubber
 } from './ui.js';
 import { updateAtmosphereTheme } from './atmosphereTheme.js';
-import { getQualityTier, setQualityTier } from './rendering.js';
+import { getQualityTier } from './rendering.js';
 
 const ANIMATION_CONFIG = {
     realTimeScale: 1.0,
-    warpTimeScale: 1440.0,        // 24 h in 60 s
-    weatherUpdateThrottle: 0.1,   // 10 % chance per frame during time warp
-    themeUpdateInterval: 500,     // ms between panel-theme updates
-    reducedMotionParticleFrameInterval: 3,
+    warpTimeScale: 1440.0, // 24 h in 60 s
+    weatherUpdateThrottle: 0.1, // 10 % chance per frame during time warp
+    themeUpdateInterval: 500, // ms between panel-theme updates
+    reducedMotionParticleFrameInterval: 3
 };
 
 export class AnimationController {
@@ -36,6 +34,7 @@ export class AnimationController {
         this.clock = null;
         this.stats = null;
         this._visibilityBound = false;
+        this._suspensions = new Set();
         this._reducedMotionFrameCount = 0;
         this._reducedMotionDelta = 0;
 
@@ -44,6 +43,10 @@ export class AnimationController {
         this._lastSparklineHour = -1;
         this._lastSunriseDay = -1; // track day to avoid per-frame DOM updates
         this.dailyScene = null;
+        this.dailySceneClass = null;
+        this.dailySceneLoadPromise = null;
+        this.qualityChangeHandler = null;
+        this.qualityChangePending = false;
 
         // FPS tracking for auto-downgrade
         this.fpsSamples = [];
@@ -55,20 +58,26 @@ export class AnimationController {
             sampleCount: 0
         };
     }
-    
+
     /**
      * Set the mode controller reference for timeline updates
-     * @param {ModeController} controller
+     * @param {import('./ModeController.js').ModeController} controller
      */
     setModeController(controller) {
         this.modeController = controller;
+        controller?.setForecastSceneLoader?.(() => this.prepareDailyScene());
+    }
+
+    setQualityChangeHandler(handler) {
+        this.qualityChangeHandler = handler;
     }
 
     /** Start the rAF loop */
     start(clock, stats) {
-        if (this.isRunning) return;
-        this.clock = clock;
-        this.stats = stats;
+        this.clock = clock || this.clock;
+        this.stats = stats || this.stats;
+        if (this.isRunning || this._suspensions.size > 0 || (typeof document !== 'undefined' && document.hidden))
+            return;
         this.isRunning = true;
         this._ensureVisibilityHandler();
         this.clock?.start?.();
@@ -88,13 +97,11 @@ export class AnimationController {
         if (this._visibilityBound || typeof document === 'undefined') return;
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                this.stop();
+                this.suspend('visibility');
                 this.clock?.stop?.();
                 return;
             }
-            if (this.clock && this.stats) {
-                this.start(this.clock, this.stats);
-            }
+            this.resume('visibility');
         });
         this._visibilityBound = true;
     }
@@ -104,10 +111,17 @@ export class AnimationController {
         const { state, services, scene3d } = this;
         const { weatherService, astronomyService } = services;
         const {
-            scene, pipeline, sky,
-            sundial, moonGroup, weatherEffects,
-            sunLight, moonLight, ambientLight,
-            controls, renderer
+            scene,
+            pipeline,
+            sky,
+            sundial,
+            moonGroup,
+            weatherEffects,
+            sunLight,
+            moonLight,
+            ambientLight,
+            controls,
+            renderer
         } = scene3d;
 
         // ── FPS tracking & auto-downgrade ──
@@ -132,7 +146,7 @@ export class AnimationController {
                         forecastPreview: this.modeController?.forecastUI?.previewMetrics || null
                     };
                     window.aetherPerf = this.performanceMetrics;
-                    
+
                     if (avgFps < 30) {
                         let nextTier = null;
                         if (currentTier === 'high') {
@@ -140,17 +154,20 @@ export class AnimationController {
                         } else if (currentTier === 'medium') {
                             nextTier = 'low';
                         }
-                        
-                        if (nextTier) {
-                            setQualityTier(nextTier);
-                            if (window.updateQualityButton) {
-                                window.updateQualityButton(nextTier);
-                            }
-                            showToast(`Performance low (${Math.round(avgFps)} FPS). Automatically switching to ${nextTier.toUpperCase()} quality... Reloading to apply.`, 'warning');
+
+                        if (nextTier && this.qualityChangeHandler && !this.qualityChangePending) {
+                            this.qualityChangePending = true;
                             this.fpsSamples = [];
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 2000);
+                            Promise.resolve()
+                                .then(() =>
+                                    this.qualityChangeHandler(nextTier, {
+                                        automatic: true,
+                                        fps: Math.round(avgFps)
+                                    })
+                                )
+                                .finally(() => {
+                                    this.qualityChangePending = false;
+                                });
                         }
                     }
                 }
@@ -158,13 +175,10 @@ export class AnimationController {
         }
 
         // ── Advance simulation time ──
-        const timeScale = state.isTimeWarping
-            ? state.timeSpeed
-            : ANIMATION_CONFIG.realTimeScale;
+        const timeScale = state.isTimeWarping ? state.timeSpeed : ANIMATION_CONFIG.realTimeScale;
         state.simulationTime = new Date(state.simulationTime.getTime() + delta * 1000 * timeScale);
 
-        const shouldUpdateReducedMotionEffects = !state.reducedMotion
-            || this._shouldUpdateReducedMotionEffects(delta);
+        const shouldUpdateReducedMotionEffects = !state.reducedMotion || this._shouldUpdateReducedMotionEffects(delta);
 
         // ── Orbit controls damping ──
         if (controls) controls.update();
@@ -210,19 +224,27 @@ export class AnimationController {
         if (activeWeatherData) {
             // Lighting
             if (astroData.sunPosition.lengthSq() > 0) {
-                updateWeatherLighting(scene, sunLight, moonLight, ambientLight, sky, {
-                    current: activeWeatherData.current,
-                    past: activeWeatherData.past,
-                    forecast: activeWeatherData.forecast
-                }, astroData);
+                updateWeatherLighting(
+                    scene,
+                    sunLight,
+                    moonLight,
+                    ambientLight,
+                    sky,
+                    {
+                        current: activeWeatherData.current,
+                        past: activeWeatherData.past,
+                        forecast: activeWeatherData.forecast
+                    },
+                    astroData
+                );
             }
 
             // Weather effects
             const empty = { weatherCode: 0, windSpeed: 0, windDirection: 0 };
             if (shouldUpdateReducedMotionEffects) {
                 weatherEffects.update(
-                    activeWeatherData.past     || empty,
-                    activeWeatherData.current  || empty,
+                    activeWeatherData.past || empty,
+                    activeWeatherData.current || empty,
                     activeWeatherData.forecast || empty,
                     state.reducedMotion ? this._consumeReducedMotionDelta() : delta,
                     ambientLight.color,
@@ -239,12 +261,15 @@ export class AnimationController {
 
             // Throttled weather display update during time warp
             if (state.isTimeWarping && Math.random() < ANIMATION_CONFIG.weatherUpdateThrottle) {
-                updateWeatherDisplay({
-                    ...state.weatherData,
-                    current: activeWeatherData.current,
-                    past: activeWeatherData.past,
-                    forecast: activeWeatherData.forecast
-                }, weatherService);
+                updateWeatherDisplay(
+                    {
+                        ...state.weatherData,
+                        current: activeWeatherData.current,
+                        past: activeWeatherData.past,
+                        forecast: activeWeatherData.forecast
+                    },
+                    weatherService
+                );
             }
 
             // ── Panel theme (throttled: ~2 Hz) ──
@@ -260,9 +285,8 @@ export class AnimationController {
                 // clamped to ±1 over a 10 °C swing
                 const histTemp = state.weatherData?.historicalYearAgo?.temp;
                 const currTemp = activeWeatherData.current?.temp;
-                const tempTrend = (histTemp != null && currTemp != null)
-                    ? Math.max(-1, Math.min(1, (currTemp - histTemp) / 10))
-                    : 0;
+                const tempTrend =
+                    histTemp != null && currTemp != null ? Math.max(-1, Math.min(1, (currTemp - histTemp) / 10)) : 0;
 
                 updatePanelTheme(dayFactor, weatherSeverity, tempTrend);
             }
@@ -273,7 +297,6 @@ export class AnimationController {
                 this._lastSparklineHour = simHour;
                 drawSparkline(state.simulationTime, state.weatherData, weatherService);
             }
-
         } else {
             // No data — still run effects at idle
             const empty = { weatherCode: 0, windSpeed: 0, windDirection: 0 };
@@ -300,7 +323,7 @@ export class AnimationController {
                 scene.fog.color.copy(ambientLight.color).multiplyScalar(0.8);
             }
         }
-        
+
         // ── Timeline update (if in timeline mode) ──
         if (this.modeController?.isTimelineMode() && this.modeController.timelineController) {
             this.modeController.timelineController.update(delta);
@@ -309,23 +332,25 @@ export class AnimationController {
         if (this.modeController?.isForecastMode() && this.modeController.forecastController) {
             this.modeController.forecastController.update(delta);
         }
-        
+
         // ── Forecast vignette drive (single-day live 3D) ──
         const fc = this.modeController;
         if (fc?.isForecastMode() && fc._focusedForecast && state.weatherData) {
             const { day, repDate } = fc._focusedForecast;
             const dailyScene = this._ensureDailyScene();
-            dailyScene.setLocation(weatherService.latitude, weatherService.longitude);
-            dailyScene.setDay(day, {
-                representativeTime: repDate,
-                hour: fc.forecastController?.vignetteHour
-            });
-            dailyScene.setEnabled(true);
-            dailyScene.update(delta);
+            if (dailyScene) {
+                dailyScene.setLocation(weatherService.latitude, weatherService.longitude);
+                dailyScene.setDay(day, {
+                    representativeTime: repDate,
+                    hour: fc.forecastController?.vignetteHour
+                });
+                dailyScene.setEnabled(true);
+                dailyScene.update(delta);
 
-            // Keep the weather panel's wind compass in sync with the focused day.
-            const snap = dailyScene.getSnapshot();
-            if (snap?.windDirection != null) updateWindCompass(snap.windDirection);
+                // Keep the weather panel's wind compass in sync with the focused day.
+                const snap = dailyScene.getSnapshot();
+                if (snap?.windDirection != null) updateWindCompass(snap.windDirection);
+            }
         } else {
             this.dailyScene?.setEnabled(false);
         }
@@ -340,8 +365,9 @@ export class AnimationController {
 
     _ensureDailyScene() {
         if (this.dailyScene) return this.dailyScene;
+        if (!this.dailySceneClass) return null;
         const { scene, sky, sundial, moonGroup, weatherEffects, sunLight, moonLight, ambientLight } = this.scene3d;
-        this.dailyScene = new DailyScene({
+        this.dailyScene = new this.dailySceneClass({
             scene,
             sky,
             sundial,
@@ -356,6 +382,16 @@ export class AnimationController {
             quality: 'focused'
         });
         return this.dailyScene;
+    }
+
+    async prepareDailyScene() {
+        if (!this.dailySceneLoadPromise) {
+            this.dailySceneLoadPromise = import('./dailyScene.js').then(({ DailyScene }) => {
+                this.dailySceneClass = DailyScene;
+                return this._ensureDailyScene();
+            });
+        }
+        return this.dailySceneLoadPromise;
     }
 
     _shouldUpdateReducedMotionEffects(delta) {
@@ -376,6 +412,19 @@ export class AnimationController {
         if (this.rafId != null) {
             cancelAnimationFrame(this.rafId);
             this.rafId = null;
+        }
+    }
+
+    /** Pause until the matching reason is resumed. Multiple reasons may overlap. */
+    suspend(reason = 'manual') {
+        this._suspensions.add(reason);
+        this.stop();
+    }
+
+    resume(reason = 'manual') {
+        this._suspensions.delete(reason);
+        if (this._suspensions.size === 0 && this.clock && this.stats) {
+            this.start(this.clock, this.stats);
         }
     }
 
