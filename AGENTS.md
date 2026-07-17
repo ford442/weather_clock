@@ -216,3 +216,15 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 ### Known Limitations
 - **Forecast accuracy placeholder:** `WeatherService.getPredictionAccuracy()` and `TimelineData.enrichWithAccuracy()` return no data. Real forecast verification via the Open-Meteo Previous Runs API is planned but not yet implemented.
 - **Hardcoded zone offsets:** The visual separation of temporal zones relies on hardcoded X offsets (e.g., `-8`, `0`, `8`) in multiple files. Changing scene scale requires updating these values consistently.
+
+---
+
+## Cursor Cloud specific instructions
+
+Node dependencies are refreshed automatically on startup (`npm install`), so the standard commands in **Build and Test Commands** (`npm run dev`, `npm test`, `npm run lint`, `npm run build`) work out of the box. `npm run dev` serves the app on `http://localhost:5173`; start it in a background/`tmux` session since it is long-running.
+
+- **Full CI parity locally:** the CI pipeline runs `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test -- --run`, `npm run build`, and `npm run check:bundle-size`. Run these before committing to match CI.
+- **Weather test noise is expected:** `npm test` prints `stderr` warnings about failed/offline fetches for the caching-fallback tests — these are mocked failures, and the suite still passes.
+- **Visual regression is optional and NOT covered by the update script.** It needs the dev server running plus a one-time extra setup: `pip install playwright Pillow` and `python3 -m playwright install chromium`. Then run `python3 verification/suite/run_all.py` (or `--smoke-only` for a fast headless check with no screenshot comparison). Baselines were captured on other hardware, so full screenshot comparisons may report GPU/font-driven diffs in this environment; prefer `--smoke-only` for a quick health check.
+- **Harmless headless-GL console noise:** in headless Chromium the app logs a `favicon.ico` 404 and `WebGL: INVALID_ENUM: readPixels` / GPU-stall warnings. These do not affect functionality — the 3D scene, weather effects, and mode switching all render correctly.
+- **Runtime data needs network:** the app fetches live weather from Open-Meteo and geocoding from Nominatim over HTTPS (no API key). If egress is blocked, live weather/search will fail; use the debug hooks (`window.setDebugWeather(code)`, `window.setDebugTime(hour)`) to exercise the scene offline.
