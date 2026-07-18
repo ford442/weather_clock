@@ -1,18 +1,22 @@
 import * as THREE from 'three';
 import { createRainMaterial, createRainMaterialWebGPU } from '../webgpu/materials/RainMaterial.js';
 import { SUNDIAL_DIMENSIONS } from '../sundial.js';
+import { getNativeRuntime } from '../native/native-runtime.js';
 import { ParticleSystemBase } from './particle-base.js';
 
 export class RainSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 1500) {
         super(scene);
         this.currentIntensity = 0;
+        this.activeCount = 0;
         this.maxParticles = maxParticles;
         this.zone = zone || { minX: -8, maxX: 8 };
 
+        this.nativeRuntime = getNativeRuntime();
+        this.nativeBuffers = this.nativeRuntime.allocateParticleBuffers(maxParticles, 6);
         const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(maxParticles * 6);
-        const velocities = new Float32Array(maxParticles * 3);
+        const positions = this.nativeBuffers.positions;
+        const velocities = this.nativeBuffers.velocities;
         const states = new Int8Array(maxParticles);
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -36,6 +40,8 @@ export class RainSystem extends ParticleSystemBase {
         this.mesh.material = await createRainMaterialWebGPU();
         oldMaterial?.dispose?.();
     }
+
+    setSplashSystem() {}
 
     resetParticle(i, randomY = false) {
         const i3 = i * 3;
@@ -80,6 +86,7 @@ export class RainSystem extends ParticleSystemBase {
         }
 
         const opacity = this.updateOpacity(delta, targetOp);
+        this.activeCount = activeCount;
         this.mesh.material.uniforms.uOpacity.value = opacity;
 
         if (opacity <= 0.01) {
@@ -96,38 +103,16 @@ export class RainSystem extends ParticleSystemBase {
         const targetWindX = Math.cos(rad) * windSpeed * speedScale;
         const targetWindZ = -Math.sin(rad) * windSpeed * speedScale;
 
+        this.nativeRuntime.stepParticles(this.nativeBuffers, activeCount, targetWindX, targetWindZ, delta, {
+            mode: 1,
+            minX: this.zone.minX,
+            maxX: this.zone.maxX
+        });
+
         for (let i = 0; i < activeCount; i++) {
-            const i3 = i * 3;
             const i6 = i * 6;
 
             if (this.states[i] === 0) {
-                this.velocities[i3] += (targetWindX - this.velocities[i3]) * 0.1;
-                this.velocities[i3 + 2] += (targetWindZ - this.velocities[i3 + 2]) * 0.1;
-
-                const vx = this.velocities[i3];
-                const vy = this.velocities[i3 + 1];
-                const vz = this.velocities[i3 + 2];
-
-                positions[i6 + 3] += vx;
-                positions[i6 + 4] += vy;
-                positions[i6 + 5] += vz;
-
-                // Longer streaks for faster perceived motion
-                const streak = 4.0;
-                positions[i6] = positions[i6 + 3] - vx * streak;
-                positions[i6 + 1] = positions[i6 + 4] - vy * streak;
-                positions[i6 + 2] = positions[i6 + 5] - vz * streak;
-
-                if (positions[i6 + 3] > this.zone.maxX) {
-                    const w = this.zone.maxX - this.zone.minX;
-                    positions[i6 + 3] -= w;
-                    positions[i6] -= w;
-                } else if (positions[i6 + 3] < this.zone.minX) {
-                    const w = this.zone.maxX - this.zone.minX;
-                    positions[i6 + 3] += w;
-                    positions[i6] += w;
-                }
-
                 const headY = positions[i6 + 4];
                 if (headY > -1 && headY < 4) {
                     if (sundialGroup) {
@@ -173,5 +158,11 @@ export class RainSystem extends ParticleSystemBase {
             }
         }
         this.mesh.geometry.attributes.position.needsUpdate = true;
+    }
+
+    dispose() {
+        super.dispose();
+        this.nativeBuffers?.dispose?.();
+        this.nativeBuffers = null;
     }
 }

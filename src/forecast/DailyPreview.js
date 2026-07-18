@@ -6,10 +6,37 @@
 import { AstronomyService } from '../astronomy.js';
 import { buildDailySceneSnapshot } from '../dailyScene.js';
 import { buildWeatherEffectConfig } from '../effects/weather-effects.js';
+import { FORECAST_PRIMITIVE, FORECAST_PRIMITIVE_CAPACITY, FORECAST_PRIMITIVE_STRIDE } from '../native/js-kernels.js';
+import { getNativeRuntime } from '../native/native-runtime.js';
 
 const astro = new AstronomyService();
+const previewBuffers = new WeakMap();
 
-export function renderDailyPreview(canvas, dayData, repDate, lat = 40.7, lon = -74, timeMs = 0) {
+function getPreviewBuffer(canvas, runtime) {
+    let entry = previewBuffers.get(canvas);
+    if (!entry || entry.buffer.disposed || entry.runtime !== runtime) {
+        entry?.buffer.dispose?.();
+        entry = { runtime, buffer: runtime.allocateForecastBuffer(FORECAST_PRIMITIVE_CAPACITY) };
+        previewBuffers.set(canvas, entry);
+    }
+    return entry.buffer;
+}
+
+export function disposeDailyPreview(canvas) {
+    const entry = previewBuffers.get(canvas);
+    entry?.buffer.dispose?.();
+    previewBuffers.delete(canvas);
+}
+
+export function renderDailyPreview(
+    canvas,
+    dayData,
+    repDate,
+    lat = 40.7,
+    lon = -74,
+    timeMs = 0,
+    runtime = getNativeRuntime()
+) {
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: true });
     const w = canvas.width,
@@ -20,9 +47,6 @@ export function renderDailyPreview(canvas, dayData, repDate, lat = 40.7, lon = -
     const effectConfig = buildWeatherEffectConfig(snap, 'thumbnail');
     const cloud = snap.cloudCover;
     const code = snap.weatherCode;
-    const windRad = ((90 - effectConfig.windDir) * Math.PI) / 180;
-    const windX = Math.cos(windRad);
-    const windY = -Math.sin(windRad);
     const isNight = (repDate && (repDate.getHours() < 6 || repDate.getHours() > 20)) || false;
 
     let top = isNight ? '#0b1020' : '#1e3a8a';
@@ -86,39 +110,62 @@ export function renderDailyPreview(canvas, dayData, repDate, lat = 40.7, lon = -
         }
     }
 
-    // Clouds (density from cover)
-    const nCloud = Math.floor(1 + (cloud / 100) * 4);
+    const precipType =
+        effectConfig.precipType === 'rain'
+            ? FORECAST_PRIMITIVE.RAIN
+            : effectConfig.precipType === 'snow'
+              ? FORECAST_PRIMITIVE.SNOW
+              : 0;
+    const primitiveLayout = runtime.generateForecastPrimitives(getPreviewBuffer(canvas, runtime), {
+        width: w,
+        height: h,
+        cloudCover: cloud,
+        precipType,
+        precipIntensity: effectConfig.precipIntensity,
+        windSpeed: effectConfig.windSpeed,
+        windDir: effectConfig.windDir,
+        timeMs
+    });
+
+    // Canvas drawing remains in JavaScript; only primitive layout is native-eligible.
     ctx.fillStyle = 'rgba(226,232,240,0.75)';
-    for (let i = 0; i < nCloud; i++) {
-        const windPhase = (timeMs * 0.0008 * Math.max(2, effectConfig.windSpeed)) % 24;
-        const windOffset = (windPhase + effectConfig.windSpeed * 0.35 + i * 8) % 24;
-        const px = 18 + (i % 3) * 28 + ((i * 7) % 11) + windX * windOffset;
-        const py = 18 + Math.floor(i / 3) * 9 + windY * windOffset * 0.35;
+    for (let i = 0; i < primitiveLayout.count; i++) {
+        const index = i * FORECAST_PRIMITIVE_STRIDE;
+        if (primitiveLayout.data[index] !== FORECAST_PRIMITIVE.CLOUD) continue;
         ctx.beginPath();
-        ctx.ellipse(px, py, 10 + (i % 2) * 3, 5, windRad * 0.18, 0, Math.PI * 2);
+        ctx.ellipse(
+            primitiveLayout.data[index + 1],
+            primitiveLayout.data[index + 2],
+            primitiveLayout.data[index + 3],
+            primitiveLayout.data[index + 4],
+            primitiveLayout.data[index + 5],
+            0,
+            Math.PI * 2
+        );
         ctx.fill();
     }
 
     // Precipitation (simple lines for rain, dots for snow)
-    const isRain = effectConfig.precipType === 'rain';
-    const isSnow = effectConfig.precipType === 'snow';
+    const isRain = precipType === FORECAST_PRIMITIVE.RAIN;
+    const isSnow = precipType === FORECAST_PRIMITIVE.SNOW;
     if (isRain || isSnow) {
         ctx.strokeStyle = isSnow ? '#e0f2fe' : '#bae6fd';
         ctx.lineWidth = isSnow ? 1 : 1.5;
-        const precipCount = Math.max(
-            isSnow ? 8 : 6,
-            Math.floor((isSnow ? 12 : 10) * (0.35 + effectConfig.precipIntensity))
-        );
-        for (let i = 0; i < precipCount; i++) {
-            const x = 12 + ((i * 17) % (w - 16));
-            const y0 = 26 + ((i * 11) % (h * 0.4));
-            if (isSnow) {
+        for (let i = 0; i < primitiveLayout.count; i++) {
+            const index = i * FORECAST_PRIMITIVE_STRIDE;
+            const kind = primitiveLayout.data[index];
+            if (kind === FORECAST_PRIMITIVE.SNOW) {
                 ctx.fillStyle = '#e0f2fe';
-                ctx.fillRect(x, y0, 1.5, 1.5);
-            } else {
+                ctx.fillRect(
+                    primitiveLayout.data[index + 1],
+                    primitiveLayout.data[index + 2],
+                    primitiveLayout.data[index + 3],
+                    primitiveLayout.data[index + 4]
+                );
+            } else if (kind === FORECAST_PRIMITIVE.RAIN) {
                 ctx.beginPath();
-                ctx.moveTo(x, y0);
-                ctx.lineTo(x + 2 + windX * 5, y0 + 11 + windY * 2);
+                ctx.moveTo(primitiveLayout.data[index + 1], primitiveLayout.data[index + 2]);
+                ctx.lineTo(primitiveLayout.data[index + 3], primitiveLayout.data[index + 4]);
                 ctx.stroke();
             }
         }

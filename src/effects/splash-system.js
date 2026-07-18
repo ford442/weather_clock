@@ -9,6 +9,7 @@ export class SplashSystem {
 
     createSplashes() {
         const particleCount = 1000;
+        this.maxParticles = particleCount;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
         const life = new Float32Array(particleCount);

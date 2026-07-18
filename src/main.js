@@ -10,6 +10,7 @@ import {
 import { setupLights } from './lights.js';
 import { setupSky, setupSundial, setupMoon, setupWeatherEffects, addToScene } from './scene-objects.js';
 import { initMoonWebGPU } from './moonPhase.js';
+import { getRequestedNativeKernels, initializeNativeRuntime } from './native/native-runtime.js';
 import { WeatherService } from './weather.js';
 import { AstronomyService } from './astronomy.js';
 import {
@@ -61,6 +62,16 @@ async function bootstrap() {
     // Rendering — async because WebGPU path requires async init
     const { scene, camera, renderer, pipeline, clock, controls, isWebGPU } = await setupRendering();
 
+    // Experimental SIMD kernels are opt-in until the benchmark clears the 2x gate.
+    // A failed import/instantiation leaves the JS paths active.
+    const nativeRuntime = await initializeNativeRuntime({ kernels: getRequestedNativeKernels(window.location.search) });
+    window.__NATIVE_BACKEND__ = nativeRuntime.backend;
+    window.__NATIVE_BACKENDS__ = nativeRuntime.backends;
+    if (new URLSearchParams(window.location.search).get('nativeBenchmark') === '1') {
+        const { runBrowserNativeBenchmarks } = await import('./native/browser-benchmark.js');
+        window.runNativeBenchmarks = runBrowserNativeBenchmarks;
+    }
+
     // Expose WebGPU status for debug / material factories
     window.__IS_WEBGPU__ = isWebGPU;
 
@@ -72,7 +83,7 @@ async function bootstrap() {
     const sky = setupSky();
     const sundial = setupSundial();
     const { moonGroup } = setupMoon();
-    const weatherEffects = await setupWeatherEffects(scene, sundial, camera, isWebGPU);
+    const weatherEffects = await setupWeatherEffects(scene, sundial, camera, isWebGPU, renderer);
     if (isWebGPU) {
         await initMoonWebGPU(moonGroup);
     }

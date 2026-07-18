@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getNativeRuntime } from '../native/native-runtime.js';
 
 // --- Shared Resources Manager ---
 const ResourceManager = {
@@ -83,12 +84,16 @@ export function createCumulusTexture() {
     ctx.fillStyle = shadowGrad;
     ctx.fillRect(0, cy * 0.9, size, size);
 
-    // Subtle pixel-level noise for organic feel
+    // Both backends use the same deterministic fractal noise so enabling the
+    // SIMD experiment changes performance, not the generated texture.
     const imgData = ctx.getImageData(0, 0, size, size);
     const data = imgData.data;
+    const nativeRuntime = getNativeRuntime();
+    const noiseData = nativeRuntime.generateCloudNoise(size, size, 4, 0xa37e);
     for (let i = 0; i < data.length; i += 4) {
         if (data[i + 3] > 0) {
-            const noise = (Math.random() - 0.5) * 14;
+            // Match the former random perturbation's -7..+7 intensity range.
+            const noise = ((noiseData[i / 4] - 127.5) / 127.5) * 7;
             data[i] = Math.max(0, Math.min(255, data[i] + noise));
             data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
             data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));

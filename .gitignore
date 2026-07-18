@@ -1,5 +1,8 @@
 node_modules
 dist
+!native/dist/
+!native/dist/weather-native.mjs
+!native/dist/weather-native.wasm
 .DS_Store
 *.log
 .vite

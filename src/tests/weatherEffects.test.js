@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWeatherEffectConfig } from '../effects/weather-effects.js';
+import { buildWeatherEffectConfig, getPrecipitationParticleBudget } from '../effects/weather-effects.js';
 
 describe('Forecast weather effect config', () => {
     it('maps rainy forecast days to wind-aligned rain intensity', () => {
@@ -25,5 +25,11 @@ describe('Forecast weather effect config', () => {
 
         expect(focused.precipType).toBe('snow');
         expect(thumbnail.particleScale).toBeLessThan(focused.particleScale);
+    });
+
+    it('raises only the WebGPU high-tier precipitation budget by 5x', () => {
+        expect(getPrecipitationParticleBudget('high', false)).toEqual({ rain: 2000, snow: 1500 });
+        expect(getPrecipitationParticleBudget('high', true)).toEqual({ rain: 10000, snow: 7500 });
+        expect(getPrecipitationParticleBudget('medium', true, 2)).toEqual({ rain: 1000, snow: 750 });
     });
 });

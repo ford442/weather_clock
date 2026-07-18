@@ -99,6 +99,9 @@ interface HTMLDivElement {
 
 interface Window {
     __IS_WEBGPU__?: boolean;
+    __NATIVE_BACKEND__?: string;
+    __NATIVE_BACKENDS__?: Record<string, string>;
+    runNativeBenchmarks?: () => Record<string, unknown>;
     aetherDebug?: Record<string, unknown>;
     aetherPerf?: Record<string, unknown>;
     modeController?: import('./ModeController.js').ModeController;

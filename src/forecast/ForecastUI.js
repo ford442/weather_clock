@@ -1,7 +1,7 @@
 /**
  * ForecastUI.js - DOM strip of 10 daily vignette cards + focus/scrub UI
  */
-import { renderDailyPreview } from './DailyPreview.js';
+import { disposeDailyPreview, renderDailyPreview } from './DailyPreview.js';
 
 export class ForecastUI {
     constructor(container, controller) {
@@ -92,6 +92,7 @@ export class ForecastUI {
 
     renderLoading() {
         if (!this.cardsContainer) return;
+        this.disposePreviewBuffers();
         this.cardsContainer.innerHTML = '';
         this.cards = [];
         for (let i = 0; i < 10; i++) {
@@ -110,6 +111,7 @@ export class ForecastUI {
 
     renderCards(days) {
         if (!this.cardsContainer) return;
+        this.disposePreviewBuffers();
         this.cardsContainer.innerHTML = '';
         this.cards = [];
 
@@ -258,7 +260,15 @@ export class ForecastUI {
         }
         this.visibilityObserver?.disconnect?.();
         this.visibilityObserver = null;
+        this.disposePreviewBuffers();
         if (this.container) this.container.innerHTML = '';
+    }
+
+    disposePreviewBuffers() {
+        this.cards?.forEach?.((card) => {
+            const canvas = card.querySelector?.('canvas');
+            if (canvas) disposeDailyPreview(canvas);
+        });
     }
 
     startPreviewAnimation() {

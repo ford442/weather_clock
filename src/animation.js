@@ -143,7 +143,10 @@ export class AnimationController {
                         quality: currentTier,
                         mode: this.modeController?.getMode?.() || 'clock',
                         sampleCount: this.fpsSamples.length,
-                        forecastPreview: this.modeController?.forecastUI?.previewMetrics || null
+                        forecastPreview: this.modeController?.forecastUI?.previewMetrics || null,
+                        nativeBackend: window.__NATIVE_BACKEND__ || 'js',
+                        nativeBackends: window.__NATIVE_BACKENDS__ || null,
+                        particles: weatherEffects?.getParticleMetrics?.() || null
                     };
                     window.aetherPerf = this.performanceMetrics;
 

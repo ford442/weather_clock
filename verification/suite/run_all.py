@@ -1,5 +1,7 @@
 import os
+import json
 import shutil
+import statistics
 import sys
 from playwright.sync_api import sync_playwright
 from PIL import Image
@@ -87,6 +89,60 @@ FORECAST_SCENARIOS = [
 ]
 
 
+def run_native_benchmarks():
+    """Run the authoritative low-tier benchmark in three fresh throttled pages."""
+    base_url = os.environ.get("VERIFY_URL", "http://127.0.0.1:5173")
+    separator = "&" if "?" in base_url else "?"
+    url = f"{base_url}{separator}native=1&nativeBenchmark=1"
+    sessions = []
+
+    with sync_playwright() as p:
+        chrome_path = os.environ.get("CHROME_PATH") or shutil.which("google-chrome") or shutil.which("chromium")
+        launch_options = {
+            "headless": True,
+            "args": [
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--use-gl=swiftshader",
+                "--enable-unsafe-swiftshader",
+            ],
+        }
+        if chrome_path:
+            launch_options["executable_path"] = chrome_path
+        browser = p.chromium.launch(**launch_options)
+        for session_index in range(3):
+            context = browser.new_context(viewport={"width": 1280, "height": 720})
+            context.add_init_script("localStorage.setItem('weatherclock_quality', 'low')")
+            page = context.new_page()
+            page.set_default_timeout(180000)
+            page.on("console", lambda message: print(f"browser: {message.text}", flush=True))
+            cdp = context.new_cdp_session(page)
+            cdp.send("Emulation.setCPUThrottlingRate", {"rate": 4})
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_function("typeof window.runNativeBenchmarks === 'function'", timeout=120000)
+            result = page.evaluate("window.runNativeBenchmarks()")
+            sessions.append(result)
+            print(f"Native benchmark session {session_index + 1}:\n{json.dumps(result, indent=2)}")
+            context.close()
+        browser.close()
+
+    workload_names = ["cloudNoise", "particleFrame", "forecastLayout1000", "forecastTenCardRedraw"]
+    verdicts = {}
+    for name in workload_names:
+        speedups = [session[name]["speedup"] for session in sessions]
+        verdicts[name] = {
+            "sessionSpeedups": speedups,
+            "medianSpeedup": statistics.median(speedups),
+            "adopt": all(speedup >= 2.0 for speedup in speedups),
+        }
+    # Forecast adoption requires both its kernel and the complete redraw to pass.
+    verdicts["forecastAdoption"] = {
+        "adopt": verdicts["forecastLayout1000"]["adopt"] and verdicts["forecastTenCardRedraw"]["adopt"]
+    }
+    print("\nAuthoritative adoption verdict:\n" + json.dumps(verdicts, indent=2))
+    return verdicts
+
+
 def build_forecast_days():
     days = []
     for index, scenario in enumerate(FORECAST_SCENARIOS):
@@ -137,6 +193,16 @@ def run_smoke_checks(page):
     }""")
     if not all(debug_state.values()):
         raise AssertionError(f"App debug/UI smoke failed: {debug_state}")
+
+    if "native=1" in page.url:
+        native_state = page.evaluate("""() => ({
+            backends: window.__NATIVE_BACKENDS__,
+            particleSimulation: window.aetherDebug.getPerformanceMetrics()?.particles?.simulation
+        })""")
+        if set((native_state.get("backends") or {}).values()) != {"wasm-simd"}:
+            raise AssertionError(f"Forced native kernels did not initialize: {native_state}")
+        if native_state.get("particleSimulation") != "wasm-simd":
+            raise AssertionError(f"Forced native particle metrics were incorrect: {native_state}")
 
     page.evaluate("window.setDebugWeather(0)")
     days = build_forecast_days()
@@ -222,6 +288,9 @@ def compare_images(baseline_path, current_path, diff_path, threshold=0.03):
     return mismatch_percentage, passed
 
 def run_tests():
+    if "--benchmark-native" in sys.argv:
+        run_native_benchmarks()
+        return
     is_update_mode = os.environ.get("VISUAL_UPDATE") == "1"
     is_smoke_only = "--smoke-only" in sys.argv
     if is_smoke_only:
@@ -251,7 +320,7 @@ def run_tests():
 
     with sync_playwright() as p:
         print("Launching browser...")
-        chrome_path = shutil.which("google-chrome") or shutil.which("chromium")
+        chrome_path = os.environ.get("CHROME_PATH") or shutil.which("google-chrome") or shutil.which("chromium")
         launch_options = {
             "headless": True,
             "args": [
@@ -268,7 +337,7 @@ def run_tests():
         page = browser.new_page()
         page.set_viewport_size({"width": 1280, "height": 720})
 
-        url = "http://localhost:5173"
+        url = os.environ.get("VERIFY_URL", "http://127.0.0.1:5173")
         print(f"Navigating to {url}...")
         try:
             page.goto(url, timeout=15000)
@@ -276,6 +345,11 @@ def run_tests():
             print("Canvas loaded successfully.")
             # Let initial assets and layout settle
             page.wait_for_timeout(3000)
+            page.wait_for_function(
+                "!!(window.aetherDebug && typeof window.setDebugTime === 'function' && typeof window.setDebugWeather === 'function')",
+                timeout=90000,
+            )
+            print("Debug hooks ready.")
         except Exception as e:
             print(f"Error loading page or canvas: {e}")
             browser.close()

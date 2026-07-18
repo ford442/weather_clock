@@ -7,6 +7,9 @@
     "scripts": {
         "dev": "vite",
         "build": "vite build",
+        "build:wasm": "bash native/build.sh",
+        "benchmark:wasm": "node native/benchmark.mjs",
+        "benchmark:wasm:browser": "python3 verification/suite/run_all.py --benchmark-native",
         "check:bundle-size": "node scripts/check-bundle-size.mjs",
         "format": "prettier --write \"src/**/*.{js,ts,css}\" \"*.{js,json,html}\" \".github/workflows/*.{yml,yaml}\"",
         "format:check": "prettier --check \"src/**/*.{js,ts,css}\" \"*.{js,json,html}\" \".github/workflows/*.{yml,yaml}\"",

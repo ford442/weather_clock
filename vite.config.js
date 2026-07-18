@@ -5,6 +5,10 @@ const normalizeId = (id) => id.replaceAll('\\', '/');
 function manualChunks(id) {
     const normalizedId = normalizeId(id);
 
+    if (normalizedId.endsWith('/src/native/browser-benchmark.js')) {
+        return 'native-benchmark';
+    }
+
     // Keep the optional renderer out of the WebGL boot graph. Both WebGPU
     // entry points share three.core.js, which remains in the core chunk.
     if (
@@ -21,6 +25,10 @@ function manualChunks(id) {
 
     if (normalizedId.includes('/node_modules/three/')) {
         return 'three-core';
+    }
+
+    if (normalizedId.includes('/src/effects/gpu-')) {
+        return 'weather-webgpu';
     }
 
     if (normalizedId.includes('/src/timeline/')) {

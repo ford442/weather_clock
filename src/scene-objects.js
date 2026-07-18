@@ -43,9 +43,18 @@ export function setupMoon() {
     return { moonGroup, moonPhaseData };
 }
 
-export async function setupWeatherEffects(scene, sundial, camera, isWebGPU = false) {
+export async function setupWeatherEffects(scene, sundial, camera, isWebGPU = false, renderer = null) {
     const quality = getQualityTier();
-    const effects = new WeatherEffects(scene, sundial.group, camera, quality);
+    let gpuClasses = null;
+    if (isWebGPU) {
+        const [{ GPURainSystem }, { GPUSnowSystem }, { GPUSplashSystem }] = await Promise.all([
+            import('./effects/gpu-rain-system.js'),
+            import('./effects/gpu-snow-system.js'),
+            import('./effects/gpu-splash-system.js')
+        ]);
+        gpuClasses = { RainSystem: GPURainSystem, SnowSystem: GPUSnowSystem, SplashSystem: GPUSplashSystem };
+    }
+    const effects = new WeatherEffects(scene, sundial.group, camera, quality, { isWebGPU, renderer, gpuClasses });
     if (isWebGPU) {
         await effects.initWebGPU();
     }

@@ -1,18 +1,22 @@
 import * as THREE from 'three';
+import { getNativeRuntime } from '../native/native-runtime.js';
 import { ResourceManager } from './cloud-resources.js';
-import { ParticleSystemBase, curlNoise } from './particle-base.js';
+import { ParticleSystemBase } from './particle-base.js';
 
 export class SnowSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 1000) {
         super(scene);
         this.currentIntensity = 0;
+        this.activeCount = 0;
         this.maxParticles = maxParticles;
         this.zone = zone || { minX: -8, maxX: 8 };
 
+        this.nativeRuntime = getNativeRuntime();
+        this.nativeBuffers = this.nativeRuntime.allocateParticleBuffers(maxParticles, 3);
         const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(maxParticles * 3);
-        const velocities = new Float32Array(maxParticles * 3);
-        const offsets = new Float32Array(maxParticles);
+        const positions = this.nativeBuffers.positions;
+        const velocities = this.nativeBuffers.velocities;
+        const offsets = this.nativeBuffers.offsets;
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
@@ -66,6 +70,7 @@ export class SnowSystem extends ParticleSystemBase {
         }
 
         const opacity = this.updateOpacity(delta, targetOp);
+        this.activeCount = activeCount;
         this.mesh.material.opacity = opacity;
 
         if (opacity <= 0.01) {
@@ -83,26 +88,26 @@ export class SnowSystem extends ParticleSystemBase {
         const wX = Math.cos(rad) * windSpeed * speedScale;
         const wZ = -Math.sin(rad) * windSpeed * speedScale;
 
+        this.nativeRuntime.stepParticles(this.nativeBuffers, activeCount, wX, wZ, delta, {
+            mode: 0,
+            minX: this.zone.minX,
+            maxX: this.zone.maxX,
+            time
+        });
+
         for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
-            const px = positions[i3];
-            const py = positions[i3 + 1];
-            const pz = positions[i3 + 2];
-
-            const curl = curlNoise(px * 0.1, py * 0.1, pz * 0.1, time + this.offsets[i] * 0.01);
-
-            positions[i3] += this.velocities[i3] + wX + curl.x * 0.05;
-            positions[i3 + 1] += this.velocities[i3 + 1] + curl.y * 0.05;
-            positions[i3 + 2] += this.velocities[i3 + 2] + wZ + curl.z * 0.05;
-
-            if (positions[i3] > this.zone.maxX) positions[i3] -= this.zone.maxX - this.zone.minX;
-            if (positions[i3] < this.zone.minX) positions[i3] += this.zone.maxX - this.zone.minX;
-
             if (positions[i3 + 1] < -5) {
                 positions[i3 + 1] = 15;
                 positions[i3] = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
             }
         }
         this.mesh.geometry.attributes.position.needsUpdate = true;
+    }
+
+    dispose() {
+        super.dispose();
+        this.nativeBuffers?.dispose?.();
+        this.nativeBuffers = null;
     }
 }

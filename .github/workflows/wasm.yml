@@ -1,0 +1,31 @@
+name: Rebuild WASM
+
+on:
+    pull_request:
+        paths:
+            - 'native/**'
+            - '.emscripten-version'
+            - '.github/workflows/wasm.yml'
+    push:
+        branches: [main]
+        paths:
+            - 'native/**'
+            - '.emscripten-version'
+            - '.github/workflows/wasm.yml'
+
+jobs:
+    rebuild:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: mymindstorm/setup-emsdk@v16
+              with:
+                  version: '6.0.2'
+                  actions-cache-folder: 'emsdk-cache'
+
+            - name: Rebuild SIMD module
+              run: npm run build:wasm
+
+            - name: Verify checked-in artifacts
+              run: git diff --exit-code -- native/dist/weather-native.mjs native/dist/weather-native.wasm

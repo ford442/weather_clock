@@ -63,13 +63,30 @@ export function buildWeatherEffectConfig(weatherSnap = {}, quality = 'focused') 
     };
 }
 
+export function getPrecipitationParticleBudget(quality, isWebGPU = false, divisor = 1) {
+    const gpuHighMultiplier = isWebGPU && quality === 'high' ? 5 : 1;
+    return {
+        rain: Math.floor((2000 * gpuHighMultiplier) / divisor),
+        snow: Math.floor((1500 * gpuHighMultiplier) / divisor)
+    };
+}
+
 export class WeatherEffects {
-    constructor(scene, sundialGroup, camera, quality = 'high') {
+    constructor(
+        scene,
+        sundialGroup,
+        camera,
+        quality = 'high',
+        { isWebGPU = false, renderer = null, gpuClasses = null } = {}
+    ) {
         this.scene = scene;
         this.sundialGroup = sundialGroup;
         this.starField = new StarField(scene);
         this.camera = camera;
         this._webgpuInitialized = false;
+        this.isWebGPU = isWebGPU;
+        this.renderer = renderer;
+        this.gpuClasses = gpuClasses;
         this.quality = quality;
         this._zones = {
             past: { minX: -12, maxX: -4 },
@@ -89,7 +106,7 @@ export class WeatherEffects {
         this.lightningLight.visible = false;
         this.scene.add(this.lightningLight);
 
-        this.splashSystem = new SplashSystem(scene);
+        this.splashSystem = isWebGPU ? new gpuClasses.SplashSystem(scene, renderer) : new SplashSystem(scene);
         this._createQualitySystems(this._particleDivisorFor(quality));
     }
 
@@ -100,32 +117,38 @@ export class WeatherEffects {
     }
 
     _createQualitySystems(divisor) {
-        const rainCount = Math.floor(2000 / divisor);
-        const snowCount = Math.floor(1500 / divisor);
+        const { rain: rainCount, snow: snowCount } = getPrecipitationParticleBudget(
+            this.quality,
+            this.isWebGPU,
+            divisor
+        );
         const cumulusCount = Math.max(1, Math.floor(10 / divisor));
         const stratusCount = Math.max(1, Math.floor(8 / divisor));
         const cirrusCount = Math.max(1, Math.floor(6 / divisor));
         const dustCount = Math.floor(300 / divisor);
         const { past: pastZone, current: currZone, future: futureZone } = this._zones;
 
-        this.pastRain = new RainSystem(this.scene, pastZone, rainCount);
-        this.pastSnow = new SnowSystem(this.scene, pastZone, snowCount);
+        const RainClass = this.isWebGPU ? this.gpuClasses.RainSystem : RainSystem;
+        const SnowClass = this.isWebGPU ? this.gpuClasses.SnowSystem : SnowSystem;
+        this.pastRain = new RainClass(this.scene, pastZone, rainCount, this.renderer);
+        this.pastSnow = new SnowClass(this.scene, pastZone, snowCount, this.renderer);
         this.pastCumulus = new CloudSystem(this.scene, this.camera, pastZone, cumulusCount, 'cumulus');
         this.pastStratus = new CloudSystem(this.scene, this.camera, pastZone, stratusCount, 'stratus');
         this.pastCirrus = new CloudSystem(this.scene, this.camera, pastZone, cirrusCount, 'cirrus');
         this.pastDust = new WindDustSystem(this.scene, pastZone, dustCount);
         this.pastFog = new FogEffect(this.scene, pastZone);
 
-        this.currRain = new RainSystem(this.scene, currZone, rainCount);
-        this.currSnow = new SnowSystem(this.scene, currZone, snowCount);
+        this.currRain = new RainClass(this.scene, currZone, rainCount, this.renderer);
+        this.currSnow = new SnowClass(this.scene, currZone, snowCount, this.renderer);
+        this.currRain.setSplashSystem?.(this.splashSystem);
         this.currCumulus = new CloudSystem(this.scene, this.camera, currZone, cumulusCount, 'cumulus');
         this.currStratus = new CloudSystem(this.scene, this.camera, currZone, stratusCount, 'stratus');
         this.currCirrus = new CloudSystem(this.scene, this.camera, currZone, cirrusCount, 'cirrus');
         this.currDust = new WindDustSystem(this.scene, currZone, dustCount);
         this.currFog = new FogEffect(this.scene, currZone);
 
-        this.futureRain = new RainSystem(this.scene, futureZone, rainCount);
-        this.futureSnow = new SnowSystem(this.scene, futureZone, snowCount);
+        this.futureRain = new RainClass(this.scene, futureZone, rainCount, this.renderer);
+        this.futureSnow = new SnowClass(this.scene, futureZone, snowCount, this.renderer);
         this.futureCumulus = new CloudSystem(this.scene, this.camera, futureZone, cumulusCount, 'cumulus');
         this.futureStratus = new CloudSystem(this.scene, this.camera, futureZone, stratusCount, 'stratus');
         this.futureCirrus = new CloudSystem(this.scene, this.camera, futureZone, cirrusCount, 'cirrus');
@@ -199,8 +222,11 @@ export class WeatherEffects {
         await this._initWebGPUSystems([
             this.starField,
             this.pastRain,
+            this.pastSnow,
             this.currRain,
+            this.currSnow,
             this.futureRain,
+            this.futureSnow,
             this.pastCumulus,
             this.pastStratus,
             this.pastCirrus,
@@ -361,7 +387,7 @@ export class WeatherEffects {
             }
         }
 
-        this.splashSystem.update(lightColor);
+        this.splashSystem.update(lightColor, delta);
     }
 
     getLightningFlash() {
@@ -446,7 +472,7 @@ export class WeatherEffects {
 
         if (code >= 95 && Math.random() < 0.012) this.createLightning();
 
-        this.splashSystem.update(lightColor);
+        this.splashSystem.update(lightColor, delta);
     }
 
     setVignetteMode(enabled) {
@@ -472,6 +498,31 @@ export class WeatherEffects {
         if (code === 45 || code === 48) fogI = 1;
         else if ((d.visibility || 10000) < 2000) fogI = Math.max(0, 1 - (d.visibility || 10000) / 2000);
         return { ...d, rainIntensity: rainI, snowIntensity: snowI, fogIntensity: fogI };
+    }
+
+    getParticleMetrics() {
+        const rain = [this.pastRain, this.currRain, this.futureRain];
+        const snow = [this.pastSnow, this.currSnow, this.futureSnow];
+        const sum = (systems, field) => systems.reduce((total, system) => total + (system?.[field] || 0), 0);
+        const configuredRain = sum(rain, 'maxParticles');
+        const configuredSnow = sum(snow, 'maxParticles');
+        const splash =
+            this.splashSystem?.maxParticles || this.splashSystem?.mesh?.geometry?.attributes?.life?.count || 0;
+        return {
+            backend: this.isWebGPU ? 'gpu-compute' : 'cpu',
+            simulation: this.isWebGPU
+                ? 'gpu-compute'
+                : typeof window !== 'undefined'
+                  ? window.__NATIVE_BACKENDS__?.particles || 'js'
+                  : 'js',
+            configured: {
+                rain: configuredRain,
+                snow: configuredSnow,
+                splash,
+                total: configuredRain + configuredSnow + splash
+            },
+            active: { rain: sum(rain, 'activeCount'), snow: sum(snow, 'activeCount') }
+        };
     }
 
     dispose() {
