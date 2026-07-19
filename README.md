@@ -70,6 +70,16 @@ The goal: make time *visible* and *tactile*—a living, breathing environment in
    ```
    Output lands in `dist/` folder—ready to deploy.
 
+4. **Deploy to the project host (optional):**
+   ```bash
+   cp deploy.config.example.json deploy.config.json
+   # Edit deploy.config.json and set your deploy token (never commit this file)
+   npm run build
+   python3 deploy.py
+   ```
+   `deploy.py` defaults to `https://storage.noahcohn.com` for this project. You can override
+   settings with environment variables such as `DEPLOY_TOKEN` and `DEPLOY_BASE_URL`.
+
 ### For Developers
 
 See **[AGENTS.md](./AGENTS.md)** for:

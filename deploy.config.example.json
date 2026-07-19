@@ -1,5 +1,5 @@
 {
-    "base_url": "https://deploy.example.com",
+    "base_url": "https://storage.noahcohn.com",
     "token": "replace-with-a-newly-rotated-token",
     "project_name": "weather-clock",
     "build_dir": "dist",
