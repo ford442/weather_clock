@@ -18,6 +18,11 @@ import requests
 
 
 CONFIG_PATH = Path(os.environ.get("DEPLOY_CONFIG", "deploy.config.json"))
+DEFAULT_BASE_URL = "https://storage.noahcohn.com"
+SETUP_HINT = (
+    f"Copy deploy.config.example.json to {CONFIG_PATH.name}, set your deploy token, "
+    "or export DEPLOY_TOKEN (and optionally DEPLOY_BASE_URL)."
+)
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
@@ -41,12 +46,21 @@ def setting(config: dict[str, Any], env_name: str, config_name: str, default: st
     return str(value).strip() if value is not None else ""
 
 
-def required_setting(config: dict[str, Any], env_name: str, config_name: str) -> str:
+def required_setting(
+    config: dict[str, Any],
+    env_name: str,
+    config_name: str,
+    *,
+    hint: str = "",
+) -> str:
     value = setting(config, env_name, config_name)
     if not value:
-        raise RuntimeError(
+        message = (
             f"Missing deployment setting: set {env_name} or '{config_name}' in {CONFIG_PATH}"
         )
+        if hint:
+            message = f"{message}\n{hint}"
+        raise RuntimeError(message)
     return value
 
 
@@ -109,8 +123,8 @@ def deploy_bundle(
 def main() -> None:
     try:
         config = load_config()
-        base_url = required_setting(config, "DEPLOY_BASE_URL", "base_url")
-        deploy_token = required_setting(config, "DEPLOY_TOKEN", "token")
+        base_url = setting(config, "DEPLOY_BASE_URL", "base_url", DEFAULT_BASE_URL)
+        deploy_token = required_setting(config, "DEPLOY_TOKEN", "token", hint=SETUP_HINT)
         project_name = setting(config, "DEPLOY_PROJECT_NAME", "project_name", "weather-clock")
         build_dir = setting(config, "DEPLOY_BUILD_DIR", "build_dir", "dist")
         target_folder = setting(config, "DEPLOY_FOLDER", "target_folder", project_name)
