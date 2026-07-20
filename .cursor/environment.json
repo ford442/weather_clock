@@ -1,0 +1,17 @@
+{
+    "name": "weather_clock",
+    "install": "npm install",
+    "ports": [
+        {
+            "name": "Weather Clock",
+            "port": 5173
+        }
+    ],
+    "terminals": [
+        {
+            "name": "Dev Server",
+            "command": "npm run dev",
+            "description": "Vite dev server for the 3D weather clock app"
+        }
+    ]
+}

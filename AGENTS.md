@@ -221,7 +221,7 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 
 ## Cursor Cloud specific instructions
 
-Node dependencies are refreshed automatically on startup (`npm install`), so the standard commands in **Build and Test Commands** (`npm run dev`, `npm test`, `npm run lint`, `npm run build`) work out of the box. `npm run dev` serves the app on `http://localhost:5173`; start it in a background/`tmux` session since it is long-running.
+Node dependencies are refreshed automatically on startup (`npm install`), so the standard commands in **Build and Test Commands** (`npm run dev`, `npm test`, `npm run lint`, `npm run build`) work out of the box. `npm run dev` serves the app on `http://localhost:5173`; the repo's `.cursor/environment.json` auto-starts it and exposes port **5173** (not the noVNC desktop on 26058). Vite is configured with `server.host: true` so IPv4 port forwarding works.
 
 - **Full CI parity locally:** the CI pipeline runs `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test -- --run`, `npm run build`, and `npm run check:bundle-size`. Run these before committing to match CI.
 - **Weather test noise is expected:** `npm test` prints `stderr` warnings about failed/offline fetches for the caching-fallback tests — these are mocked failures, and the suite still passes.

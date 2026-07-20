@@ -45,6 +45,16 @@ function manualChunks(id) {
 }
 
 export default defineConfig({
+    server: {
+        // Bind IPv4 as well as IPv6 so Cursor Cloud port forwarding (127.0.0.1)
+        // and CI smoke tests can reach the dev server.
+        host: true,
+        port: 5173
+    },
+    preview: {
+        host: true,
+        port: 4173
+    },
     build: {
         target: 'esnext',
         // The UI icons are tiny SVGs; keep the limit explicit so they stay
