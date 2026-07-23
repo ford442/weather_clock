@@ -6,6 +6,7 @@ import { CloudSystem } from './cloud-system.js';
 import { StarField } from './star-field.js';
 import { FogEffect } from './fog-effect.js';
 import { SplashSystem } from './splash-system.js';
+import { LightningBoltSystem } from './lightning-bolt-system.js';
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -105,6 +106,7 @@ export class WeatherEffects {
         this.lightningLight = new THREE.PointLight(0xaaddff, 5, 50);
         this.lightningLight.visible = false;
         this.scene.add(this.lightningLight);
+        this.lightningBolts = new LightningBoltSystem(scene);
 
         this.splashSystem = isWebGPU ? new gpuClasses.SplashSystem(scene, renderer) : new SplashSystem(scene);
         this._createQualitySystems(this._particleDivisorFor(quality));
@@ -208,6 +210,10 @@ export class WeatherEffects {
                 this.lightningTimeoutId = null;
             }
             this.lightningLight.visible = false;
+            for (const bolt of this.lightningBolts?.bolts || []) {
+                bolt.life = 0;
+                bolt.mesh.visible = false;
+            }
         }
     }
 
@@ -388,6 +394,7 @@ export class WeatherEffects {
         }
 
         this.splashSystem.update(lightColor, delta);
+        this.lightningBolts?.update(delta);
     }
 
     getLightningFlash() {
@@ -406,6 +413,8 @@ export class WeatherEffects {
             Math.random() * 10 - 5
         );
         this.lightningLight.visible = true;
+
+        this.lightningBolts?.spawnBolt(this.lightningLight.position, 0);
 
         // Hide after random duration
         this.lightningTimeoutId = setTimeout(
@@ -473,6 +482,7 @@ export class WeatherEffects {
         if (code >= 95 && Math.random() < 0.012) this.createLightning();
 
         this.splashSystem.update(lightColor, delta);
+        this.lightningBolts?.update(delta);
     }
 
     setVignetteMode(enabled) {
@@ -533,6 +543,7 @@ export class WeatherEffects {
         for (const sys of this._qualitySystems) sys?.dispose?.();
         this.starField?.dispose?.();
         this.splashSystem?.dispose?.();
+        this.lightningBolts?.dispose?.();
         if (this.lightningLight) {
             this.scene.remove(this.lightningLight);
             this.lightningLight.dispose?.();

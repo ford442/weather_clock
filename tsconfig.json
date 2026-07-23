@@ -10,7 +10,8 @@
         "resolveJsonModule": true,
         "skipLibCheck": true,
         "strict": false,
-        "target": "ES2022"
+        "target": "ES2022",
+        "types": ["vite/client", "vite-plugin-pwa/client"]
     },
     "include": ["src/**/*.js", "src/**/*.d.ts"],
     "exclude": ["dist", "src/tests", "src/vendor"]

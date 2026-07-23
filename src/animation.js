@@ -109,7 +109,7 @@ export class AnimationController {
     /** Per-frame update */
     update(delta) {
         const { state, services, scene3d } = this;
-        const { weatherService, astronomyService } = services;
+        const { weatherService, astronomyService, ambienceEngine } = services;
         const {
             scene,
             pipeline,
@@ -117,6 +117,7 @@ export class AnimationController {
             sundial,
             moonGroup,
             weatherEffects,
+            groundEffects,
             sunLight,
             moonLight,
             ambientLight,
@@ -262,6 +263,17 @@ export class AnimationController {
                 updateWindCompass(activeWeatherData.current.windDirection);
             }
 
+            // ── Ground/sundial weather reactions (snow, wetness/reflection, foliage, frost) ──
+            if (shouldUpdateReducedMotionEffects) {
+                groundEffects.update(activeWeatherData.current, state.simulationTime, delta, astroData);
+                const shimmer = groundEffects.computeHeatShimmer(activeWeatherData.current);
+                const tierAllowsShimmer = getQualityTier() !== 'low';
+                pipeline.setHeatShimmer?.({
+                    enabled: shimmer.enabled && tierAllowsShimmer,
+                    intensity: shimmer.intensity
+                });
+            }
+
             // Throttled weather display update during time warp
             if (state.isTimeWarping && Math.random() < ANIMATION_CONFIG.weatherUpdateThrottle) {
                 updateWeatherDisplay(
@@ -325,6 +337,13 @@ export class AnimationController {
             if (scene.fog) {
                 scene.fog.color.copy(ambientLight.color).multiplyScalar(0.8);
             }
+        }
+
+        // ── Ambient audio ──
+        if (ambienceEngine?.started) {
+            const flash = weatherEffects.getLightningFlash?.() || 0;
+            const dayFactor = astroData?.sunPosition ? astroData.sunPosition.y / 20 : 0;
+            ambienceEngine.update(delta, activeWeatherData?.current, dayFactor, flash);
         }
 
         // ── Timeline update (if in timeline mode) ──

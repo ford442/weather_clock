@@ -57,6 +57,45 @@ body {
     gap: 16px;
 }
 
+.offline-status {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: #2a1a1a;
+    background: rgba(232, 168, 56, 0.92);
+    border-radius: 12px;
+    padding: 4px 10px;
+    transition:
+        opacity 0.3s ease,
+        transform 0.3s ease;
+    opacity: 0;
+    transform: scale(0.95);
+    pointer-events: none;
+}
+
+.offline-status[hidden] {
+    display: none;
+}
+
+.offline-status.visible {
+    opacity: 1;
+    transform: scale(1);
+}
+
+#kiosk-toggle {
+    transition:
+        background 0.2s,
+        border-color 0.2s,
+        color 0.2s;
+}
+
+#kiosk-toggle.active {
+    background: rgba(120, 200, 255, 0.25);
+    border-color: rgba(120, 200, 255, 0.6);
+    color: #bfe6ff;
+}
+
 #top-bar .location-display {
     font-size: 13px;
     font-weight: 500;
@@ -155,6 +194,12 @@ body {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+}
+
+#top-bar #ambience-toggle.active {
+    background: rgba(120, 200, 255, 0.25);
+    border-color: rgba(120, 200, 255, 0.6);
+    color: #bfe6ff;
 }
 
 /* ── Unit Segmented Control ── */
@@ -573,4 +618,88 @@ body.time-warping .time-display {
     font-size: 11px;
     color: #ffd060;
     font-weight: 600;
+}
+
+.aqi-badge,
+.pollen-badge {
+    background: rgba(var(--badge-rgb, 255, 200, 50), 0.15);
+    border: 1px solid rgba(var(--badge-rgb, 255, 200, 50), 0.3);
+    border-radius: 8px;
+    padding: 1px 7px;
+    font-size: 11px;
+    color: var(--badge-color, #ffd060);
+    font-weight: 600;
+}
+
+/* ── Severe weather alert banner ── */
+.alert-banner {
+    position: absolute;
+    top: 64px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    max-width: min(90vw, 520px);
+    background: rgba(224, 90, 90, 0.16);
+    border: 1px solid rgba(224, 90, 90, 0.45);
+    border-radius: 12px;
+    backdrop-filter: blur(12px);
+    color: #ffdede;
+    pointer-events: auto;
+    overflow: hidden;
+}
+
+.alert-banner[hidden] {
+    display: none;
+}
+
+.alert-banner-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 14px;
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.alert-banner-chevron {
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.alert-banner-summary[aria-expanded='true'] .alert-banner-chevron {
+    transform: rotate(180deg);
+}
+
+.alert-banner-body {
+    padding: 0 14px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(255, 222, 222, 0.9);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.alert-banner-body[hidden] {
+    display: none;
+}
+
+.alert-banner.pulse {
+    animation: alert-banner-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes alert-banner-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 rgba(224, 90, 90, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 18px rgba(224, 90, 90, 0.75);
+    }
 }

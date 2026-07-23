@@ -1,4 +1,5 @@
 node_modules
+.venv*
 dist
 !native/dist/
 !native/dist/weather-native.mjs
@@ -15,5 +16,5 @@ __pycache__/
 deploy.config.json
 deploy.config.*.json
 !deploy.config.example.json
-verification/suite/current/
-verification/suite/diffs/
+test-results/
+playwright-report/

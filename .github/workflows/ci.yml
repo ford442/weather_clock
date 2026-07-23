@@ -58,44 +58,18 @@ jobs:
             - name: Install Node dependencies
               run: npm ci
 
-            - name: Set up Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: '3.11'
-                  cache: 'pip'
-
-            - name: Install Python dependencies
-              run: |
-                  python -m pip install --upgrade pip
-                  pip install playwright Pillow
-
             - name: Install Playwright Chromium
-              run: npx playwright install chromium
+              run: npx playwright install --with-deps chromium
 
-            - name: Start Vite development server
-              run: |
-                  npm run dev &
-                  echo "Waiting for server to be responsive on http://localhost:5173..."
-                  for i in {1..30}; do
-                    if curl -s http://localhost:5173 > /dev/null; then
-                      echo "Vite server is ready!"
-                      exit 0
-                    fi
-                    sleep 1
-                  done
-                  echo "Vite server failed to start in 30 seconds"
-                  exit 1
-              shell: bash
+            - name: Run visual regression + functional e2e tests
+              run: npx playwright test
 
-            - name: Run visual regression tests
-              run: python3 verification/suite/run_all.py
-
-            - name: Upload mismatch diffs as artifacts on failure
+            - name: Upload Playwright report and diffs as artifacts on failure
               if: failure()
               uses: actions/upload-artifact@v4
               with:
-                  name: visual-regression-diffs
+                  name: playwright-report
                   path: |
-                      verification/suite/current/
-                      verification/suite/diffs/
+                      playwright-report/
+                      test-results/
                   if-no-files-found: ignore

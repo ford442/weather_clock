@@ -4,12 +4,8 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <title>3D Weather Clock</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;700&display=swap"
-            rel="stylesheet"
-        />
+        <meta name="theme-color" content="#2E1A47" />
+        <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="stylesheet" href="/src/styles/main.css" />
     </head>
     <body>
@@ -40,6 +36,48 @@
                         </svg>
                     </button>
                 </div>
+                <div id="offline-status" class="offline-status" hidden>Offline</div>
+                <script>
+                    (function () {
+                        const el = document.getElementById('offline-status');
+                        if (!el) return;
+                        function offlineText() {
+                            try {
+                                const lat = localStorage.getItem('weatherclock_lat');
+                                const lon = localStorage.getItem('weatherclock_lon');
+                                if (!lat || !lon) return 'Offline';
+                                const roundedLat = Math.round(Number(lat) * 100) / 100;
+                                const roundedLon = Math.round(Number(lon) * 100) / 100;
+                                const cached = JSON.parse(
+                                    localStorage.getItem(`weatherclock_${roundedLat}_${roundedLon}_weather`)
+                                );
+                                if (cached && cached.timestamp) {
+                                    const timeStr = new Date(cached.timestamp).toLocaleTimeString([], {
+                                        hour: 'numeric',
+                                        minute: '2-digit'
+                                    });
+                                    return `Offline — showing data from ${timeStr}`;
+                                }
+                            } catch (error) {
+                                // Fall through to generic offline label
+                            }
+                            return 'Offline';
+                        }
+                        function sync() {
+                            if (!navigator.onLine) {
+                                el.hidden = false;
+                                el.classList.add('visible');
+                                el.textContent = offlineText();
+                            } else {
+                                el.hidden = true;
+                                el.classList.remove('visible');
+                            }
+                        }
+                        window.addEventListener('offline', sync);
+                        window.addEventListener('online', sync);
+                        sync();
+                    })();
+                </script>
                 <div class="search-container">
                     <input type="text" id="location-search" class="search-input" placeholder="City name…" />
                 </div>
@@ -59,6 +97,73 @@
                 </button>
             </div>
             <div class="top-bar-right">
+                <button
+                    id="kiosk-toggle"
+                    class="mode-toggle-btn"
+                    title="Enter kiosk mode (fullscreen + keep screen on)"
+                    aria-pressed="false"
+                    hidden
+                >
+                    <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                        <rect
+                            x="2"
+                            y="3"
+                            width="12"
+                            height="10"
+                            rx="1"
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-width="1.5"
+                        />
+                        <line
+                            x1="5"
+                            y1="7"
+                            x2="5"
+                            y2="9"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                        />
+                        <line
+                            x1="11"
+                            y1="7"
+                            x2="11"
+                            y2="9"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                        />
+                    </svg>
+                </button>
+                <button id="ambience-toggle" class="mode-toggle-btn" title="Ambient sound (muted)" aria-pressed="false">
+                    <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                        <path
+                            d="M2 6h2.5L8 3v10L4.5 10H2V6z"
+                            fill="currentColor"
+                            stroke="currentColor"
+                            stroke-width="1"
+                            stroke-linejoin="round"
+                        />
+                        <line
+                            x1="10.5"
+                            y1="4"
+                            x2="14"
+                            y2="12"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                        />
+                        <line
+                            x1="14"
+                            y1="4"
+                            x2="10.5"
+                            y2="12"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                        />
+                    </svg>
+                </button>
                 <button id="mode-toggle" class="mode-toggle-btn" title="Switch to Timeline View (T)">
                     <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                         <circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5" />
@@ -96,6 +201,30 @@
                     <button class="segment" data-segment="mph">mph</button>
                 </div>
             </div>
+        </div>
+
+        <!-- Severe Weather Alert Banner -->
+        <div id="alert-banner" class="alert-banner" role="alert" hidden>
+            <button id="alert-banner-toggle" class="alert-banner-summary" aria-expanded="false">
+                <span id="alert-banner-headline" class="alert-banner-headline">--</span>
+                <svg
+                    class="icon-svg alert-banner-chevron"
+                    viewBox="0 0 16 16"
+                    width="14"
+                    height="14"
+                    aria-hidden="true"
+                >
+                    <polyline
+                        points="4,6 8,10 12,6"
+                        stroke="currentColor"
+                        fill="none"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+            </button>
+            <div id="alert-banner-body" class="alert-banner-body" hidden></div>
         </div>
 
         <!-- Center Overlay -->
@@ -257,6 +386,8 @@
                 <span id="sunset-time" class="stat-value">--:--</span>
             </span>
             <span id="current-uv" class="uv-badge">UV --</span>
+            <span id="current-aqi" class="aqi-badge" hidden>AQI --</span>
+            <span id="current-pollen" class="pollen-badge" hidden>Pollen --</span>
         </div>
 
         <!-- Advanced Drawer -->
@@ -278,7 +409,10 @@
                     </div>
                 </div>
                 <div class="tab-content" id="tab-accuracy">
-                    <div class="adv-section">
+                    <div
+                        class="adv-section"
+                        title="Mean absolute error of the 1-day- and 3-day-ahead model forecasts vs. observed temperatures over the last 24 hours (Open-Meteo Previous Runs API). Score: 100% minus 10 points per °C of error."
+                    >
                         <h3>Forecast Accuracy</h3>
                         <div id="accuracy-delta" class="adv-val-big">--</div>
                         <div id="accuracy-score" class="adv-sub">Score: --%</div>

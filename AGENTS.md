@@ -33,7 +33,8 @@ The app has three viewing modes:
 | **Astronomy** | SunCalc | Vendored as ES module in `src/vendor/suncalc.js` |
 | **Weather Data** | Open-Meteo API | Forecast + Archive endpoints |
 | **Geocoding** | Nominatim (OpenStreetMap) | Used for search & reverse geocoding |
-| **Visual Testing** | Python + Playwright + Pillow | Unified suite in `verification/suite/` |
+| **PWA / Offline** | `vite-plugin-pwa` + Workbox | Precached app shell; runtime caching for Open-Meteo and Nominatim |
+| **Visual / E2E Testing** | Playwright Test (`@playwright/test`) | Unified suite in `e2e/`; see `playwright.config.js` |
 
 ---
 
@@ -48,14 +49,15 @@ The app has three viewing modes:
 ### Source (`src/`)
 | File | Responsibility |
 |------|----------------|
-| `main.js` | Application orchestrator. Sets up state, rendering, lights, scene objects, services, animation loop, UI callbacks, mode controller, and debug API. |
+| `main.js` | Application orchestrator. Sets up state, rendering, lights, scene objects, services, animation loop, UI callbacks, mode controller, debug API, offline status, and kiosk/wake-lock mode. |
+| `registerSW.js` | Registers the Vite PWA service worker and shows the update-available toast prompt. Skips registration when `?test=1` is present. |
 | `rendering.js` | Scene/camera setup, quality tiers, renderer recovery, and the shared interface to the dual WebGL/WebGPU pipeline. |
 | `lights.js` | Ambient light, directional sun light, directional moon light; shadow map configuration. |
 | `scene-objects.js` | Factory functions for the `Sky` object, sundial, moon group, and weather effects. |
 | `animation.js` | `AnimationController` class. Drives the `requestAnimationFrame` loop, advances `simulationTime`, handles time-warp, throttles UI updates. |
 | `ui.js`, `ui/` | DOM-facing facade plus focused modules for time/date, weather panels, search, gauges, sparklines, toasts, shortcuts, and event listeners. |
 | `weather-simulation.js` | Weather interpolation over the hourly timeline (`getWeatherAtTime`), plus `getActiveWeatherData` for past/current/forecast snapshots. |
-| `weather.js` | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timelines, handles geolocation/search, unit conversion, and advanced analytics. Forecast accuracy remains an explicit no-data placeholder. |
+| `weather.js` | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timelines, handles geolocation/search, unit conversion, and advanced analytics. Forecast accuracy (`getPredictionAccuracy`) compares Previous Runs API predictions against observed temperatures (cached once per day per location). |
 | `astronomy.js` | `AstronomyService` class. Wraps SunCalc to compute sun/moon positions and illumination, converting spherical coordinates to Three.js Cartesian. |
 | `effects/weather-effects.js`, `effects/` | Weather-effect coordinator plus pooled rain, snow, dust, cloud, fog, star, and splash systems. |
 | `weatherLighting.js` | `updateWeatherLighting()` — calculates day/night factor, weighted cloud cover, severity, fog density, sky shader uniforms, and smoothly interpolates sun/moon/ambient colors and intensities. |
@@ -85,11 +87,13 @@ The app has three viewing modes:
 - Experimental WGSL compute shaders: `rain-compute.wgsl`, `snow-compute.wgsl`, `splash-compute.wgsl`, `cloud-post.wgsl`, `star-field.wgsl`.
 - They are not the active WebGPU path. Runtime WebGPU support lives under `src/webgpu/`; WebGL shader strings remain in `src/shaders.js`. Do not wire the standalone WGSL files into production unless explicitly working on issue #87.
 
-### Visual Verification (`verification/suite/`)
-- `run_all.py` is the only committed visual/smoke runner.
-- `baselines/` contains the reviewed screenshots used for comparison.
-- `current/` and `diffs/` are generated locally and ignored by git.
-- The runner covers the canonical weather/time screenshots plus UI/debug readiness and forecast-mode smoke checks.
+### Visual & Functional E2E (`e2e/`)
+- Specs use the `.e2e.js` suffix (Playwright `testMatch`) so Vitest never picks them up.
+- `visual.e2e.js` covers the canonical weather/time screenshot matrix plus UI/debug readiness and forecast-mode smoke checks.
+- `functional.e2e.js` covers behavior flows (mode cycling, unit/search/quality persistence) with all external APIs mocked.
+- Committed baselines live in `e2e/visual.e2e.js-snapshots/` (Playwright's per-platform naming).
+- `test-results/` and `playwright-report/` are generated locally and ignored by git.
+- Screenshots are compared via `page.screenshot()` + `toMatchSnapshot()` — `toHaveScreenshot()` cannot be used because its stability check requires identical consecutive frames, which the live WebGL loop never produces.
 
 ---
 
@@ -112,19 +116,18 @@ npm run preview
 npm test
 ```
 
-### Visual Regression Tests
-Requires the dev server to be running (`npm run dev` in another terminal) and Python with Playwright installed:
+### Visual Regression & E2E Tests
+Requires a one-time browser install (`npx playwright install chromium`). Playwright starts the dev server automatically via the `webServer` config:
 
 ```bash
-pip install playwright
-playwright install
-
-python3 verification/suite/run_all.py
+npm run test:e2e            # full suite: screenshots + smoke + functional
+npm run test:e2e:update     # recapture baselines intentionally
+npx playwright test e2e/functional.e2e.js   # functional specs only (fast)
 ```
 
-Use `VISUAL_UPDATE=1 python3 verification/suite/run_all.py` to replace reviewed baselines intentionally. Normal runs write generated images under `verification/suite/current/` and mismatch images under `verification/suite/diffs/`.
+Mismatch artifacts land in `test-results/` and the HTML report in `playwright-report/` (both gitignored).
 
-Use `python3 verification/suite/run_all.py --smoke-only` for a quick browser check of app readiness, debug hooks, and forecast-mode state without screenshot comparisons.
+The specs append `?test=1` to every URL so the service worker is disabled during visual regression, keeping screenshots deterministic. Launch flags force SwiftShader (software WebGL) so baselines match CI's renderer.
 
 ---
 
@@ -147,12 +150,18 @@ Use `python3 verification/suite/run_all.py --smoke-only` for a quick browser che
    - Run `npm test` before committing.
    - Tests are in `src/tests/` and use Vitest with mocked `fetch` and `navigator.geolocation`.
 
-2. **Visual Verification**
-   - Start the dev server: `npm run dev`
-   - Run `python3 verification/suite/run_all.py`.
-   - Inspect generated screenshots and diffs for regressions in sky color, weather effects, forecast mode, and UI layout.
+2. **Visual & Functional E2E**
+   - One-time setup: `npx playwright install chromium`
+   - Run `npm run test:e2e` (the dev server starts automatically).
+   - Inspect `test-results/` diffs and `playwright-report/` for regressions in sky color, weather effects, forecast mode, and UI layout.
 
-3. **Interactive Debug Mode**
+3. **PWA / Offline Verification**
+   - Run `npm run build && npm run preview` to exercise the production service worker.
+   - Open DevTools → Application → Service Workers and confirm `/sw.js` is registered.
+   - Enable offline in DevTools, reload, and confirm the app shell still renders and the `#offline-status` pill appears.
+   - The web app manifest (`/manifest.webmanifest`) uses `display: fullscreen` and the dusk palette theme color (`#2E1A47`).
+
+4. **Interactive Debug Mode**
    - Open the browser console on `http://localhost:5173` and use:
      ```javascript
      window.setDebugWeather(65);   // Force Heavy Rain (0 = Clear, 71 = Snow, 95 = Thunderstorm)
@@ -214,7 +223,7 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 `ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers.
 
 ### Known Limitations
-- **Forecast accuracy placeholder:** `WeatherService.getPredictionAccuracy()` and `TimelineData.enrichWithAccuracy()` return no data. Real forecast verification via the Open-Meteo Previous Runs API is planned but not yet implemented.
+- **Timeline accuracy placeholder:** `TimelineData.enrichWithAccuracy()` returns no data. `WeatherService.getPredictionAccuracy()` is implemented via the Open-Meteo Previous Runs API (day-1/day-3 MAE vs. observed temperatures over the last 24 h, shown in the Advanced drawer's Accuracy tab), but the timeline-mode accuracy rings are not yet wired up.
 - **Hardcoded zone offsets:** The visual separation of temporal zones relies on hardcoded X offsets (e.g., `-8`, `0`, `8`) in multiple files. Changing scene scale requires updating these values consistently.
 
 ---
@@ -223,8 +232,8 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 
 Node dependencies are refreshed automatically on startup (`npm install`), so the standard commands in **Build and Test Commands** (`npm run dev`, `npm test`, `npm run lint`, `npm run build`) work out of the box. `npm run dev` serves the app on `http://localhost:5173`; the repo's `.cursor/environment.json` auto-starts it and exposes port **5173** (not the noVNC desktop on 26058). Vite is configured with `server.host: true` so IPv4 port forwarding works.
 
-- **Full CI parity locally:** the CI pipeline runs `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test -- --run`, `npm run build`, and `npm run check:bundle-size`. Run these before committing to match CI.
+- **Full CI parity locally:** the CI pipeline runs `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test -- --run`, `npm run build`, and `npm run check:bundle-size`, plus the separate e2e job (`npx playwright test`, needs `npx playwright install chromium` once). Run these before committing to match CI.
 - **Weather test noise is expected:** `npm test` prints `stderr` warnings about failed/offline fetches for the caching-fallback tests — these are mocked failures, and the suite still passes.
-- **Visual regression is optional and NOT covered by the update script.** It needs the dev server running plus a one-time extra setup: `pip install playwright Pillow` and `python3 -m playwright install chromium`. Then run `python3 verification/suite/run_all.py` (or `--smoke-only` for a fast headless check with no screenshot comparison). Baselines were captured on other hardware, so full screenshot comparisons may report GPU/font-driven diffs in this environment; prefer `--smoke-only` for a quick health check.
+- **E2E / visual regression is optional and NOT covered by the update script.** One-time setup: `npx playwright install chromium`. Then run `npm run test:e2e` (Playwright auto-starts the dev server). For a fast health check without screenshots, run only the functional specs: `npx playwright test e2e/functional.e2e.js`. Baselines are captured with SwiftShader (software WebGL) for cross-machine stability, but GPU/font-driven diffs can still occur on unusual hardware.
 - **Harmless headless-GL console noise:** in headless Chromium the app logs a `favicon.ico` 404 and `WebGL: INVALID_ENUM: readPixels` / GPU-stall warnings. These do not affect functionality — the 3D scene, weather effects, and mode switching all render correctly.
 - **Runtime data needs network:** the app fetches live weather from Open-Meteo and geocoding from Nominatim over HTTPS (no API key). If egress is blocked, live weather/search will fail; use the debug hooks (`window.setDebugWeather(code)`, `window.setDebugTime(hour)`) to exercise the scene offline.

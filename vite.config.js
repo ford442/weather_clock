@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 const normalizeId = (id) => id.replaceAll('\\', '/');
 
@@ -55,6 +56,95 @@ export default defineConfig({
         host: true,
         port: 4173
     },
+    plugins: [
+        VitePWA({
+            registerType: 'prompt',
+            injectRegister: false,
+            manifest: {
+                name: '3D Weather Clock',
+                short_name: 'Weather Clock',
+                description: 'A photorealistic 3D weather clock with live forecasts, astronomy, and time simulation.',
+                theme_color: '#2E1A47',
+                background_color: '#050608',
+                display: 'fullscreen',
+                start_url: '/',
+                scope: '/',
+                icons: [
+                    {
+                        src: '/icon-192x192.png',
+                        sizes: '192x192',
+                        type: 'image/png'
+                    },
+                    {
+                        src: '/icon-512x512.png',
+                        sizes: '512x512',
+                        type: 'image/png'
+                    },
+                    {
+                        src: '/maskable-icon-512x512.png',
+                        sizes: '512x512',
+                        type: 'image/png',
+                        purpose: 'maskable'
+                    }
+                ]
+            },
+            workbox: {
+                clientsClaim: true,
+                globPatterns: ['**/*.{js,css,html,woff2,png,svg,ico,webmanifest}'],
+                globIgnores: ['**/native/**', '**/*.wasm'],
+                runtimeCaching: [
+                    {
+                        urlPattern: /^https:\/\/api\.open-meteo\.com\/v1\/forecast/,
+                        handler: 'StaleWhileRevalidate',
+                        options: {
+                            cacheName: 'openmeteo-forecast',
+                            expiration: {
+                                maxEntries: 50,
+                                maxAgeSeconds: 60 * 60 * 24 // 1 day
+                            }
+                        }
+                    },
+                    {
+                        urlPattern: /^https:\/\/archive-api\.open-meteo\.com\/v1\/archive/,
+                        handler: 'StaleWhileRevalidate',
+                        options: {
+                            cacheName: 'openmeteo-archive',
+                            expiration: {
+                                maxEntries: 50,
+                                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 days
+                            }
+                        }
+                    },
+                    {
+                        urlPattern: /^https:\/\/air-quality-api\.open-meteo\.com\/v1\/air-quality/,
+                        handler: 'StaleWhileRevalidate',
+                        options: {
+                            cacheName: 'openmeteo-airquality',
+                            expiration: {
+                                maxEntries: 20,
+                                maxAgeSeconds: 60 * 60 * 6 // 6 hours
+                            }
+                        }
+                    },
+                    {
+                        urlPattern: /^https:\/\/nominatim\.openstreetmap\.org\/reverse/,
+                        handler: 'CacheFirst',
+                        options: {
+                            cacheName: 'nominatim-reverse',
+                            expiration: {
+                                maxEntries: 100,
+                                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
+                            }
+                        }
+                    },
+                    {
+                        urlPattern: /^https:\/\/nominatim\.openstreetmap\.org\/search/,
+                        handler: 'NetworkOnly'
+                    }
+                ]
+            }
+        })
+    ],
     build: {
         target: 'esnext',
         // The UI icons are tiny SVGs; keep the limit explicit so they stay

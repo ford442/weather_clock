@@ -13,8 +13,8 @@ When an issue closes, remove it from this document. Add new work to the issue tr
 
 ## Platform and correctness
 
-- [#95 — Migrate visual regression to `@playwright/test` and expand unit coverage](https://github.com/ford442/weather_clock/issues/95)
-- [#94 — Implement forecast accuracy with the Open-Meteo Previous Runs API](https://github.com/ford442/weather_clock/issues/94)
+- [#95 — Migrate visual regression to `@playwright/test` and expand unit coverage](https://github.com/ford442/weather_clock/issues/95) — implemented: `e2e/` Playwright specs (visual matrix + smoke + functional) replaced the Python suite; unit coverage added for `atmosphereTheme.js`, `AnomalyCalculator.js`, and `getQualityTier()`.
+- [#94 — Implement forecast accuracy with the Open-Meteo Previous Runs API](https://github.com/ford442/weather_clock/issues/94) — partially implemented: `WeatherService.getPredictionAccuracy()` computes day-1/day-3 MAE and shows it in the Advanced drawer's Accuracy tab; timeline-mode accuracy rings (`TimelineData.enrichWithAccuracy()`) remain open.
 - [#93 — Add installable/offline PWA support](https://github.com/ford442/weather_clock/issues/93)
 - [#97 — Accessibility and internationalization pass](https://github.com/ford442/weather_clock/issues/97)
 

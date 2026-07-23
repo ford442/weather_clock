@@ -2,6 +2,12 @@
 import { calculateMoonPhase } from '../moonPhase.js';
 import { drawPressureGauge } from './gauge.js';
 import { formatTime12 } from './time-display.js';
+import { getUsAqiCategory, getDominantPollen, getAlertSeverityStyle, isPulseSeverity } from '../air-quality.js';
+
+function hexToRgbTriplet(hex) {
+    const n = parseInt(hex.replace('#', ''), 16);
+    return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+}
 
 let prefersReducedMotion = false;
 
@@ -147,21 +153,42 @@ export function updateWeatherDisplay(data, weatherService) {
 
     // ── Advanced: accuracy ──
     const accuracyDeltaEl = document.getElementById('accuracy-delta');
-    if (accuracyDeltaEl) {
-        accuracyDeltaEl.textContent = 'Forecast accuracy tracking coming soon.';
-        accuracyDeltaEl.style.color = '';
-        accuracyDeltaEl.style.fontSize = '14px';
-    }
-    setText('accuracy-score', '');
-
     const accuracyTabBtn = document.querySelector('.tab-btn[data-tab="accuracy"]');
-    if (accuracyTabBtn) {
-        accuracyTabBtn.style.display = 'none';
-        if (accuracyTabBtn.classList.contains('active')) {
-            accuracyTabBtn.classList.remove('active');
-            document.querySelector('.tab-btn[data-tab="history"]')?.classList.add('active');
-            document.getElementById('tab-accuracy').classList.remove('active');
-            document.getElementById('tab-history').classList.add('active');
+
+    if (data.accuracy) {
+        // MAE is a temperature *delta*: °C → °F scales by 9/5 with no offset
+        const maeDisplay =
+            weatherService.unit === 'imperial'
+                ? `${((data.accuracy.mae * 9) / 5).toFixed(1)}°F`
+                : `${data.accuracy.mae.toFixed(1)}°C`;
+        if (accuracyDeltaEl) {
+            accuracyDeltaEl.textContent = `±${maeDisplay} over last 24h`;
+            accuracyDeltaEl.style.color = '';
+            accuracyDeltaEl.style.fontSize = '';
+        }
+        const accuracyScoreEl = document.getElementById('accuracy-score');
+        if (accuracyScoreEl) {
+            accuracyScoreEl.textContent = `Score: ${data.accuracy.score}%`;
+            accuracyScoreEl.style.color =
+                data.accuracy.score >= 90 ? '#22c55e' : data.accuracy.score >= 70 ? '#eab308' : '#ef4444';
+        }
+        if (accuracyTabBtn) accuracyTabBtn.style.display = '';
+    } else {
+        if (accuracyDeltaEl) {
+            accuracyDeltaEl.textContent = 'No forecast accuracy data for this location.';
+            accuracyDeltaEl.style.color = '';
+            accuracyDeltaEl.style.fontSize = '14px';
+        }
+        setText('accuracy-score', '');
+
+        if (accuracyTabBtn) {
+            accuracyTabBtn.style.display = 'none';
+            if (accuracyTabBtn.classList.contains('active')) {
+                accuracyTabBtn.classList.remove('active');
+                document.querySelector('.tab-btn[data-tab="history"]')?.classList.add('active');
+                document.getElementById('tab-accuracy').classList.remove('active');
+                document.getElementById('tab-history').classList.add('active');
+            }
         }
     }
 
@@ -269,5 +296,91 @@ export function updatePanelTheme(dayFactor, weatherSeverity, tempTrend = 0) {
         root.style.setProperty('--trend-glow', `rgba(${r}, ${g}, ${b}, ${strength * 0.45})`);
     } else {
         root.style.setProperty('--trend-glow', 'transparent');
+    }
+}
+
+// ── Air quality / pollen chips ───────────────────────────────────────────────
+/**
+ * @param {{usAqi?: number|null, europeanAqi?: number|null, pollen?: {birch?: number|null, grass?: number|null, ragweed?: number|null}}|null} airQuality
+ */
+export function updateAirQualityDisplay(airQuality) {
+    const aqiEl = document.getElementById('current-aqi');
+    if (aqiEl) {
+        const category = getUsAqiCategory(airQuality?.usAqi);
+        if (category) {
+            aqiEl.hidden = false;
+            aqiEl.textContent = `AQI ${Math.round(airQuality.usAqi)}`;
+            aqiEl.title = category.label;
+            aqiEl.style.setProperty('--badge-color', category.color);
+            aqiEl.style.setProperty('--badge-rgb', hexToRgbTriplet(category.color));
+        } else {
+            aqiEl.hidden = true;
+        }
+    }
+
+    const pollenEl = document.getElementById('current-pollen');
+    if (pollenEl) {
+        const dominant = getDominantPollen(airQuality?.pollen);
+        if (dominant) {
+            pollenEl.hidden = false;
+            pollenEl.textContent = `Pollen: ${dominant.label}`;
+            pollenEl.title = `${dominant.type} pollen: ${dominant.label}`;
+            pollenEl.style.setProperty('--badge-color', dominant.color);
+            pollenEl.style.setProperty('--badge-rgb', hexToRgbTriplet(dominant.color));
+        } else {
+            pollenEl.hidden = true;
+        }
+    }
+}
+
+let alertBannerToggleBound = false;
+
+/**
+ * @param {Array<{event: string, severity: string, headline: string, description: string}>} alerts
+ */
+export function updateAlertBanner(alerts) {
+    const banner = document.getElementById('alert-banner');
+    const headlineEl = document.getElementById('alert-banner-headline');
+    const bodyEl = document.getElementById('alert-banner-body');
+    const toggleBtn = document.getElementById('alert-banner-toggle');
+    if (!banner || !headlineEl || !bodyEl || !toggleBtn) return;
+
+    if (!alerts || alerts.length === 0) {
+        banner.hidden = true;
+        banner.classList.remove('pulse');
+        return;
+    }
+
+    // Show the most severe alert as the headline; list the rest in the expandable body.
+    const order = ['Extreme', 'Severe', 'Moderate', 'Minor', 'Unknown'];
+    const sorted = [...alerts].sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity));
+    const top = sorted[0];
+    const style = getAlertSeverityStyle(top.severity);
+
+    banner.hidden = false;
+    banner.classList.toggle('pulse', isPulseSeverity(top.severity));
+    banner.style.setProperty('--badge-color', style.color);
+    headlineEl.textContent = `${top.event}${sorted.length > 1 ? ` (+${sorted.length - 1} more)` : ''}`;
+
+    // Built via DOM APIs (not innerHTML) since alert text comes from an external
+    // feed (NWS) and must not be interpreted as markup.
+    bodyEl.replaceChildren(
+        ...sorted.map((alert) => {
+            const item = document.createElement('div');
+            item.className = 'alert-item';
+            const strong = document.createElement('strong');
+            strong.textContent = alert.event;
+            item.append(strong, ` (${alert.severity}) — ${alert.headline || alert.description || ''}`);
+            return item;
+        })
+    );
+
+    if (!alertBannerToggleBound) {
+        alertBannerToggleBound = true;
+        toggleBtn.addEventListener('click', () => {
+            const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+            toggleBtn.setAttribute('aria-expanded', String(!expanded));
+            bodyEl.hidden = expanded;
+        });
     }
 }

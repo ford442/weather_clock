@@ -246,6 +246,110 @@ describe('WeatherService', () => {
     });
 });
 
+describe('WeatherService — air quality & alerts', () => {
+    it('builds the NWS alerts URL rounded to 4 decimal places', () => {
+        const service = new WeatherService();
+        expect(service.buildAlertsUrl(40.71280001, -74.00600009)).toBe(
+            'https://api.weather.gov/alerts/active?point=40.7128,-74.006'
+        );
+        expect(service.buildAlertsUrl(51.5074, -0.1278)).toBe(
+            'https://api.weather.gov/alerts/active?point=51.5074,-0.1278'
+        );
+    });
+
+    it('fetches and normalizes air quality data', async () => {
+        const service = new WeatherService();
+        service.setManualLocation(40.71, -74.01, 'Test City');
+
+        fetch.mockResolvedValueOnce({
+            json: async () => ({
+                current: {
+                    pm2_5: 12.3,
+                    pm10: 20.1,
+                    ozone: 45,
+                    us_aqi: 62,
+                    european_aqi: 30,
+                    birch_pollen: 15,
+                    grass_pollen: 5,
+                    ragweed_pollen: null
+                }
+            })
+        });
+
+        const result = await service.fetchAirQuality();
+        expect(fetch).toHaveBeenCalledWith(
+            expect.stringContaining('https://air-quality-api.open-meteo.com/v1/air-quality'),
+            expect.anything()
+        );
+        expect(result).toEqual({
+            pm2_5: 12.3,
+            pm10: 20.1,
+            ozone: 45,
+            usAqi: 62,
+            europeanAqi: 30,
+            pollen: { birch: 15, grass: 5, ragweed: null }
+        });
+    });
+
+    it('falls back to null when air quality fetch fails with no cache', async () => {
+        const service = new WeatherService();
+        service.setManualLocation(40.71, -74.01, 'Test City');
+        fetch.mockRejectedValueOnce(new Error('network down'));
+
+        const result = await service.fetchAirQuality();
+        expect(result).toBeNull();
+    });
+
+    it('fetches and normalizes active alerts', async () => {
+        const service = new WeatherService();
+        service.setManualLocation(40.71, -74.01, 'Test City');
+
+        fetch.mockResolvedValueOnce({
+            json: async () => ({
+                features: [
+                    {
+                        id: 'urn:test:1',
+                        properties: {
+                            event: 'Severe Thunderstorm Warning',
+                            severity: 'Severe',
+                            headline: 'Severe storm approaching',
+                            description: 'Details here',
+                            effective: '2024-01-01T00:00:00Z',
+                            expires: '2024-01-01T02:00:00Z'
+                        }
+                    }
+                ]
+            })
+        });
+
+        const result = await service.fetchAlerts();
+        expect(fetch).toHaveBeenCalledWith(
+            expect.stringContaining('https://api.weather.gov/alerts/active?point='),
+            expect.anything()
+        );
+        expect(result).toEqual([
+            {
+                id: 'urn:test:1',
+                event: 'Severe Thunderstorm Warning',
+                severity: 'Severe',
+                headline: 'Severe storm approaching',
+                description: 'Details here',
+                effective: '2024-01-01T00:00:00Z',
+                expires: '2024-01-01T02:00:00Z'
+            }
+        ]);
+    });
+
+    it('treats alert fetch failure as "no active alerts" rather than an error', async () => {
+        const service = new WeatherService();
+        service.setManualLocation(51.5074, -0.1278, 'London'); // non-US — NWS has no coverage
+        fetch.mockRejectedValueOnce(new Error('404'));
+
+        const result = await service.fetchAlerts();
+        expect(result).toEqual([]);
+    });
+});
+
 describe('Daily Forecast', () => {
     it('should fetch and normalize a 10-day daily forecast', async () => {
         const service = new WeatherService();
@@ -389,5 +493,113 @@ describe('Weather Interpolation', () => {
         expect(res25.weatherCode).toBe(0);
         expect(res50.weatherCode).toBe(65); // factor is 0.5, maps to next.weatherCode
         expect(res75.weatherCode).toBe(65);
+    });
+});
+
+describe('Forecast accuracy', () => {
+    const buildPreviousRunsResponse = ({ hours = 24, day1Error = 1, day3Error = 2 } = {}) => {
+        const times = [];
+        const actual = [];
+        const day1 = [];
+        const day3 = [];
+        for (let h = hours; h >= 1; h--) {
+            times.push(new Date(Date.now() - h * 60 * 60 * 1000).toISOString());
+            actual.push(10);
+            day1.push(10 + day1Error);
+            day3.push(10 - day3Error);
+        }
+        return {
+            hourly: {
+                time: times,
+                temperature_2m: actual,
+                temperature_2m_previous_day1: day1,
+                temperature_2m_previous_day3: day3
+            }
+        };
+    };
+
+    const createService = () => {
+        const service = new WeatherService();
+        service.setManualLocation(40.71, -74.01, 'Test City');
+        return service;
+    };
+
+    it('should compute MAE and score from previous-runs fixture data', async () => {
+        const service = createService();
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => buildPreviousRunsResponse()
+        });
+
+        const accuracy = await service.getPredictionAccuracy();
+
+        expect(accuracy).not.toBeNull();
+        expect(accuracy.mae).toBe(1); // |10 - 11| over 24h
+        expect(accuracy.maeDay3).toBe(2); // |10 - 8| over 24h
+        expect(accuracy.score).toBe(90); // 100 - 10 points per °C of MAE
+        expect(accuracy.sampleSize).toBe(24);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(fetch.mock.calls[0][0]).toContain('previous-runs-api.open-meteo.com');
+    });
+
+    it('should skip null pairs when computing MAE', async () => {
+        const service = createService();
+        const response = buildPreviousRunsResponse({ hours: 24, day1Error: 2 });
+        // Null out half the day-1 predictions; remaining 12 pairs keep MAE = 2
+        for (let i = 0; i < 12; i++) {
+            response.hourly.temperature_2m_previous_day1[i] = null;
+        }
+        fetch.mockResolvedValueOnce({ ok: true, json: async () => response });
+
+        const accuracy = await service.getPredictionAccuracy();
+
+        expect(accuracy).not.toBeNull();
+        expect(accuracy.mae).toBe(2);
+        expect(accuracy.sampleSize).toBe(12);
+    });
+
+    it('should return null when the endpoint lacks data for the location', async () => {
+        const service = createService();
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ hourly: { time: ['2026-07-23T00:00'] } })
+        });
+
+        const accuracy = await service.getPredictionAccuracy();
+        expect(accuracy).toBeNull();
+    });
+
+    it('should return null when there are too few valid comparison hours', async () => {
+        const service = createService();
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => buildPreviousRunsResponse({ hours: 5 })
+        });
+
+        const accuracy = await service.getPredictionAccuracy();
+        expect(accuracy).toBeNull();
+    });
+
+    it('should return null gracefully when the fetch fails', async () => {
+        const service = createService();
+        fetch.mockRejectedValueOnce(new Error('Network disconnected'));
+
+        const accuracy = await service.getPredictionAccuracy();
+        expect(accuracy).toBeNull();
+    });
+
+    it('should cache the result and only fetch once per day per location', async () => {
+        const service = createService();
+        fetch.mockResolvedValueOnce({
+            ok: true,
+            json: async () => buildPreviousRunsResponse()
+        });
+
+        const first = await service.getPredictionAccuracy();
+        const second = await service.getPredictionAccuracy();
+
+        expect(first).not.toBeNull();
+        expect(second).toEqual(first);
+        expect(fetch).toHaveBeenCalledTimes(1);
     });
 });

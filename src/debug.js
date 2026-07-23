@@ -136,7 +136,10 @@ export function setupDebugAPI(state, services, scene3d) {
             particles: weatherEffects.getParticleMetrics?.() || null
         }),
         getForecastPreviewMetrics: () => window.modeController?.forecastUI?.previewMetrics || null,
-        getMode: () => window.modeController?.getMode?.()
+        getMode: () => window.modeController?.getMode?.(),
+        spawnBolt: () => {
+            weatherEffects.createLightning();
+        }
     };
 
     // Debug: jump into forecast mode focused on a day index (0-9) at a given hour

@@ -1,3 +1,16 @@
+import '@fontsource/inter/latin-200.css';
+import '@fontsource/inter/latin-300.css';
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-700.css';
+import '@fontsource/inter/latin-ext-200.css';
+import '@fontsource/inter/latin-ext-300.css';
+import '@fontsource/inter/latin-ext-400.css';
+import '@fontsource/inter/latin-ext-500.css';
+import '@fontsource/inter/latin-ext-700.css';
+
+import './registerSW.js';
+
 import Stats from 'three/addons/libs/stats.module.js';
 
 import {
@@ -8,7 +21,15 @@ import {
     applyQualityTier
 } from './rendering.js';
 import { setupLights } from './lights.js';
-import { setupSky, setupSundial, setupMoon, setupWeatherEffects, addToScene } from './scene-objects.js';
+import {
+    setupSky,
+    setupSundial,
+    setupMoon,
+    setupWeatherEffects,
+    setupGround,
+    setupGroundEffects,
+    addToScene
+} from './scene-objects.js';
 import { initMoonWebGPU } from './moonPhase.js';
 import { getRequestedNativeKernels, initializeNativeRuntime } from './native/native-runtime.js';
 import { WeatherService } from './weather.js';
@@ -23,10 +44,13 @@ import {
     drawSparkline,
     showToast,
     setupKeyboardShortcuts,
-    setReducedMotionPreference
+    setReducedMotionPreference,
+    updateAirQualityDisplay,
+    updateAlertBanner
 } from './ui.js';
 import { AnimationController } from './animation.js';
 import { setupDebugAPI } from './debug.js';
+import { AmbienceEngine } from './audio/AmbienceEngine.js';
 import { ModeController } from './ModeController.js';
 import { updateAtmosphereTheme } from './atmosphereTheme.js';
 
@@ -51,7 +75,8 @@ const PREF_KEYS = {
     lon: 'weatherclock_lon',
     location: 'weatherclock_location',
     unit: 'weatherclock_unit',
-    windUnit: 'weatherclock_wind_unit'
+    windUnit: 'weatherclock_wind_unit',
+    ambienceMuted: 'weatherclock_ambience_muted'
 };
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
@@ -87,11 +112,36 @@ async function bootstrap() {
     if (isWebGPU) {
         await initMoonWebGPU(moonGroup);
     }
-    addToScene(scene, { sky, sundial, moonGroup });
+    const ground = setupGround(isWebGPU);
+    const groundEffects = await setupGroundEffects(scene, ground, sundial, camera, renderer, isWebGPU);
+    addToScene(scene, { sky, sundial, moonGroup, ground });
 
     // Services
     const weatherService = new WeatherService();
     const astronomyService = new AstronomyService();
+    const ambienceEngine = new AmbienceEngine();
+
+    const ambienceToggle = document.getElementById('ambience-toggle');
+    const storedMuted = localStorage.getItem(PREF_KEYS.ambienceMuted);
+    ambienceEngine.muted = storedMuted === null ? true : storedMuted === 'true';
+
+    function updateAmbienceButton() {
+        if (!ambienceToggle) return;
+        const muted = ambienceEngine.muted;
+        ambienceToggle.setAttribute('aria-pressed', String(!muted));
+        ambienceToggle.title = muted ? 'Ambient sound (muted)' : 'Ambient sound (on)';
+        ambienceToggle.classList.toggle('active', !muted);
+    }
+    updateAmbienceButton();
+
+    if (ambienceToggle) {
+        ambienceToggle.addEventListener('click', () => {
+            ambienceEngine.ensureStarted();
+            ambienceEngine.setMuted(!ambienceEngine.muted);
+            localStorage.setItem(PREF_KEYS.ambienceMuted, String(ambienceEngine.muted));
+            updateAmbienceButton();
+        });
+    }
 
     function loadPreferences() {
         const lat = localStorage.getItem(PREF_KEYS.lat);
@@ -166,12 +216,18 @@ async function bootstrap() {
         sundial,
         moonGroup,
         weatherEffects,
+        ground,
+        groundEffects,
         sunLight,
         moonLight,
         ambientLight,
         controls
     };
-    const animationController = new AnimationController(state, { weatherService, astronomyService }, scene3d);
+    const animationController = new AnimationController(
+        state,
+        { weatherService, astronomyService, ambienceEngine },
+        scene3d
+    );
     setupRendererRecovery({ ...scene3d, isWebGPU }, animationController, { showToast });
 
     let qualityChangeInProgress = false;
@@ -201,14 +257,51 @@ async function bootstrap() {
     animationController.setQualityChangeHandler(changeQuality);
     let searchRequestId = 0;
 
+    const offlineStatus = document.getElementById('offline-status');
+
+    function updateOfflineStatus(isOffline, cachedAt = null) {
+        if (!offlineStatus) return;
+        if (isOffline && cachedAt) {
+            const timeStr = new Date(cachedAt).toLocaleTimeString([], {
+                hour: 'numeric',
+                minute: '2-digit'
+            });
+            offlineStatus.textContent = `Offline — showing data from ${timeStr}`;
+            offlineStatus.hidden = false;
+            offlineStatus.classList.add('visible');
+        } else if (isOffline) {
+            offlineStatus.textContent = 'Offline';
+            offlineStatus.hidden = false;
+            offlineStatus.classList.add('visible');
+        } else {
+            offlineStatus.classList.remove('visible');
+            offlineStatus.hidden = true;
+        }
+    }
+
+    function showLatestOfflineStatus() {
+        const cached = weatherService.latitude
+            ? weatherService.getFromCache(
+                  weatherService.getCacheKey(weatherService.latitude, weatherService.longitude),
+                  true
+              )
+            : null;
+        updateOfflineStatus(true, cached?.timestamp);
+    }
+
+    window.addEventListener('offline', showLatestOfflineStatus);
+    window.addEventListener('online', () => updateOfflineStatus(false));
+
     /** Apply one weather payload consistently across state, UI, persistence, and forecast data. */
     async function applyWeatherData(data) {
         state.weatherData = data;
+        groundEffects.setLatitude(weatherService.latitude);
         updateWeatherDisplay(data, weatherService);
         drawSparkline(state.simulationTime, data, weatherService);
         savePreferences();
 
         if (data?.isCached) {
+            updateOfflineStatus(data.isOffline, data.cachedAt);
             if (data.isOffline) {
                 showToast('Offline — showing cached data', 'info');
             } else {
@@ -218,9 +311,98 @@ async function bootstrap() {
                 });
                 showToast(`Showing cached weather from ${timeStr}`, 'info');
             }
+        } else if (!navigator.onLine) {
+            showLatestOfflineStatus();
+        } else {
+            updateOfflineStatus(false);
         }
 
         await loadDailyForecast();
+        await loadAirQualityAndAlerts();
+    }
+
+    // Kiosk / wake-lock mode
+    let wakeLock = null;
+    const kioskToggle = document.getElementById('kiosk-toggle');
+    if (kioskToggle) {
+        const canWakeLock = 'wakeLock' in navigator;
+        const canFullscreen = document.documentElement.requestFullscreen != null;
+        if (canWakeLock || canFullscreen) {
+            kioskToggle.hidden = false;
+        }
+
+        async function requestWakeLock() {
+            if (!canWakeLock) return;
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                wakeLock.addEventListener('release', () => {
+                    if (wakeLock == null) kioskToggle.classList.remove('active');
+                });
+            } catch (error) {
+                console.warn('Wake lock request failed:', error);
+            }
+        }
+
+        async function releaseWakeLock() {
+            if (wakeLock) {
+                try {
+                    await wakeLock.release();
+                } catch (error) {
+                    console.warn('Wake lock release failed:', error);
+                }
+                wakeLock = null;
+            }
+        }
+
+        async function enterKiosk() {
+            if (canFullscreen) {
+                try {
+                    await document.documentElement.requestFullscreen();
+                } catch (error) {
+                    console.warn('Fullscreen request failed:', error);
+                }
+            }
+            await requestWakeLock();
+            kioskToggle.classList.add('active');
+            kioskToggle.setAttribute('aria-pressed', 'true');
+            kioskToggle.title = 'Exit kiosk mode';
+        }
+
+        async function exitKiosk() {
+            if (document.fullscreenElement && canFullscreen) {
+                try {
+                    await document.exitFullscreen();
+                } catch (error) {
+                    console.warn('Exit fullscreen failed:', error);
+                }
+            }
+            await releaseWakeLock();
+            kioskToggle.classList.remove('active');
+            kioskToggle.setAttribute('aria-pressed', 'false');
+            kioskToggle.title = 'Enter kiosk mode (fullscreen + keep screen on)';
+        }
+
+        kioskToggle.addEventListener('click', () => {
+            const active = kioskToggle.classList.contains('active');
+            if (active) {
+                exitKiosk();
+            } else {
+                enterKiosk();
+            }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (!kioskToggle.classList.contains('active')) return;
+            if (document.visibilityState === 'visible') {
+                requestWakeLock();
+            } else {
+                releaseWakeLock();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            releaseWakeLock();
+        });
     }
 
     // UI Event Callbacks
@@ -350,6 +532,28 @@ async function bootstrap() {
         };
     }
 
+    // Load air quality + severe-weather alerts and attach them to the weather data
+    // object. Non-blocking and best-effort: air quality has no coverage everywhere,
+    // and NWS alerts only cover the US, so a failure here just means the chips/banner
+    // stay hidden rather than breaking the clock.
+    async function loadAirQualityAndAlerts() {
+        if (!weatherService.latitude || !weatherService.longitude) return;
+        try {
+            const [airQuality, alerts] = await Promise.all([
+                weatherService.fetchAirQuality(),
+                weatherService.fetchAlerts()
+            ]);
+            if (state.weatherData) {
+                state.weatherData.airQuality = airQuality;
+                state.weatherData.alerts = alerts;
+            }
+            updateAirQualityDisplay(airQuality);
+            updateAlertBanner(alerts);
+        } catch (error) {
+            console.warn('Failed to load air quality / alerts:', error);
+        }
+    }
+
     // Load daily 10-day forecast and attach it to the weather data object.
     // This is intentionally non-blocking: a failure here should not break the clock.
     async function loadDailyForecast() {
@@ -387,7 +591,15 @@ async function bootstrap() {
             console.error('Weather initialization failed:', error);
             document.getElementById('location').textContent = 'Weather data unavailable';
             document.getElementById('current-description').textContent = 'Unable to fetch';
-            showToast('Failed to load weather data. Check your connection.', 'error');
+
+            const isOffline = error?.isOffline || !navigator.onLine;
+            if (isOffline) {
+                showLatestOfflineStatus();
+                showToast('Offline — no cached weather data available', 'error');
+            } else {
+                updateOfflineStatus(false);
+                showToast('Failed to load weather data. Check your connection.', 'error');
+            }
         }
     }
 
@@ -441,6 +653,10 @@ async function bootstrap() {
         }
 
         animationController.start(clock, stats);
+
+        if (!navigator.onLine) {
+            showLatestOfflineStatus();
+        }
 
         await fetchAndDisplayWeather();
 

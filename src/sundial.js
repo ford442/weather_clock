@@ -180,6 +180,8 @@ export function createSundial() {
 
     return {
         group,
+        base,
+        face,
         update
     };
 }

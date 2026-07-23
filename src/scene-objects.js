@@ -3,6 +3,8 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { createSundial } from './sundial.js';
 import { calculateMoonPhase, createMoon } from './moonPhase.js';
 import { WeatherEffects } from './effects/weather-effects.js';
+import { GroundEffects } from './effects/ground-effects.js';
+import { createGround } from './ground.js';
 import { getQualityTier } from './rendering.js';
 
 const SKY_CONFIG = {
@@ -61,10 +63,29 @@ export async function setupWeatherEffects(scene, sundial, camera, isWebGPU = fal
     return effects;
 }
 
-export function addToScene(scene, { sky, sundial, moonGroup }) {
+export function setupGround(isWebGPU = false) {
+    return createGround(isWebGPU);
+}
+
+/**
+ * @param {import('three').Scene} scene
+ * @param {ReturnType<typeof createGround>} ground
+ * @param {ReturnType<typeof createSundial>} sundial
+ * @param {import('three').Camera} camera
+ * @param {import('three').WebGLRenderer|import('three/webgpu').WebGPURenderer} renderer
+ * @param {boolean} isWebGPU
+ */
+export async function setupGroundEffects(scene, ground, sundial, camera, renderer, isWebGPU = false) {
+    const groundEffects = new GroundEffects(scene, ground, sundial, camera, renderer, isWebGPU);
+    await groundEffects.init();
+    return groundEffects;
+}
+
+export function addToScene(scene, { sky, sundial, moonGroup, ground }) {
     scene.add(sky);
     scene.add(sundial.group);
     scene.add(moonGroup);
+    if (ground) scene.add(ground.mesh);
 }
 
 export { SKY_CONFIG };

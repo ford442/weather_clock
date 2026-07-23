@@ -1,5 +1,6 @@
 // Aether Architect: Verified
 import * as THREE from 'three';
+import { getAqiHaze } from './air-quality.js';
 
 let previousIntensity = { sun: 0.8, moon: 0.0, ambient: 0.4 };
 const transitionSpeed = 0.01; // Slower transition (approx 5s)
@@ -118,15 +119,24 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
     const wind = weatherSnap.windSpeed ?? 0;
     const vis = weatherSnap.visibility ?? 10000;
     const sev = weatherSnap.severity !== undefined ? weatherSnap.severity : getSeverity(code);
+    const uvIndex = weatherSnap.uvIndex ?? 0;
+    const aqiHaze = getAqiHaze(weatherSnap.aqi);
     const atmosphere = weatherSnap.atmosphere || null;
     const localTransitionSpeed = atmosphere ? 0.045 : transitionSpeed;
 
     // --- SUN LIGHTING ---
+    // Extreme UV (index 8+, "very high"/"extreme") subtly intensifies sun glare.
+    const uvGlareFactor = clamp((uvIndex - 8) / 4, 0, 1);
     const baseSunIntensity = 2.0;
     const cloudSunFactor = 1 - (cloud / 100) * 0.4;
     const severityFactor = 1 - (sev / 100) * 0.4;
     const targetSunIntensity =
-        baseSunIntensity * cloudSunFactor * severityFactor * dayFactor * (atmosphere?.sunIntensityMultiplier ?? 1);
+        baseSunIntensity *
+        cloudSunFactor *
+        severityFactor *
+        dayFactor *
+        (atmosphere?.sunIntensityMultiplier ?? 1) *
+        (1 + uvGlareFactor * 0.25);
 
     // --- MOON LIGHTING ---
     let targetMoonIntensity = 0;
@@ -194,14 +204,17 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
         }
         let targetFogDensity =
             (0.0001 + (cloud / 100) * 0.005 + (sev / 100) * 0.03 + visibilityFactor * 0.05) *
-            (atmosphere?.fogDensityMultiplier ?? 1);
-        if (targetFogDensity > 0.025) targetFogDensity = 0.025;
+                (atmosphere?.fogDensityMultiplier ?? 1) +
+            aqiHaze * 0.02;
+        if (targetFogDensity > 0.03) targetFogDensity = 0.03;
 
         scene.fog.density += (targetFogDensity - scene.fog.density) * 0.05;
 
         const fogColor = atmosphere?.skyFogColor
             ? new THREE.Color().copy(atmosphere.skyFogColor)
             : new THREE.Color().copy(ambientLight.color).multiplyScalar(0.8);
+        // High AQI tints the fog toward a brown-grey smog haze.
+        if (aqiHaze > 0) fogColor.lerp(new THREE.Color(0x8a7a5c), aqiHaze * 0.6);
         scene.fog.color.lerp(fogColor, localTransitionSpeed);
     }
 
@@ -339,7 +352,9 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         weatherCode: currentCode,
         windSpeed: weightedWind,
         visibility: (weatherData.current && weatherData.current.visibility) || 10000,
-        severity: weightedSeverity
+        severity: weightedSeverity,
+        uvIndex: weatherData.current?.uvIndex ?? 0,
+        aqi: weatherData.current?.aqi ?? null
     };
 
     // Reuse the single implementation for actual application + sky/fog/transitions.

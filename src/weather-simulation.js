@@ -177,8 +177,15 @@ export function getActiveWeatherData(simulationTime, weatherData) {
         ? getWeatherAtTime(new Date(simulationTime.getTime() + 3 * 3600 * 1000), weatherData.timeline)
         : weatherData.forecast || simWeather;
 
+    const current = ensureIntensities(simWeather);
+    // Air quality is only ever "current" (no hourly/forecast timeline for it), so it's
+    // attached directly rather than interpolated like the rest of `current`.
+    if (current) {
+        current.aqi = weatherData.airQuality?.usAqi ?? null;
+    }
+
     return {
-        current: ensureIntensities(simWeather),
+        current,
         past: ensureIntensities(simPast),
         forecast: ensureIntensities(simForecast)
     };

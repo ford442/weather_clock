@@ -9,13 +9,14 @@
         "build": "vite build",
         "build:wasm": "bash native/build.sh",
         "benchmark:wasm": "node native/benchmark.mjs",
-        "benchmark:wasm:browser": "python3 verification/suite/run_all.py --benchmark-native",
         "check:bundle-size": "node scripts/check-bundle-size.mjs",
         "format": "prettier --write \"src/**/*.{js,ts,css}\" \"*.{js,json,html}\" \".github/workflows/*.{yml,yaml}\"",
         "format:check": "prettier --check \"src/**/*.{js,ts,css}\" \"*.{js,json,html}\" \".github/workflows/*.{yml,yaml}\"",
         "lint": "eslint src",
         "preview": "vite preview",
         "test": "vitest",
+        "test:e2e": "playwright test",
+        "test:e2e:update": "playwright test --update-snapshots",
         "typecheck": "tsc --noEmit"
     },
     "keywords": [],
@@ -23,12 +24,15 @@
     "license": "ISC",
     "devDependencies": {
         "@eslint/js": "^10.0.1",
+        "@fontsource/inter": "^5.3.0",
+        "@playwright/test": "^1.61.1",
         "@types/suncalc": "^1.9.2",
         "eslint": "^10.7.0",
         "globals": "^17.7.0",
         "prettier": "^3.9.5",
         "typescript": "^7.0.2",
         "vite": "^7.2.4",
+        "vite-plugin-pwa": "^1.3.0",
         "vitest": "^3.2.4"
     },
     "dependencies": {

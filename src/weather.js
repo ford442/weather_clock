@@ -297,7 +297,7 @@ export class WeatherService {
         // Request past_days=1 to ensure we have historical hourly data for the "Past" zone interpolation
         // even if the current time is just after midnight.
         const currentData = await this.#fetchJSON(
-            `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl&timezone=auto&past_days=1`
+            `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl,uv_index&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl,uv_index,precipitation_probability&timezone=auto&past_days=1`
         );
 
         // Archive API — no UV/precipProb in archive, use apparent_temp + humidity
@@ -407,7 +407,7 @@ export class WeatherService {
         // Advanced data
         const historicalYearAgo = await this.fetchHistoricalYearAgo(now);
         const regional = null; // Lazy loaded on Nearby tab open
-        const accuracy = this.getPredictionAccuracy(current);
+        const accuracy = await this.getPredictionAccuracy();
 
         const result = {
             location: this.location,
@@ -478,6 +478,102 @@ export class WeatherService {
 
         const results = await Promise.all(promises);
         return results.filter((r) => r !== null);
+    }
+
+    /**
+     * Fetch current air quality (PM2.5/PM10, ozone, US/European AQI, and — where the
+     * Open-Meteo model has coverage — pollen) for the active location.
+     * Cached the same way as `getDailyForecast` (localStorage, checked before network).
+     * @returns {Promise<{pm2_5: number|null, pm10: number|null, ozone: number|null, usAqi: number|null, europeanAqi: number|null, pollen: {birch: number|null, grass: number|null, ragweed: number|null}}|null>}
+     */
+    async fetchAirQuality() {
+        if (this.latitude == null || this.longitude == null) {
+            throw new Error('Location not available');
+        }
+
+        const cacheKey = this.getCacheKey(this.latitude, this.longitude, 'air_quality');
+
+        try {
+            const cached = this.getFromCache(cacheKey);
+            if (cached) return cached.data;
+
+            const params = 'pm10,pm2_5,ozone,us_aqi,european_aqi,birch_pollen,grass_pollen,ragweed_pollen';
+            const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=${params}&timezone=auto`;
+            const data = await this.#fetchJSON(url);
+            const cur = data.current || {};
+
+            const result = {
+                pm2_5: cur.pm2_5 ?? null,
+                pm10: cur.pm10 ?? null,
+                ozone: cur.ozone ?? null,
+                usAqi: cur.us_aqi ?? null,
+                europeanAqi: cur.european_aqi ?? null,
+                pollen: {
+                    birch: cur.birch_pollen ?? null,
+                    grass: cur.grass_pollen ?? null,
+                    ragweed: cur.ragweed_pollen ?? null
+                }
+            };
+
+            this.setCache(cacheKey, result);
+            return result;
+        } catch (error) {
+            console.warn('Air quality fetch failed, attempting cache fallback:', error);
+            const stale = this.getFromCache(cacheKey, true);
+            return stale ? stale.data : null;
+        }
+    }
+
+    /**
+     * Build the NWS active-alerts URL for a point. Coordinates are rounded to 4
+     * decimal places (~11 m), matching NWS's own precision and keeping the cache
+     * key stable across tiny GPS jitter.
+     * @param {number} lat
+     * @param {number} lon
+     */
+    buildAlertsUrl(lat, lon) {
+        const roundedLat = Math.round(lat * 10000) / 10000;
+        const roundedLon = Math.round(lon * 10000) / 10000;
+        return `https://api.weather.gov/alerts/active?point=${roundedLat},${roundedLon}`;
+    }
+
+    /**
+     * Fetch active severe-weather alerts from the US National Weather Service.
+     * Open-Meteo has no alerts endpoint, and NWS only has US coverage — any
+     * failure (including "no coverage here") is treated as "no active alerts"
+     * rather than surfaced as an error, so non-US locations silently show nothing.
+     * @returns {Promise<Array<{id: string, event: string, severity: string, headline: string, description: string, effective: string|null, expires: string|null}>>}
+     */
+    async fetchAlerts() {
+        if (this.latitude == null || this.longitude == null) {
+            throw new Error('Location not available');
+        }
+
+        const cacheKey = this.getCacheKey(this.latitude, this.longitude, 'alerts');
+
+        try {
+            const cached = this.getFromCache(cacheKey);
+            if (cached) return cached.data;
+
+            const url = this.buildAlertsUrl(this.latitude, this.longitude);
+            const data = await this.#fetchJSON(url);
+            const alerts = (data.features || []).map((feature) => ({
+                id: feature.id,
+                event: feature.properties?.event ?? 'Alert',
+                severity: feature.properties?.severity ?? 'Unknown',
+                headline: feature.properties?.headline ?? '',
+                description: feature.properties?.description ?? '',
+                effective: feature.properties?.effective ?? null,
+                expires: feature.properties?.expires ?? null
+            }));
+
+            this.setCache(cacheKey, alerts);
+            return alerts;
+        } catch (error) {
+            console.warn('Alerts fetch failed or unavailable for this location:', error);
+            const stale = this.getFromCache(cacheKey, true);
+            return stale ? stale.data : [];
+        }
     }
 
     /**
@@ -559,7 +655,7 @@ export class WeatherService {
         return `weatherclock_${roundedLat}_${roundedLon}_${type}`;
     }
 
-    getFromCache(key, allowExpired = false) {
+    getFromCache(key, allowExpired = false, ttlMs = 60 * 60 * 1000) {
         // Try memory first
         let cached = this.cache.get(key);
 
@@ -582,7 +678,7 @@ export class WeatherService {
         if (!cached) return null;
 
         const now = Date.now();
-        const isExpired = now - cached.timestamp > 60 * 60 * 1000; // 1 hour TTL
+        const isExpired = now - cached.timestamp > ttlMs;
 
         if (isExpired && !allowExpired) {
             this.deleteFromCache(key);
@@ -621,10 +717,89 @@ export class WeatherService {
         }
     }
 
-    getPredictionAccuracy(_current) {
-        // Forecast accuracy requires archived forecast runs (Previous Runs API).
-        // This is not yet implemented. Returning null signals "no data" to the UI.
-        return null;
+    /**
+     * Compute recent forecast accuracy by comparing past model runs against
+     * observed temperatures, via the Open-Meteo Previous Runs API.
+     *
+     * `temperature_2m_previous_dayN` is a continuous hourly series where each value
+     * was predicted N days before valid time; plain `temperature_2m` (current run)
+     * is the best-estimate actual for past hours. A single request therefore
+     * provides both the predictions and the verifying observations.
+     *
+     * Cached once per day per location. Returns null when the endpoint lacks data
+     * for the location (e.g. remote areas) or on any failure.
+     *
+     * @returns {Promise<{mae: number, maeDay3: number|null, score: number, sampleSize: number, updatedAt: number}|null>}
+     *   mae/maeDay3 are mean absolute errors in °C over the last 24 observed hours;
+     *   score is 0–100 (100 minus 10 points per °C of day-1 MAE).
+     */
+    async getPredictionAccuracy() {
+        const ACCURACY_CACHE_TTL = 24 * 60 * 60 * 1000; // Once per day per location
+        const MIN_SAMPLE_SIZE = 12; // Hours of valid comparison pairs required
+
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const cacheKey = this.getCacheKey(this.latitude, this.longitude, `accuracy_${dateStr}`);
+
+        try {
+            const cached = this.getFromCache(cacheKey, false, ACCURACY_CACHE_TTL);
+            if (cached) return cached.data;
+
+            const data = await this.#fetchJSON(
+                `https://previous-runs-api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&hourly=temperature_2m,temperature_2m_previous_day1,temperature_2m_previous_day3&past_days=2&forecast_days=0&timezone=auto`
+            );
+
+            const hourly = data?.hourly;
+            const times = hourly?.time;
+            const actual = hourly?.temperature_2m;
+            const day1 = hourly?.temperature_2m_previous_day1;
+            const day3 = hourly?.temperature_2m_previous_day3;
+            if (!Array.isArray(times) || !Array.isArray(actual) || !Array.isArray(day1)) {
+                return null; // Endpoint has no data for this location
+            }
+
+            // Trailing 24 fully-observed hours
+            const nowMs = now.getTime();
+            const observedIndices = [];
+            for (let i = 0; i < times.length; i++) {
+                if (new Date(times[i]).getTime() < nowMs) observedIndices.push(i);
+            }
+            const sample = observedIndices.slice(-24);
+
+            const computeMae = (predicted) => {
+                let sum = 0;
+                let n = 0;
+                for (const i of sample) {
+                    const a = actual[i];
+                    const p = Array.isArray(predicted) ? predicted[i] : null;
+                    if (typeof a === 'number' && typeof p === 'number') {
+                        sum += Math.abs(a - p);
+                        n++;
+                    }
+                }
+                return n > 0 ? { value: sum / n, n } : null;
+            };
+
+            const day1Stats = computeMae(day1);
+            if (!day1Stats || day1Stats.n < MIN_SAMPLE_SIZE) return null;
+            const day3Stats = computeMae(day3);
+
+            const result = {
+                mae: Math.round(day1Stats.value * 10) / 10,
+                maeDay3: day3Stats ? Math.round(day3Stats.value * 10) / 10 : null,
+                // 100% = perfect forecast; lose 10 points per °C of mean absolute error
+                score: Math.max(0, Math.min(100, Math.round(100 - day1Stats.value * 10))),
+                sampleSize: day1Stats.n,
+                updatedAt: Date.now()
+            };
+
+            this.setCache(cacheKey, result);
+            return result;
+        } catch (e) {
+            console.error('Failed to compute prediction accuracy:', e);
+            const stale = this.getFromCache(cacheKey, true);
+            return stale ? stale.data : null;
+        }
     }
 
     findClosestHourIndex(timeArray, targetDate) {

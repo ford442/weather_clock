@@ -109,6 +109,17 @@ function deriveSkyColor(scene, weatherData) {
     return { r, g, b };
 }
 
+// A severe/extreme active alert pulses --accent brightness at this rate.
+const ALERT_PULSE_SEVERITIES = new Set(['Severe', 'Extreme']);
+
+function getAlertPulseFactor(weatherData) {
+    const alerts = weatherData?.alerts;
+    if (!alerts || alerts.length === 0) return 0;
+    const hasPulseAlert = alerts.some((a) => ALERT_PULSE_SEVERITIES.has(a.severity));
+    if (!hasPulseAlert) return 0;
+    return (Math.sin(performance.now() * 0.004) + 1) / 2; // 0..1
+}
+
 /**
  * Sample the 3D scene atmosphere and drive CSS custom properties.
  * @param {import('three').WebGLRenderer} renderer
@@ -142,17 +153,18 @@ export function updateAtmosphereTheme(renderer, scene, weatherData) {
     current.accentG += (target.accentG - current.accentG) * LERP_FACTOR;
     current.accentB += (target.accentB - current.accentB) * LERP_FACTOR;
 
+    // Severe/extreme alerts pulse the accent brighter, on top of the temp-driven color.
+    const pulse = getAlertPulseFactor(weatherData);
+    const pulseBoost = 1 + pulse * 0.35;
+    const accentR = Math.min(255, current.accentR * pulseBoost);
+    const accentG = Math.min(255, current.accentG * pulseBoost);
+    const accentB = Math.min(255, current.accentB * pulseBoost);
+
     const root = document.documentElement;
     root.style.setProperty(
         '--sky-dominant',
         `rgba(${Math.round(current.skyR)}, ${Math.round(current.skyG)}, ${Math.round(current.skyB)}, 0.6)`
     );
-    root.style.setProperty(
-        '--accent',
-        `${Math.round(current.accentR)}, ${Math.round(current.accentG)}, ${Math.round(current.accentB)}`
-    );
-    root.style.setProperty(
-        '--glow',
-        `rgba(${Math.round(current.accentR)}, ${Math.round(current.accentG)}, ${Math.round(current.accentB)}, 0.4)`
-    );
+    root.style.setProperty('--accent', `${Math.round(accentR)}, ${Math.round(accentG)}, ${Math.round(accentB)}`);
+    root.style.setProperty('--glow', `rgba(${Math.round(accentR)}, ${Math.round(accentG)}, ${Math.round(accentB)}, 0.4)`);
 }

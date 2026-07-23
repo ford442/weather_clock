@@ -105,6 +105,7 @@ export async function applyQualityTier(tier, scene3d) {
     resizeShadowMap(sunLight, config.shadowMapSize);
     resizeShadowMap(moonLight, config.moonShadowMapSize);
     await weatherEffects.setQuality?.(tier, config.particleDivisor);
+    await scene3d.groundEffects?.setQuality?.(tier, config.particleDivisor);
 }
 
 // Configuration constants
