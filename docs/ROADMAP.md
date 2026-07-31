@@ -28,6 +28,8 @@ When an issue closes, remove it from this document. Add new work to the issue tr
 
 ## Astronomical & Environmental Graphics Vision
 
+See the high-level [VISION.md](./VISION.md) for the overall intent.
+
 These items deepen the core philosophy of a mostly graphical representation of weather, light, and sky around the faux sundial. Prefer visual language over additional numeric HUD.
 
 - [#113 — Temporal weather narrative: storm leaving left, conditions arriving from right, day/night temperature cues](https://github.com/ford442/weather_clock/issues/113)
