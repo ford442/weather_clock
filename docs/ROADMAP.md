@@ -3,7 +3,7 @@
 This is the living index of planned work for Weather Clock. GitHub issues own requirements, discussion, and completion state; this page only groups the currently open work into a useful order.
 
 - [All open issues](https://github.com/ford442/weather_clock/issues?q=is%3Aissue%20state%3Aopen)
-- Last reconciled with the issue tracker: 2026-07-16
+- Last reconciled with the issue tracker: 2026-07-30
 
 When an issue closes, remove it from this document. Add new work to the issue tracker before adding it here so this file does not become a second backlog.
 
@@ -25,6 +25,29 @@ When an issue closes, remove it from this document. Add new work to the issue tr
 - [#91 — Living environment and surface response](https://github.com/ford442/weather_clock/issues/91)
 - [#92 — Alerts, air quality, UV, and pollen](https://github.com/ford442/weather_clock/issues/92)
 - [#96 — Photo mode and time-lapse export](https://github.com/ford442/weather_clock/issues/96)
+
+## Astronomical & Environmental Graphics Vision
+
+These items deepen the core philosophy of a mostly graphical representation of weather, light, and sky around the faux sundial. Prefer visual language over additional numeric HUD.
+
+- [#113 — Temporal weather narrative: storm leaving left, conditions arriving from right, day/night temperature cues](https://github.com/ford442/weather_clock/issues/113)
+  - Strengthen past/present/future storytelling so storms and cold leave to the left while warmer/clearer conditions and predicted temperature move in from the right.
+  - Nighttime approaching shows cooling with clear blue-vs-red cues; rising/falling/steady trends indicated graphically.
+  - Clouds form a continuous scene across the temporal zones.
+
+- [#114 — Earth–Sun distance modulation + refined moonlight / sunlight contrast](https://github.com/ford442/weather_clock/issues/114)
+  - Subtle modulation of solar intensity by current Earth–Sun distance.
+  - More delicate, phase- and angle-aware moonlight vs sunlight contrast.
+
+- [#115 — Accurate constellation and planet positions for the user's location](https://github.com/ford442/weather_clock/issues/115)
+  - Real constellation positions and major planets placed correctly for location + simulation time.
+  - Fade with daylight, twilight, and cloud cover.
+
+- [#116 — Graphical pressure and moisture visualization in scene + timeline](https://github.com/ford442/weather_clock/issues/116)
+  - Drive fog, haze, cloud softness, and timeline indicators from humidity and pressure so these factors are readable without relying solely on panels.
+
+- [#117 — Optional zodiacal / horoscopic layer for Moon, planets, and months](https://github.com/ford442/weather_clock/issues/117)
+  - Toggleable symbolic overlay (off by default) that can show traditional signs without compromising the photorealistic atmospheric experience.
 
 ## Research and performance experiments
 
