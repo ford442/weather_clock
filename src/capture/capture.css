@@ -1,0 +1,73 @@
+/* Capture mode + time-lapse progress UI */
+
+/* Hide all DOM overlays while capturing a photo frame. The WebGL canvas never
+   contains DOM, so this is purely a cosmetic flash-preview. */
+body.capture-mode #top-bar,
+body.capture-mode #center-overlay,
+body.capture-mode #panel-left,
+body.capture-mode #panel-right,
+body.capture-mode #panel-advanced,
+body.capture-mode #bottom-mini-bar,
+body.capture-mode #timeline-scrubber,
+body.capture-mode #alert-banner,
+body.capture-mode #dev-hint,
+body.capture-mode #toast-container,
+body.capture-mode #timeline-ui-container {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: none !important;
+}
+
+.timelapse-progress {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(10, 10, 20, 0.72);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    font:
+        500 12px/1 Inter,
+        system-ui,
+        sans-serif;
+    z-index: 10002;
+    box-shadow: 0 0 18px rgba(0, 0, 0, 0.45);
+}
+
+.timelapse-progress[hidden] {
+    display: none;
+}
+
+.timelapse-bar {
+    width: 140px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    overflow: hidden;
+}
+
+.timelapse-bar-fill {
+    width: 0%;
+    height: 100%;
+    background: var(--accent, #8ab4ff);
+    transition: width 0.15s linear;
+}
+
+.timelapse-cancel-btn {
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: transparent;
+    color: #fff;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.timelapse-cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+}

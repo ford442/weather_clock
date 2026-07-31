@@ -23,6 +23,7 @@ export class ModeController {
 
         this.currentMode = 'clock';
         this.isTransitioning = false;
+        this.locked = false; // blocks mode switching (e.g. during time-lapse recording)
         this.animationId = null;
         this.clockCameraState = {
             position: new THREE.Vector3(),
@@ -72,6 +73,11 @@ export class ModeController {
         if (this.state) this.state.reducedMotion = reducedMotion;
     }
 
+    /** Block/unblock all mode switching (button, T key, popstate) — used while recording a time-lapse. */
+    setLocked(locked) {
+        this.locked = locked;
+    }
+
     setForecastSceneLoader(loader) {
         this.forecastAdapter.setSceneLoader(loader);
     }
@@ -118,7 +124,7 @@ export class ModeController {
     }
 
     async switchMode(newMode) {
-        if (!MODES.includes(newMode) || newMode === this.currentMode || this.isTransitioning) return;
+        if (!MODES.includes(newMode) || newMode === this.currentMode || this.isTransitioning || this.locked) return;
 
         this.isTransitioning = true;
         this._crossFadeCenterOverlay();

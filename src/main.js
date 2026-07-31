@@ -50,6 +50,7 @@ import {
 } from './ui.js';
 import { AnimationController } from './animation.js';
 import { setupDebugAPI } from './debug.js';
+import { setupCapture } from './capture/index.js';
 import { AmbienceEngine } from './audio/AmbienceEngine.js';
 import { ModeController } from './ModeController.js';
 import { updateAtmosphereTheme } from './atmosphereTheme.js';
@@ -605,6 +606,7 @@ async function bootstrap() {
 
     // Init
     async function init() {
+        let capture = null;
         const applyReducedMotionPreference = (isReduced) => {
             state.reducedMotion = isReduced;
             document.body.classList.toggle('reduced-motion', isReduced);
@@ -615,6 +617,7 @@ async function bootstrap() {
             }
             weatherEffects.setReducedMotion?.(isReduced);
             modeController?.setReducedMotion?.(isReduced);
+            capture?.setReducedMotion(isReduced);
         };
 
         updateTimeDisplay(state.simulationTime, state.isTimeWarping);
@@ -647,6 +650,20 @@ async function bootstrap() {
                 ambientLight
             }
         );
+
+        // Photo mode + time-lapse export (buttons wire themselves; shortcuts
+        // go through the shared callbacks object).
+        capture = setupCapture({
+            state,
+            renderer,
+            pipeline,
+            animationController,
+            modeController,
+            showToast
+        });
+        callbacks.onCapturePhoto = capture.capturePhoto;
+        callbacks.onToggleTimelapse = capture.toggleTimelapse;
+        capture.setReducedMotion(state.reducedMotion);
 
         if (state.weatherData) {
             updateAtmosphereTheme(renderer, scene, state.weatherData);

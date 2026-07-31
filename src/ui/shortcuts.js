@@ -20,6 +20,12 @@ export function setupKeyboardShortcuts(callbacks) {
             case 'u':
                 callbacks.onToggleUnit?.();
                 break;
+            case 'p':
+                callbacks.onCapturePhoto?.();
+                break;
+            case 'l':
+                callbacks.onToggleTimelapse?.();
+                break;
         }
     });
 }

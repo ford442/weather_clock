@@ -68,6 +68,7 @@ The app has three viewing modes:
 | `debug.js` | Exposes `window.setDebugWeather(code)`, `window.setDebugTime(hour)`, and `window.aetherDebug` for runtime inspection. |
 | `ModeController.js`, `modes/` | Mode orchestration, adapters, camera transitions, UI visibility, and browser history for Clock, Timeline, and Forecast modes. |
 | `forecast/` | ForecastController + ForecastUI + DailyPreview (2D). New mode for immersive future-day vignettes. |
+| `capture/` | Photo mode + time-lapse export. `photo.js` renders one frame at 2× pixel ratio and captures it via same-task `canvas.toBlob()` (no `preserveDrawingBuffer`), composites a caption strip (`caption.js`), and shares/downloads (`share.js`). `timelapse.js` records a deterministic 00:00→24:00 sweep (720 fixed-timestep frames) via `MediaRecorder` on `canvas.captureStream()`. Shortcuts: `P` = photo, `L` = time-lapse (hidden under reduced motion). `ModeController.setLocked()` blocks mode switching while recording. |
 | `webgpu/` | Renderer capability detection/factory, WebGL and WebGPU post-processing adapters, and TSL/WebGPU material adapters. WebGL remains the fallback. |
 | `vendor/suncalc.js` | Vendored SunCalc library patched for ES module compatibility. |
 
@@ -220,7 +221,7 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 - **Splashes:** Small particle bursts spawn on the sundial surface when raindrops hit.
 
 ### Mode Switching
-`ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers.
+`ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
 
 ### Known Limitations
 - **Timeline accuracy placeholder:** `TimelineData.enrichWithAccuracy()` returns no data. `WeatherService.getPredictionAccuracy()` is implemented via the Open-Meteo Previous Runs API (day-1/day-3 MAE vs. observed temperatures over the last 24 h, shown in the Advanced drawer's Accuracy tab), but the timeline-mode accuracy rings are not yet wired up.

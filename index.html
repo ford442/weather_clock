@@ -97,6 +97,34 @@
                 </button>
             </div>
             <div class="top-bar-right">
+                <button id="photo-capture" class="mode-toggle-btn" title="Save photo (P)">
+                    <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                        <rect
+                            x="1.5"
+                            y="4.5"
+                            width="13"
+                            height="9"
+                            rx="1.5"
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-width="1.5"
+                        />
+                        <circle cx="8" cy="9" r="2.5" stroke="currentColor" fill="none" stroke-width="1.5" />
+                        <path
+                            d="M5.5 4.5 6.5 2.5h3l1 2"
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-width="1.5"
+                            stroke-linejoin="round"
+                        />
+                    </svg>
+                </button>
+                <button id="timelapse-record" class="mode-toggle-btn" title="Export time-lapse (L)">
+                    <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                        <circle cx="8" cy="8" r="6.5" stroke="currentColor" fill="none" stroke-width="1.5" />
+                        <circle cx="8" cy="8" r="2.5" fill="currentColor" />
+                    </svg>
+                </button>
                 <button
                     id="kiosk-toggle"
                     class="mode-toggle-btn"
@@ -457,6 +485,14 @@
         <!-- DEV hint -->
         <div id="dev-hint">` — toggle stats</div>
         <div id="toast-container"></div>
+
+        <!-- Time-lapse recording progress -->
+        <div id="timelapse-progress" class="timelapse-progress" hidden>
+            <span class="timelapse-label">Recording time-lapse</span>
+            <div class="timelapse-bar"><div id="timelapse-progress-fill" class="timelapse-bar-fill"></div></div>
+            <span id="timelapse-progress-pct">0%</span>
+            <button id="timelapse-cancel" class="timelapse-cancel-btn">Cancel</button>
+        </div>
 
         <script type="module" src="/src/main.js"></script>
         <script>
