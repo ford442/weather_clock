@@ -65,14 +65,18 @@ def required_setting(
 
 
 
-def fetch_remote_sizes(target_folder, target_site="test"):
-    """Ask the VPS for {rel_path: bytes} already on the deploy target."""
-    base = CONTABO_BASE_URL.rstrip("/")
-    url = f"{base}/api/deploy/{PROJECT_NAME}/sizes"
+def fetch_remote_sizes(
+    base_url: str,
+    project_name: str,
+    target_folder: str,
+    deploy_token: str,
+    target_site: str = "test",
+) -> dict[str, int]:
+    """Ask the deploy service for {rel_path: bytes} already on the target."""
+    url = f"{base_url.rstrip('/')}/api/deploy/{project_name}/sizes"
     headers = {}
-    token = globals().get("DEPLOY_TOKEN")
-    if token:
-        headers["X-Deploy-Token"] = token
+    if deploy_token:
+        headers["X-Deploy-Token"] = deploy_token
     params = {"target_site": target_site or "test"}
     if target_folder:
         params["target_folder"] = target_folder
@@ -120,12 +124,11 @@ def deploy_bundle(
     headers = {"X-Deploy-Token": deploy_token}
 
     print("Building zip archive...")
-    target_folder_for_sizes = globals().get("DEPLOY_FOLDER") or globals().get("TARGET_FOLDER") or PROJECT_NAME
-    if "target_folder" in locals() and target_folder:
-        target_folder_for_sizes = target_folder
-    target_site_for_sizes = globals().get("DEPLOY_TARGET", "test")
+    target_site = os.environ.get("DEPLOY_TARGET", "test").strip() or "test"
     print("Checking remote file sizes...")
-    skip_sizes = fetch_remote_sizes(target_folder_for_sizes, target_site_for_sizes)
+    skip_sizes = fetch_remote_sizes(
+        base_url, project_name, target_folder, deploy_token, target_site
+    )
     zip_bytes = build_zip(build_path, skip_sizes)
     print(f"Archive size: {len(zip_bytes) / 1024:.1f} KB\n")
 
