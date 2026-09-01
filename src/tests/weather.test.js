@@ -14,6 +14,26 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+// vitest's default 'node' environment has no global localStorage; provide a
+// minimal in-memory stand-in for tests that exercise the persistence path.
+function createFakeLocalStorage() {
+    const store = {};
+    return {
+        store,
+        getItem: (key) => (key in store ? store[key] : null),
+        setItem: (key, value) => {
+            store[key] = String(value);
+        },
+        removeItem: (key) => {
+            delete store[key];
+        },
+        key: (index) => Object.keys(store)[index] ?? null,
+        get length() {
+            return Object.keys(store).length;
+        }
+    };
+}
+
 describe('WeatherService', () => {
     it('should initialize with default location if geolocation fails', async () => {
         const service = new WeatherService();
@@ -190,6 +210,46 @@ describe('WeatherService', () => {
             expect(data.isCached).toBe(true);
             expect(data.isOffline).toBe(true);
             expect(fetch).toHaveBeenCalledTimes(1);
+        });
+
+        it('should evict the oldest localStorage entries once the cache cap is exceeded', () => {
+            const fakeStorage = createFakeLocalStorage();
+            vi.stubGlobal('localStorage', fakeStorage);
+
+            const service = new WeatherService();
+            service.setManualLocation(40.71, -74.01, 'Test City');
+
+            // Fill well past MAX_CACHE_ENTRIES (24) so eviction must kick in.
+            for (let i = 0; i < 30; i++) {
+                service.cache.clear(); // Force each read to come from localStorage.
+                service.setCache(`test-key-${i}`, { value: i });
+            }
+
+            const storedKeys = Object.keys(fakeStorage.store).filter((k) =>
+                k.startsWith('weatherclock_cache_v1_')
+            );
+            expect(storedKeys.length).toBeLessThanOrEqual(24);
+
+            // The most recently written entry must survive eviction.
+            expect(service.getFromCache('test-key-29')).not.toBeNull();
+            // The oldest entries should have been evicted.
+            expect(fakeStorage.getItem('weatherclock_cache_v1_test-key-0')).toBeNull();
+        });
+
+        it('should not throw when localStorage.setItem fails (e.g. quota exceeded)', () => {
+            const fakeStorage = createFakeLocalStorage();
+            fakeStorage.setItem = () => {
+                throw new DOMException('Quota exceeded', 'QuotaExceededError');
+            };
+            vi.stubGlobal('localStorage', fakeStorage);
+
+            const service = new WeatherService();
+            service.setManualLocation(40.71, -74.01, 'Test City');
+            const key = service.getCacheKey(40.71, -74.01);
+
+            expect(() => service.setCache(key, { test: 'data' })).not.toThrow();
+            // In-memory cache should still reflect the write even though persistence failed.
+            expect(service.cache.get(key)?.data).toEqual({ test: 'data' });
         });
     });
 

@@ -80,6 +80,27 @@ const PREF_KEYS = {
     ambienceMuted: 'weatherclock_ambience_muted'
 };
 
+// localStorage can throw (quota exceeded, private browsing, blocked storage)
+// on either the origin's own weather cache or another app sharing the
+// origin's quota. Preference persistence should never break the weather
+// display over that, so every access goes through these safe wrappers.
+function readPref(key) {
+    try {
+        return localStorage.getItem(key);
+    } catch (e) {
+        console.warn(`Failed to read preference "${key}":`, e);
+        return null;
+    }
+}
+
+function writePref(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch (e) {
+        console.warn(`Failed to save preference "${key}":`, e);
+    }
+}
+
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 async function bootstrap() {
     const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -123,7 +144,7 @@ async function bootstrap() {
     const ambienceEngine = new AmbienceEngine();
 
     const ambienceToggle = document.getElementById('ambience-toggle');
-    const storedMuted = localStorage.getItem(PREF_KEYS.ambienceMuted);
+    const storedMuted = readPref(PREF_KEYS.ambienceMuted);
     ambienceEngine.muted = storedMuted === null ? true : storedMuted === 'true';
 
     function updateAmbienceButton() {
@@ -139,17 +160,17 @@ async function bootstrap() {
         ambienceToggle.addEventListener('click', () => {
             ambienceEngine.ensureStarted();
             ambienceEngine.setMuted(!ambienceEngine.muted);
-            localStorage.setItem(PREF_KEYS.ambienceMuted, String(ambienceEngine.muted));
+            writePref(PREF_KEYS.ambienceMuted, String(ambienceEngine.muted));
             updateAmbienceButton();
         });
     }
 
     function loadPreferences() {
-        const lat = localStorage.getItem(PREF_KEYS.lat);
-        const lon = localStorage.getItem(PREF_KEYS.lon);
-        const location = localStorage.getItem(PREF_KEYS.location);
-        const unit = localStorage.getItem(PREF_KEYS.unit);
-        const windUnit = localStorage.getItem(PREF_KEYS.windUnit);
+        const lat = readPref(PREF_KEYS.lat);
+        const lon = readPref(PREF_KEYS.lon);
+        const location = readPref(PREF_KEYS.location);
+        const unit = readPref(PREF_KEYS.unit);
+        const windUnit = readPref(PREF_KEYS.windUnit);
 
         if (lat && lon && location) {
             weatherService.setManualLocation(lat, lon, location);
@@ -165,12 +186,12 @@ async function bootstrap() {
 
     function savePreferences() {
         if (weatherService.latitude) {
-            localStorage.setItem(PREF_KEYS.lat, String(weatherService.latitude));
-            localStorage.setItem(PREF_KEYS.lon, String(weatherService.longitude));
-            localStorage.setItem(PREF_KEYS.location, weatherService.location);
+            writePref(PREF_KEYS.lat, String(weatherService.latitude));
+            writePref(PREF_KEYS.lon, String(weatherService.longitude));
+            writePref(PREF_KEYS.location, weatherService.location);
         }
-        localStorage.setItem(PREF_KEYS.unit, weatherService.unit);
-        localStorage.setItem(PREF_KEYS.windUnit, weatherService.windUnit);
+        writePref(PREF_KEYS.unit, weatherService.unit);
+        writePref(PREF_KEYS.windUnit, weatherService.windUnit);
     }
 
     // Stats (hidden by default; backtick ` toggles)
