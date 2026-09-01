@@ -46,6 +46,7 @@ function manualChunks(id) {
 }
 
 export default defineConfig({
+    base: '/weather-clock/',
     server: {
         // Bind IPv4 as well as IPv6 so Cursor Cloud port forwarding (127.0.0.1)
         // and CI smoke tests can reach the dev server.
@@ -67,21 +68,21 @@ export default defineConfig({
                 theme_color: '#2E1A47',
                 background_color: '#050608',
                 display: 'fullscreen',
-                start_url: '/',
-                scope: '/',
+                start_url: '/weather-clock/',
+                scope: '/weather-clock/',
                 icons: [
                     {
-                        src: '/icon-192x192.png',
+                        src: 'icon-192x192.png',
                         sizes: '192x192',
                         type: 'image/png'
                     },
                     {
-                        src: '/icon-512x512.png',
+                        src: 'icon-512x512.png',
                         sizes: '512x512',
                         type: 'image/png'
                     },
                     {
-                        src: '/maskable-icon-512x512.png',
+                        src: 'maskable-icon-512x512.png',
                         sizes: '512x512',
                         type: 'image/png',
                         purpose: 'maskable'
