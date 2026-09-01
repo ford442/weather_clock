@@ -6,6 +6,12 @@ import {
     getRepresentativeTimeForDay
 } from './dailyForecast.js';
 
+// localStorage is shared by the whole origin (other apps on the same host
+// included), so the weather cache must stay bounded rather than growing
+// forever as the user visits new locations.
+const CACHE_STORAGE_PREFIX = 'weatherclock_cache_v1_';
+const MAX_CACHE_ENTRIES = 24;
+
 export class WeatherServiceError extends Error {
     constructor(message, status = null, endpoint = null, options = {}) {
         super(message);
@@ -663,7 +669,7 @@ export class WeatherService {
             // Try localStorage using a key-scoped entry so multiple cache types
             // (weather, daily, etc.) can coexist for the same location.
             try {
-                const storageStr = localStorage.getItem(`weatherclock_cache_v1_${key}`);
+                const storageStr = localStorage.getItem(`${CACHE_STORAGE_PREFIX}${key}`);
                 if (storageStr) {
                     cached = JSON.parse(storageStr);
                     if (cached) {
@@ -697,11 +703,23 @@ export class WeatherService {
         };
         this.cache.set(key, cacheEntry);
 
-        if (typeof localStorage !== 'undefined') {
+        if (typeof localStorage === 'undefined') return;
+
+        const storageKey = `${CACHE_STORAGE_PREFIX}${key}`;
+        const serialized = JSON.stringify(cacheEntry);
+
+        try {
+            this.#pruneStorageCache(MAX_CACHE_ENTRIES - 1, [storageKey]);
+            localStorage.setItem(storageKey, serialized);
+        } catch (e) {
+            console.error('Failed to write to localStorage cache, evicting oldest entries and retrying:', e);
             try {
-                localStorage.setItem(`weatherclock_cache_v1_${key}`, JSON.stringify(cacheEntry));
-            } catch (e) {
-                console.error('Failed to write to localStorage cache:', e);
+                // The quota may already be exhausted by other apps sharing this
+                // origin; evict more aggressively and retry once before giving up.
+                this.#pruneStorageCache(Math.floor(MAX_CACHE_ENTRIES / 2), [storageKey]);
+                localStorage.setItem(storageKey, serialized);
+            } catch (retryError) {
+                console.error('Failed to write to localStorage cache after eviction, giving up:', retryError);
             }
         }
     }
@@ -710,10 +728,43 @@ export class WeatherService {
         this.cache.delete(key);
         if (typeof localStorage !== 'undefined') {
             try {
-                localStorage.removeItem(`weatherclock_cache_v1_${key}`);
+                localStorage.removeItem(`${CACHE_STORAGE_PREFIX}${key}`);
             } catch (e) {
                 console.error('Failed to delete from localStorage cache:', e);
             }
+        }
+    }
+
+    /**
+     * Keep at most `maxRemaining` weather cache entries in localStorage,
+     * evicting the oldest ones first. `preserveKeys` are never evicted (used
+     * to protect the entry currently being written before its own count is
+     * reflected in storage).
+     */
+    #pruneStorageCache(maxRemaining, preserveKeys = []) {
+        const entries = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const storageKey = localStorage.key(i);
+            if (!storageKey || !storageKey.startsWith(CACHE_STORAGE_PREFIX)) continue;
+            if (preserveKeys.includes(storageKey)) continue;
+
+            let timestamp = 0;
+            try {
+                const parsed = JSON.parse(localStorage.getItem(storageKey));
+                timestamp = parsed?.timestamp ?? 0;
+            } catch {
+                // Malformed entry; evict it first by treating it as oldest.
+            }
+            entries.push({ storageKey, timestamp });
+        }
+
+        const overflow = entries.length - Math.max(0, maxRemaining);
+        if (overflow <= 0) return;
+
+        entries.sort((a, b) => a.timestamp - b.timestamp);
+        for (const { storageKey } of entries.slice(0, overflow)) {
+            localStorage.removeItem(storageKey);
+            this.cache.delete(storageKey.slice(CACHE_STORAGE_PREFIX.length));
         }
     }
 
