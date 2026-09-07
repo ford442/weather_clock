@@ -224,8 +224,19 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 `ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
 
 ### Known Limitations
-- **Timeline accuracy placeholder:** `TimelineData.enrichWithAccuracy()` returns no data. `WeatherService.getPredictionAccuracy()` is implemented via the Open-Meteo Previous Runs API (day-1/day-3 MAE vs. observed temperatures over the last 24 h, shown in the Advanced drawer's Accuracy tab), but the timeline-mode accuracy rings are not yet wired up.
-- **Hardcoded zone offsets:** The visual separation of temporal zones relies on hardcoded X offsets (e.g., `-8`, `0`, `8`) in multiple files. Changing scene scale requires updating these values consistently.
+- **Timeline accuracy placeholder:** `TimelineData.enrichWithAccuracy()` returns no data. `WeatherService.getPredictionAccuracy()` is implemented via the Open-Meteo Previous Runs API (day-1/day-3 MAE vs. observed temperatures over the last 24 h, shown in the Advanced drawer's Accuracy tab), but the timeline-mode accuracy rings are not yet wired up. Tracked as [#110](https://github.com/ford442/weather_clock/issues/110).
+- **Hardcoded zone offsets:** The visual separation of temporal zones relies on hardcoded X offsets (e.g., `-8`, `0`, `8`) in multiple files. Changing scene scale requires updating these values consistently. Tracked as [#109](https://github.com/ford442/weather_clock/issues/109) (centralize into a `SCENE_LAYOUT` config).
+
+### Known Issues / Blockers
+_Last verified 2026-09-07 by running `lint`, `typecheck`, and `format:check` directly — this section was stale relative to the code for ~32 days before this pass._
+
+- **CI is currently red** — [#108](https://github.com/ford442/weather_clock/issues/108) is open and matches what's actually failing right now:
+  - `npm run lint` → 2 errors in `src/ground.js:16` (`isWebGPU` and `snowMaskTexture` assigned but never used).
+  - `npm run typecheck` → 17 errors across 5 files: `src/audio/AmbienceEngine.js` (`webkitAudioContext` typo, missing `rainIntensity`/`windSpeed` on an untyped object), `src/effects/ground-effects.js` (`THREE` namespace not found — likely a missing type import), `src/weather-simulation.js` and `src/weatherLighting.js` (`aqi`/`airQuality` not on `WeatherSnapshot`), `src/webgpu/PostProcessingPipeline.js` (`setHeatShimmer` not in the post-processing adapter's type).
+  - `npm run format:check` → 5 files need a Prettier pass: `src/atmosphereTheme.js`, `src/audio/AmbienceEngine.js`, `src/effects/ground-effects.js`, `src/effects/lightning-bolt-system.js`, `src/tests/weather.test.js`.
+  - Anyone starting new work here should either fix #108 first or expect their own CI run to be noisy with pre-existing failures.
+- **WebGPU material stubs are incomplete** — [#111](https://github.com/ford442/weather_clock/issues/111) tracks finishing these; matches literal `// TODO` markers in `src/webgpu/materials/CloudMaterial.js:25`, `RainMaterial.js:26`, and `SplashMaterial.js:24` (volumetric lighting / distance-fade / ripple-ring TSL logic all deferred).
+- **`@ts-nocheck` on 20 files under `src/`** — [#106](https://github.com/ford442/weather_clock/issues/106) tracks removing these; `typecheck` above only surfaces errors in the files that have already lost their `@ts-nocheck`, so more type errors are likely hiding in the other 20 once each is turned back on.
 
 ---
 
