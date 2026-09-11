@@ -47,6 +47,7 @@ export function setupMoon() {
 
 export async function setupWeatherEffects(scene, sundial, camera, isWebGPU = false, renderer = null) {
     const quality = getQualityTier();
+    /** @type {{RainSystem: new (...args: any[]) => any, SnowSystem: new (...args: any[]) => any, SplashSystem: new (...args: any[]) => any}|null} */
     let gpuClasses = null;
     if (isWebGPU) {
         const [{ GPURainSystem }, { GPUSnowSystem }, { GPUSplashSystem }] = await Promise.all([

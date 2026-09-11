@@ -299,11 +299,11 @@ export class AnomalyCalculator {
      * Creates an ExtremeWeatherEvent object from a sequence of days.
      *
      * @private
-     * @param {DayData[]} sequence - Array of consecutive days
+     * @param {DayData[]} sequence - Array of consecutive days (zScore already populated by the caller)
      * @returns {ExtremeWeatherEvent} Formatted event object
      */
     _createEventFromSequence(sequence) {
-        const zScores = sequence.map((d) => d.zScore);
+        const zScores = sequence.map((d) => /** @type {number} */ (d.zScore));
         const maxZScore = Math.max(...zScores);
         const minZScore = Math.min(...zScores);
         const avgZScore = zScores.reduce((a, b) => a + b, 0) / zScores.length;
@@ -347,7 +347,7 @@ export class AnomalyCalculator {
      * Batch processes an array of days to add z-scores and anomalies.
      *
      * @param {DayData[]} days - Array of day data objects
-     * @returns {DayData[]} Array with added zScore and anomaly properties
+     * @returns {Array<DayData & {zScore: number, anomaly: number, classification: string}>} Array with added zScore and anomaly properties
      */
     processDays(days) {
         return days.map((day) => {

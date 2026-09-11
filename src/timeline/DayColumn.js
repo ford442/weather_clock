@@ -241,7 +241,7 @@ export class DayColumn {
         const canvas = document.createElement('canvas');
         canvas.width = 256;
         canvas.height = 128;
-        const ctx = canvas.getContext('2d');
+        const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
 
         const date = new Date(this.data.date + 'T00:00:00');
         const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
@@ -550,7 +550,7 @@ export class DayColumn {
             tempMax: this.data.tempMax,
             tempMin: this.data.tempMin,
             tempAvg: this.data.tempAvg,
-            tempAnomaly: this.data.tempAnomaly || this.data.anomaly,
+            tempAnomaly: this.data.tempAnomaly || this.data.anomaly || 0,
             zScore: this.data.zScore,
             weatherCode: this.data.weatherCode,
             condition: this.data.condition || getConditionFromCode(this.data.weatherCode),

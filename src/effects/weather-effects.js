@@ -73,6 +73,13 @@ export function getPrecipitationParticleBudget(quality, isWebGPU = false, diviso
 }
 
 export class WeatherEffects {
+    /**
+     * @param {THREE.Scene} scene
+     * @param {THREE.Group} sundialGroup
+     * @param {THREE.Camera} camera
+     * @param {EffectQuality} [quality]
+     * @param {{isWebGPU?: boolean, renderer?: THREE.WebGPURenderer|null, gpuClasses?: {SplashSystem: new (...args: any[]) => any, RainSystem: new (...args: any[]) => any, SnowSystem: new (...args: any[]) => any}|null}} [options]
+     */
     constructor(
         scene,
         sundialGroup,
@@ -108,7 +115,10 @@ export class WeatherEffects {
         this.scene.add(this.lightningLight);
         this.lightningBolts = new LightningBoltSystem(scene);
 
-        this.splashSystem = isWebGPU ? new gpuClasses.SplashSystem(scene, renderer) : new SplashSystem(scene);
+        // isWebGPU true implies gpuClasses was supplied by the caller.
+        this.splashSystem = isWebGPU
+            ? new /** @type {NonNullable<typeof gpuClasses>} */ (gpuClasses).SplashSystem(scene, renderer)
+            : new SplashSystem(scene);
         this._createQualitySystems(this._particleDivisorFor(quality));
     }
 
@@ -130,33 +140,51 @@ export class WeatherEffects {
         const dustCount = Math.floor(300 / divisor);
         const { past: pastZone, current: currZone, future: futureZone } = this._zones;
 
-        const RainClass = this.isWebGPU ? this.gpuClasses.RainSystem : RainSystem;
-        const SnowClass = this.isWebGPU ? this.gpuClasses.SnowSystem : SnowSystem;
+        // this.isWebGPU true implies this.gpuClasses was supplied by the caller (see constructor).
+        const gpuClasses = /** @type {NonNullable<typeof this.gpuClasses>} */ (this.gpuClasses);
+        const RainClass = this.isWebGPU ? gpuClasses.RainSystem : RainSystem;
+        const SnowClass = this.isWebGPU ? gpuClasses.SnowSystem : SnowSystem;
         this.pastRain = new RainClass(this.scene, pastZone, rainCount, this.renderer);
         this.pastSnow = new SnowClass(this.scene, pastZone, snowCount, this.renderer);
+        /** @type {CloudSystem} */
         this.pastCumulus = new CloudSystem(this.scene, this.camera, pastZone, cumulusCount, 'cumulus');
+        /** @type {CloudSystem} */
         this.pastStratus = new CloudSystem(this.scene, this.camera, pastZone, stratusCount, 'stratus');
+        /** @type {CloudSystem} */
         this.pastCirrus = new CloudSystem(this.scene, this.camera, pastZone, cirrusCount, 'cirrus');
+        /** @type {WindDustSystem} */
         this.pastDust = new WindDustSystem(this.scene, pastZone, dustCount);
+        /** @type {FogEffect} */
         this.pastFog = new FogEffect(this.scene, pastZone);
 
         this.currRain = new RainClass(this.scene, currZone, rainCount, this.renderer);
         this.currSnow = new SnowClass(this.scene, currZone, snowCount, this.renderer);
         this.currRain.setSplashSystem?.(this.splashSystem);
+        /** @type {CloudSystem} */
         this.currCumulus = new CloudSystem(this.scene, this.camera, currZone, cumulusCount, 'cumulus');
+        /** @type {CloudSystem} */
         this.currStratus = new CloudSystem(this.scene, this.camera, currZone, stratusCount, 'stratus');
+        /** @type {CloudSystem} */
         this.currCirrus = new CloudSystem(this.scene, this.camera, currZone, cirrusCount, 'cirrus');
+        /** @type {WindDustSystem} */
         this.currDust = new WindDustSystem(this.scene, currZone, dustCount);
+        /** @type {FogEffect} */
         this.currFog = new FogEffect(this.scene, currZone);
 
         this.futureRain = new RainClass(this.scene, futureZone, rainCount, this.renderer);
         this.futureSnow = new SnowClass(this.scene, futureZone, snowCount, this.renderer);
+        /** @type {CloudSystem} */
         this.futureCumulus = new CloudSystem(this.scene, this.camera, futureZone, cumulusCount, 'cumulus');
+        /** @type {CloudSystem} */
         this.futureStratus = new CloudSystem(this.scene, this.camera, futureZone, stratusCount, 'stratus');
+        /** @type {CloudSystem} */
         this.futureCirrus = new CloudSystem(this.scene, this.camera, futureZone, cirrusCount, 'cirrus');
+        /** @type {WindDustSystem} */
         this.futureDust = new WindDustSystem(this.scene, futureZone, dustCount);
+        /** @type {FogEffect} */
         this.futureFog = new FogEffect(this.scene, futureZone);
 
+        /** @type {any[]} */
         this._pastSystems = [
             this.pastRain,
             this.pastSnow,
@@ -166,6 +194,7 @@ export class WeatherEffects {
             this.pastDust,
             this.pastFog
         ];
+        /** @type {any[]} */
         this._currSystems = [
             this.currRain,
             this.currSnow,
@@ -175,6 +204,7 @@ export class WeatherEffects {
             this.currDust,
             this.currFog
         ];
+        /** @type {any[]} */
         this._futureSystems = [
             this.futureRain,
             this.futureSnow,
@@ -184,6 +214,7 @@ export class WeatherEffects {
             this.futureDust,
             this.futureFog
         ];
+        /** @type {any[]} */
         this._qualitySystems = [...this._pastSystems, ...this._currSystems, ...this._futureSystems];
 
         if (this._vignetteMode) this.setVignetteMode(true);

@@ -22,7 +22,7 @@ export function createCumulusTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
-    const ctx = canvas.getContext('2d');
+    const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
     ctx.clearRect(0, 0, size, size);
 
     const cx = size / 2,
@@ -109,7 +109,7 @@ export function createStratusTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
-    const ctx = canvas.getContext('2d');
+    const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
     ctx.clearRect(0, 0, size, size);
 
     // Wide soft base
@@ -172,7 +172,7 @@ export function createCirrusTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
-    const ctx = canvas.getContext('2d');
+    const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
     ctx.clearRect(0, 0, size, size);
 
     // Very thin wispy streaks
@@ -239,7 +239,7 @@ export function createFogTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
-    const ctx = canvas.getContext('2d');
+    const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
     ctx.clearRect(0, 0, size, size);
     const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
     grad.addColorStop(0, 'rgba(215, 225, 240, 0.55)');

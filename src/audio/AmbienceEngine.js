@@ -19,7 +19,13 @@ function createPinkNoiseBuffer(ctx, seconds = NOISE_BUFFER_SECONDS) {
     const length = Math.floor(ctx.sampleRate * seconds);
     const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
     const data = buffer.getChannelData(0);
-    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    let b0 = 0,
+        b1 = 0,
+        b2 = 0,
+        b3 = 0,
+        b4 = 0,
+        b5 = 0,
+        b6 = 0;
     for (let i = 0; i < length; i++) {
         const white = Math.random() * 2 - 1;
         b0 = 0.99886 * b0 + white * 0.0555179;
@@ -69,7 +75,8 @@ export class AmbienceEngine {
     }
 
     _buildGraph() {
-        const ctx = this.ctx;
+        // Only ever called from ensureStarted() immediately after this.ctx is assigned.
+        const ctx = /** @type {AudioContext} */ (this.ctx);
 
         this.master = ctx.createGain();
         this.master.gain.value = this.volume;
@@ -172,7 +179,8 @@ export class AmbienceEngine {
     _applyMute() {
         if (!this.ctx) return;
         const target = this.muted ? 0 : this.volume;
-        this.master.gain.setTargetAtTime(target, this.ctx.currentTime, 0.15);
+        // Guarded by this.ctx above; master is built alongside ctx in _buildGraph().
+        /** @type {GainNode} */ (this.master).gain.setTargetAtTime(target, this.ctx.currentTime, 0.15);
         if (this.muted) {
             this.ctx.suspend();
         } else if (document.visibilityState !== 'hidden') {
@@ -188,12 +196,15 @@ export class AmbienceEngine {
     setVolume(volume) {
         this.volume = clamp01(volume);
         if (this.started && !this.muted) {
-            this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.15);
+            // this.started implies _buildGraph() has run, so ctx/master are set.
+            const ctx = /** @type {AudioContext} */ (this.ctx);
+            /** @type {GainNode} */ (this.master).gain.setTargetAtTime(this.volume, ctx.currentTime, 0.15);
         }
     }
 
     _triggerThunder(intensity) {
-        const ctx = this.ctx;
+        // Only ever called from update() after a `!this.ctx` early return.
+        const ctx = /** @type {AudioContext} */ (this.ctx);
         const distance = 0.5 + Math.random() * 2.5; // seconds of flash→rumble gap
         const startAt = ctx.currentTime + distance;
 
@@ -210,14 +221,17 @@ export class AmbienceEngine {
         gain.gain.linearRampToValueAtTime(peak, startAt + 0.3);
         gain.gain.exponentialRampToValueAtTime(0.001, startAt + 2.2);
 
-        source.connect(lowpass).connect(gain).connect(this.master);
+        source
+            .connect(lowpass)
+            .connect(gain)
+            .connect(/** @type {GainNode} */ (this.master));
         source.start(startAt);
         source.stop(startAt + 2.3);
     }
 
     /**
      * @param {number} delta - seconds since last frame
-     * @param {WeatherSnapshot} weather - current interpolated weather snapshot (rainIntensity, windSpeed)
+     * @param {WeatherSnapshot|null|undefined} weather - current interpolated weather snapshot (rainIntensity, windSpeed)
      * @param {number} sunElevationNorm - sun height roughly in -1 (deep night) .. 1 (noon)
      * @param {number} lightningFlash - current flash intensity (0 when idle)
      */
@@ -227,22 +241,31 @@ export class AmbienceEngine {
         const t = ctx.currentTime;
         const smoothing = 0.4;
 
+        // Guarded by the `!this.started || !this.ctx` early return above; all graph
+        // nodes below are built together with ctx in _buildGraph().
+        const rainGain = /** @type {GainNode} */ (this.rainGain);
+        const rainFilter = /** @type {BiquadFilterNode} */ (this.rainFilter);
+        const windGain = /** @type {GainNode} */ (this.windGain);
+        const windFilter = /** @type {BiquadFilterNode} */ (this.windFilter);
+        const birdGain = /** @type {GainNode} */ (this.birdGain);
+        const cricketGain = /** @type {GainNode} */ (this.cricketGain);
+
         const rainIntensity = clamp01(weather?.rainIntensity ?? 0);
-        this.rainGain.gain.setTargetAtTime(rainIntensity * 0.7, t, smoothing);
-        this.rainFilter.frequency.setTargetAtTime(2000 + rainIntensity * 3000, t, smoothing);
+        rainGain.gain.setTargetAtTime(rainIntensity * 0.7, t, smoothing);
+        rainFilter.frequency.setTargetAtTime(2000 + rainIntensity * 3000, t, smoothing);
 
         const windSpeed = Math.max(0, weather?.windSpeed ?? 0);
         const windNorm = clamp01(windSpeed / 50);
-        this.windGain.gain.setTargetAtTime(windNorm * 0.5, t, smoothing);
-        this.windFilter.frequency.setTargetAtTime(150 + windNorm * 1500, t, smoothing);
+        windGain.gain.setTargetAtTime(windNorm * 0.5, t, smoothing);
+        windFilter.frequency.setTargetAtTime(150 + windNorm * 1500, t, smoothing);
 
         // Diurnal bed: birds gate in the hour after sunrise, crickets after dusk.
         const dayFactor = sunElevationNorm ?? 0;
         const birdWindow = dayFactor > -0.05 && dayFactor < 0.4 ? 1 - Math.abs((dayFactor - 0.17) / 0.23) : 0;
-        this.birdGain.gain.setTargetAtTime(clamp01(birdWindow) * 0.12, t, smoothing);
+        birdGain.gain.setTargetAtTime(clamp01(birdWindow) * 0.12, t, smoothing);
 
         const nightGate = dayFactor < -0.05 ? clamp01(-dayFactor * 4) : 0;
-        this.cricketGain.gain.setTargetAtTime(nightGate * 0.1, t, smoothing);
+        cricketGain.gain.setTargetAtTime(nightGate * 0.1, t, smoothing);
 
         // Rising edge of a lightning flash → schedule a distant rumble.
         if (lightningFlash > 0.05 && this._lastFlash <= 0.05 && t > this._nextThunderAt) {

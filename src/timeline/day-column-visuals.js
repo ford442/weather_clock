@@ -389,14 +389,17 @@ export class MiniParticleSystem {
     }
 
     updateRain(_delta, _time) {
+        const velocities = this.velocities;
+        if (!velocities) return;
+
         const positions = this.mesh.geometry.attributes.position.array;
 
-        for (let i = 0; i < this.velocities.length; i++) {
+        for (let i = 0; i < velocities.length; i++) {
             const i6 = i * 6;
 
             // Move rain down
-            positions[i6 + 1] += this.velocities[i];
-            positions[i6 + 4] += this.velocities[i];
+            positions[i6 + 1] += velocities[i];
+            positions[i6 + 4] += velocities[i];
 
             // Reset if below bottom
             if (positions[i6 + 1] < -2.5) {
@@ -495,7 +498,10 @@ export class AccuracyRing {
     }
 
     init() {
-        const { skill } = this.accuracy;
+        // skill is null when there's not enough data to score (legitimate no-data
+        // case); treat it as 0 (lowest accuracy) which is also what `null` coerces
+        // to in the arithmetic comparisons below, so this is behavior-preserving.
+        const skill = this.accuracy.skill ?? 0;
 
         // Color based on skill score
         // Green (>0.7): Highly accurate

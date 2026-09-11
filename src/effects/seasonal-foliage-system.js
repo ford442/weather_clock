@@ -82,7 +82,9 @@ export class SeasonalFoliageSystem {
             this._resetLeaf(i, positions, velocities);
         }
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        /** @type {Float32Array} */
         this._leafPositions = positions;
+        /** @type {Float32Array} */
         this._leafVelocities = velocities;
 
         const material = new THREE.PointsMaterial({

@@ -48,9 +48,8 @@ export class GroundEffects {
     async init() {
         if (this.isWebGPU) {
             const { createGroundMaterialWebGPU } = await import('../webgpu/materials/GroundMaterial.js');
-            const { createSnowNodeMaterial, createFrostNodeMaterial } = await import(
-                '../webgpu/materials/weather-node-patches.js'
-            );
+            const { createSnowNodeMaterial, createFrostNodeMaterial } =
+                await import('../webgpu/materials/weather-node-patches.js');
 
             const groundMat = await createGroundMaterialWebGPU(this._snowNoiseTexture, this.reflection.texture);
             this.ground.material.dispose();

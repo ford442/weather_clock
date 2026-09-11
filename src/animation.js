@@ -24,6 +24,11 @@ const ANIMATION_CONFIG = {
 };
 
 export class AnimationController {
+    /**
+     * @param {AppState} state
+     * @param {{weatherService: import('./weather.js').WeatherService, astronomyService: import('./astronomy.js').AstronomyService, ambienceEngine?: import('./audio/AmbienceEngine.js').AmbienceEngine}} services
+     * @param {Object} scene3d
+     */
     constructor(state, services, scene3d) {
         this.state = state;
         this.services = services;
@@ -152,6 +157,7 @@ export class AnimationController {
                     window.aetherPerf = this.performanceMetrics;
 
                     if (avgFps < 30) {
+                        /** @type {'medium'|'low'|null} */
                         let nextTier = null;
                         if (currentTier === 'high') {
                             nextTier = 'medium';
@@ -190,6 +196,7 @@ export class AnimationController {
         // ── Sundial / Astro / normal updates (skipped when actively driving a forecast vignette) ──
         const mc = this.modeController;
         const inForecastVignette = !!(mc && mc.isForecastMode && mc.isForecastMode() && mc._focusedForecast);
+        /** @type {ReturnType<import('./astronomy.js').AstronomyService['update']>|null} */
         let astroData = null;
         if (!inForecastVignette) {
             sundial.update(state.simulationTime);
@@ -220,14 +227,20 @@ export class AnimationController {
         }
 
         // Get active weather data (skip heavy path in forecast vignette)
+        /** @type {ReturnType<typeof getActiveWeatherData>} */
         let activeWeatherData = null;
         if (!inForecastVignette) {
             activeWeatherData = getActiveWeatherData(state.simulationTime, state.weatherData);
         }
 
         if (activeWeatherData) {
+            // activeWeatherData is only ever set alongside astroData, both gated by
+            // the same `!inForecastVignette` check above, so astroData is guaranteed
+            // non-null here even though TS can't correlate the two variables.
+            const astro = /** @type {NonNullable<typeof astroData>} */ (astroData);
+
             // Lighting
-            if (astroData.sunPosition.lengthSq() > 0) {
+            if (astro.sunPosition.lengthSq() > 0) {
                 updateWeatherLighting(
                     scene,
                     sunLight,
@@ -239,7 +252,7 @@ export class AnimationController {
                         past: activeWeatherData.past,
                         forecast: activeWeatherData.forecast
                     },
-                    astroData
+                    astro
                 );
             }
 
@@ -265,7 +278,7 @@ export class AnimationController {
 
             // ── Ground/sundial weather reactions (snow, wetness/reflection, foliage, frost) ──
             if (shouldUpdateReducedMotionEffects) {
-                groundEffects.update(activeWeatherData.current, state.simulationTime, delta, astroData);
+                groundEffects.update(activeWeatherData.current, state.simulationTime, delta, astro);
                 const shimmer = groundEffects.computeHeatShimmer(activeWeatherData.current);
                 const tierAllowsShimmer = getQualityTier() !== 'low';
                 pipeline.setHeatShimmer?.({
@@ -280,8 +293,8 @@ export class AnimationController {
                     {
                         ...state.weatherData,
                         current: activeWeatherData.current,
-                        past: activeWeatherData.past,
-                        forecast: activeWeatherData.forecast
+                        past: activeWeatherData.past ?? undefined,
+                        forecast: activeWeatherData.forecast ?? undefined
                     },
                     weatherService
                 );
@@ -293,7 +306,7 @@ export class AnimationController {
                 this._lastThemeMs = nowMs;
 
                 // dayFactor: normalised sin of sun altitude (-1 night … +1 noon)
-                const dayFactor = astroData.sunPosition.y / 20;
+                const dayFactor = astro.sunPosition.y / 20;
                 const weatherSeverity = activeWeatherData.current?.severity ?? 0;
 
                 // tempTrend: how much warmer/cooler today is vs the same date last year

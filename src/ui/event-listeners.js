@@ -14,15 +14,15 @@
  */
 export function setupEventListeners(callbacks, modeController) {
     const retryBtn = document.getElementById('retry-location');
-    if (retryBtn) retryBtn.addEventListener('click', callbacks.onRetryLocation);
+    if (retryBtn) retryBtn.addEventListener('click', (e) => callbacks.onRetryLocation?.(e));
 
     const unitToggle = document.getElementById('unit-toggle');
     if (unitToggle) {
-        unitToggle.addEventListener('click', callbacks.onToggleUnit);
+        unitToggle.addEventListener('click', () => callbacks.onToggleUnit?.());
         unitToggle.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                callbacks.onToggleUnit();
+                callbacks.onToggleUnit?.();
             }
         });
     }
@@ -88,7 +88,7 @@ export function setupEventListeners(callbacks, modeController) {
                 const rect = track.getBoundingClientRect();
                 const x = ev.clientX - rect.left;
                 const pct = Math.max(0, Math.min(1, x / rect.width));
-                callbacks.onScrub(pct);
+                callbacks.onScrub?.(pct);
             };
 
             const onUp = () => {
@@ -105,7 +105,7 @@ export function setupEventListeners(callbacks, modeController) {
             if (e.target === playhead || (e.target instanceof Node && playhead.contains(e.target))) return;
             const rect = track.getBoundingClientRect();
             const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-            callbacks.onScrub(pct);
+            callbacks.onScrub?.(pct);
         });
     }
 
@@ -135,7 +135,7 @@ export function setupEventListeners(callbacks, modeController) {
     const nearbyTabBtn = document.querySelector('.tab-btn[data-tab="nearby"]');
     if (nearbyTabBtn && callbacks.onLoadNearby) {
         nearbyTabBtn.addEventListener('click', () => {
-            callbacks.onLoadNearby();
+            callbacks.onLoadNearby?.();
         });
     }
 }

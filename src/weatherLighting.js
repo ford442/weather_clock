@@ -29,8 +29,12 @@ export function getDayFactor(sunY) {
     return (sunY + twilightRange) / (twilightRange * 2);
 }
 
+/**
+ * @param {Date|null} [date]
+ * @param {number} [lat]
+ */
 function getSeasonalWarmth(date = new Date(), lat = 40.7128) {
-    const d = date instanceof Date ? date : new Date(date);
+    const d = date instanceof Date ? date : new Date(/** @type {any} */ (date));
     const start = new Date(d.getFullYear(), 0, 0);
     const dayOfYear = Math.floor((d.getTime() - start.getTime()) / 86400000);
     const northernWarmth = (Math.sin(((dayOfYear - 80) / 365) * Math.PI * 2) + 1) / 2;
@@ -48,7 +52,7 @@ function getVisibilityHaze(visibility = 10000) {
  * keeps the established live lighting formula.
  * @param {WeatherSnapshot} weatherSnap
  * @param {Object|null} [astroData]
- * @param {{date?: Date, lat?: number}} [options]
+ * @param {{date?: Date|null, lat?: number}} [options]
  * @returns {AtmosphereUniforms}
  */
 export function deriveDailyAtmosphere(weatherSnap, astroData = null, options = {}) {

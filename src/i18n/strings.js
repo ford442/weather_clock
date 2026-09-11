@@ -123,6 +123,7 @@ function baseLanguage(tag) {
         .toLowerCase();
 }
 
+/** @type {string|null} */
 let currentLocale = null;
 
 /** Resolve the active locale: explicit override > browser language > fallback. */

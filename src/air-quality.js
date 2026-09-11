@@ -57,7 +57,8 @@ export function getDominantPollen(pollen) {
     if (!pollen) return null;
     const entries = Object.entries(pollen).filter(([, v]) => v != null && !Number.isNaN(v));
     if (entries.length === 0) return null;
-    const [type, value] = entries.reduce((a, b) => (b[1] > a[1] ? b : a));
+    // Already filtered to non-null/non-NaN values above.
+    const [type, value] = entries.reduce((a, b) => ((b[1] ?? -Infinity) > (a[1] ?? -Infinity) ? b : a));
     return { type, value, ...getPollenSeverity(value) };
 }
 

@@ -135,7 +135,9 @@ export class TTLCache {
 
             let timestamp = 0;
             try {
-                const parsed = JSON.parse(localStorage.getItem(storageKey));
+                // getItem() can race to null between the key() lookup above and here;
+                // JSON.parse(null) coerces to "null" and parses to `null`, same as our catch fallback.
+                const parsed = JSON.parse(/** @type {string} */ (localStorage.getItem(storageKey)));
                 timestamp = parsed?.timestamp ?? 0;
             } catch {
                 // Malformed entry; evict it first by treating it as oldest.

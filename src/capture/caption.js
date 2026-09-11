@@ -40,7 +40,7 @@ export function compositeCaption(source, lines, scale = 1) {
     const out = document.createElement('canvas');
     out.width = width;
     out.height = height;
-    const ctx = out.getContext('2d');
+    const ctx = /** @type {CanvasRenderingContext2D} */ (out.getContext('2d'));
     ctx.drawImage(source, 0, 0);
 
     const stripHeight = CAPTURE_CONFIG.captionStripHeightPx * scale;

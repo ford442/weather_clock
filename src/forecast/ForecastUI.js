@@ -324,7 +324,7 @@ export class ForecastUI {
             });
             return;
         }
-        this.visibilityObserver = new IntersectionObserver(
+        const observer = new IntersectionObserver(
             (entries) => {
                 entries.forEach((entry) => {
                     if (entry.target instanceof HTMLElement) {
@@ -337,6 +337,7 @@ export class ForecastUI {
                 threshold: 0.05
             }
         );
-        this.cards.forEach((card) => this.visibilityObserver.observe(card));
+        this.visibilityObserver = observer;
+        this.cards.forEach((card) => observer.observe(card));
     }
 }

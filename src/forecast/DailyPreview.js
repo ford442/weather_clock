@@ -45,8 +45,8 @@ export function renderDailyPreview(
     // Background sky gradient (rough time of day + cloud factor)
     const snap = buildDailySceneSnapshot(dayData, repDate);
     const effectConfig = buildWeatherEffectConfig(snap, 'thumbnail');
-    const cloud = snap.cloudCover;
-    const code = snap.weatherCode;
+    const cloud = snap.cloudCover ?? 0;
+    const code = snap.weatherCode ?? 0;
     const isNight = (repDate && (repDate.getHours() < 6 || repDate.getHours() > 20)) || false;
 
     let top = isNight ? '#0b1020' : '#1e3a8a';

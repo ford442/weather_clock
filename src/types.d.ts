@@ -49,6 +49,13 @@ interface WeatherSnapshot {
     aqi?: number | null;
 }
 
+/** WeatherSnapshot after weather-simulation.js#ensureIntensities() has populated its precipitation intensities. */
+interface WeatherSnapshotWithIntensities extends WeatherSnapshot {
+    rainIntensity: number;
+    snowIntensity: number;
+    fogIntensity: number;
+}
+
 interface DailyForecastDay {
     date: string;
     weatherCode: number;

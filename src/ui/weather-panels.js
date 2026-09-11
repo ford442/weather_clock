@@ -20,15 +20,15 @@ export function setReducedMotionPreference(reducedMotion) {
  * Aggregate panel data consumed by {@link updateWeatherDisplay}. Assembled by
  * main.js from WeatherService + AstronomyService + timeline accuracy output.
  * @typedef {Object} WeatherDisplayData
- * @property {string} [location]
+ * @property {string|null} [location]
  * @property {WeatherSnapshot} [current]
  * @property {WeatherSnapshot} [past]
  * @property {WeatherSnapshot} [forecast]
  * @property {Date|string} [sunrise]
  * @property {Date|string} [sunset]
- * @property {{temp?: number, description?: string}} [historicalYearAgo]
- * @property {ClockForecastAccuracy} [accuracy]
- * @property {Array<{name: string, temp: number}>} [regional]
+ * @property {{temp?: number, description?: string}|null} [historicalYearAgo]
+ * @property {ClockForecastAccuracy|null} [accuracy]
+ * @property {Array<{name: string, temp: number}>|null} [regional]
  */
 
 // ── countTo: rAF-driven number animation (800 ms, ease-out cubic) ──────────
@@ -49,7 +49,7 @@ export function countTo(el, newVal, suffix = '') {
         return;
     }
 
-    if (_countState.has(el)) cancelAnimationFrame(_countState.get(el));
+    if (_countState.has(el)) cancelAnimationFrame(/** @type {number} */ (_countState.get(el)));
 
     if (prefersReducedMotion) {
         el.textContent = newVal + suffix;
@@ -138,7 +138,7 @@ export function updateWeatherDisplay(data, weatherService) {
         setText('past-description', data.past.description);
         setTemp('past-temp', data.past.temp);
         setTemp('past-feels-like', data.past.apparentTemp ?? data.past.temp);
-        const pastWindConverted = weatherService.convertWind(data.past.windSpeed);
+        const pastWindConverted = weatherService.convertWind(data.past.windSpeed ?? 0);
         const wind = document.getElementById('past-wind');
         if (wind) {
             if (!prefersReducedMotion) {
@@ -212,8 +212,8 @@ export function updateWeatherDisplay(data, weatherService) {
             if (accuracyTabBtn.classList.contains('active')) {
                 accuracyTabBtn.classList.remove('active');
                 document.querySelector('.tab-btn[data-tab="history"]')?.classList.add('active');
-                document.getElementById('tab-accuracy').classList.remove('active');
-                document.getElementById('tab-history').classList.add('active');
+                document.getElementById('tab-accuracy')?.classList.remove('active');
+                document.getElementById('tab-history')?.classList.add('active');
             }
         }
     }
@@ -256,10 +256,10 @@ export function updateSceneSummary(data, weatherService) {
     if (!el || !data?.current) return;
 
     const unit = weatherService.unit === 'imperial' ? 'F' : 'C';
-    const temp = formatNumber(Math.round(weatherService.convertTemp(data.current.temp)), {
+    const temp = formatNumber(Math.round(weatherService.convertTemp(data.current.temp ?? 0)), {
         maximumFractionDigits: 0
     });
-    const precipProb = data.current.precipProb ?? data.forecast?.precipProb;
+    const precipProb = data.current.precipProb ?? data.forecast?.precipProb ?? 0;
     const precip = precipProb > 20 ? `${Math.round(precipProb)}% chance of precipitation` : '';
     const sunset = data.sunset ? formatTime12(new Date(data.sunset)) : '';
 
@@ -374,7 +374,7 @@ export function updateAirQualityDisplay(airQuality) {
         const category = getUsAqiCategory(airQuality?.usAqi);
         if (category) {
             aqiEl.hidden = false;
-            aqiEl.textContent = `AQI ${Math.round(airQuality.usAqi)}`;
+            aqiEl.textContent = `AQI ${Math.round(/** @type {number} */ (airQuality?.usAqi))}`;
             aqiEl.title = category.label;
             aqiEl.style.setProperty('--badge-color', category.color);
             aqiEl.style.setProperty('--badge-rgb', hexToRgbTriplet(category.color));
@@ -390,7 +390,7 @@ export function updateAirQualityDisplay(airQuality) {
             pollenEl.hidden = false;
             pollenEl.textContent = `Pollen: ${dominant.label}`;
             pollenEl.title = `${dominant.type} pollen: ${dominant.label}`;
-            pollenEl.style.setProperty('--badge-color', dominant.color);
+            pollenEl.style.setProperty('--badge-color', dominant.color ?? null);
             pollenEl.style.setProperty('--badge-rgb', hexToRgbTriplet(dominant.color));
         } else {
             pollenEl.hidden = true;

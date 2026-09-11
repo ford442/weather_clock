@@ -30,7 +30,9 @@ function subdivide(p1, p2, depth, spread, out, isBranch = false) {
         const branchEnd = mid
             .clone()
             .lerp(p2, 0.3 + Math.random() * 0.3)
-            .add(new THREE.Vector3((Math.random() - 0.5) * spread * 2, -spread * 0.5, (Math.random() - 0.5) * spread * 2));
+            .add(
+                new THREE.Vector3((Math.random() - 0.5) * spread * 2, -spread * 0.5, (Math.random() - 0.5) * spread * 2)
+            );
         subdivide(mid, branchEnd, Math.max(0, depth - 2), spread * 0.5, out, true);
     }
 

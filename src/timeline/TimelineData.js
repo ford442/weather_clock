@@ -703,13 +703,23 @@ export class TimelineData {
      * @returns {TimelineHourlyPoint|WeatherSnapshot}
      */
     getWeatherSnapshotForDay(dayData, representativeDate = null) {
-        if (!dayData || !Array.isArray(dayData.hourly) || dayData.hourly.length === 0) {
+        if (!dayData) {
+            // No day data at all; return an empty/minimal snapshot.
+            return {
+                weatherCode: 0,
+                cloudCover: 50,
+                windSpeed: 10,
+                temp: undefined,
+                description: this.simplifyWeatherCondition(0)
+            };
+        }
+        if (!Array.isArray(dayData.hourly) || dayData.hourly.length === 0) {
             // Synthesize minimal from daily
             return {
                 weatherCode: dayData.weatherCode || 0,
                 cloudCover: 50,
                 windSpeed: 10,
-                temp: dayData.tempAvg,
+                temp: dayData.tempAvg ?? undefined,
                 description: this.simplifyWeatherCondition(dayData.weatherCode || 0)
             };
         }

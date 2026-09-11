@@ -439,8 +439,9 @@ export class WeatherService {
         ];
 
         const promises = offsets.map(async (offset) => {
-            const rLat = this.latitude + offset.lat;
-            const rLon = this.longitude + offset.lon;
+            // Only called after the Nearby tab is opened, by which point a location fetch has run.
+            const rLat = /** @type {number} */ (this.latitude) + offset.lat;
+            const rLon = /** @type {number} */ (this.longitude) + offset.lon;
             try {
                 const data = await this.#fetchJSON(
                     forecastUrl(rLat, rLon, { current: 'temperature_2m,weather_code', timezone: 'auto' })
@@ -622,7 +623,7 @@ export class WeatherService {
      * @param {DailyForecastDay} day - Normalized daily forecast object
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
-     * @returns {Date}
+     * @returns {Date|null}
      */
     getDailyForecastRepresentativeTime(day, lat, lon) {
         if (!day || !day.date) return null;

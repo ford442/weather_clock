@@ -83,8 +83,12 @@ export class ForecastModeAdapter {
         const location = this.owner.getCurrentLocation();
         const prefetchedDaily = this.owner.state?.weatherData?.dailyForecast || null;
         if (!prefetchedDaily?.length) this.ui?.renderLoading?.();
-        await this.controller.loadData(location.lat, location.lon, prefetchedDaily);
-        if (this.controller.days.length) this.controller.focusDay(0);
+        // init() above guarantees this.controller is set at this point.
+        const controller = /** @type {import('../forecast/ForecastController.js').ForecastController} */ (
+            this.controller
+        );
+        await controller.loadData(location.lat, location.lon, prefetchedDaily);
+        if (controller.days.length) controller.focusDay(0);
 
         const fromPosition = this.owner.camera.position.clone();
         const fromTarget = this.owner.controls.target.clone();

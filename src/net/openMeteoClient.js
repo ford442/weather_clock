@@ -7,6 +7,12 @@
  */
 
 export class WeatherServiceError extends Error {
+    /**
+     * @param {string} message
+     * @param {number|null} [status]
+     * @param {string|null} [endpoint]
+     * @param {{code?: string, isOffline?: boolean, cause?: unknown}} [options]
+     */
     constructor(message, status = null, endpoint = null, options = {}) {
         super(message);
         this.name = 'WeatherServiceError';

@@ -225,9 +225,7 @@ describe('WeatherService', () => {
                 service.setCache(`test-key-${i}`, { value: i });
             }
 
-            const storedKeys = Object.keys(fakeStorage.store).filter((k) =>
-                k.startsWith('weatherclock_cache_v1_')
-            );
+            const storedKeys = Object.keys(fakeStorage.store).filter((k) => k.startsWith('weatherclock_cache_v1_'));
             expect(storedKeys.length).toBeLessThanOrEqual(24);
 
             // The most recently written entry must survive eviction.

@@ -125,8 +125,9 @@ export class TimelineUI {
      * @param {(column: import('./DayColumn.js').DayColumn) => void} onSelect
      */
     setDayProxies(dayColumns, onSelect) {
-        if (!this.dayProxyList) return;
-        this.dayProxyList.innerHTML = '';
+        const dayProxyList = this.dayProxyList;
+        if (!dayProxyList) return;
+        dayProxyList.innerHTML = '';
         (dayColumns || []).forEach((column, i) => {
             const data = column.getData ? column.getData() : column.data;
             const date = data?.date ? new Date(data.date) : null;
@@ -158,7 +159,7 @@ export class TimelineUI {
             btn.addEventListener('focus', () => column.setHovered?.(true));
             btn.addEventListener('blur', () => column.setHovered?.(false));
 
-            this.dayProxyList.appendChild(btn);
+            dayProxyList.appendChild(btn);
         });
     }
 
@@ -487,34 +488,62 @@ export class TimelineUI {
     showDayDetails(dayData) {
         if (!dayData) return;
 
+        // Cached elements are always present once cacheElements() has run against
+        // the fixed template above; guard defensively so a missing element is a
+        // no-op rather than a crash (matches hideDayDetails()'s pattern below).
+        const {
+            detailDate,
+            detailHigh,
+            detailLow,
+            detailCondition,
+            detailAnomaly,
+            detailAccuracy,
+            accuracyValue,
+            detailPanel
+        } = this;
+        if (
+            !detailDate ||
+            !detailHigh ||
+            !detailLow ||
+            !detailCondition ||
+            !detailAnomaly ||
+            !detailAccuracy ||
+            !accuracyValue ||
+            !detailPanel
+        ) {
+            return;
+        }
+
         // Format date
         const date = new Date(dayData.date);
         const dateStr = formatDate(date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
         // Update content
-        this.detailDate.textContent = dateStr;
-        this.detailHigh.textContent = `${Math.round(dayData.tempMax)}°`;
-        this.detailLow.textContent = `${Math.round(dayData.tempMin)}°`;
-        this.detailCondition.textContent = this.formatCondition(dayData.condition);
+        detailDate.textContent = dateStr;
+        detailHigh.textContent = `${Math.round(dayData.tempMax ?? 0)}°`;
+        detailLow.textContent = `${Math.round(dayData.tempMin ?? 0)}°`;
+        detailCondition.textContent = this.formatCondition(dayData.condition);
 
         // Anomaly display
         const anomaly = dayData.tempAnomaly;
         const anomalySign = anomaly > 0 ? '+' : '';
-        this.detailAnomaly.textContent = `${anomalySign}${anomaly.toFixed(1)}° from normal`;
-        this.detailAnomaly.className = 'detail-anomaly' + (anomaly > 0 ? ' positive' : anomaly < 0 ? ' negative' : '');
+        detailAnomaly.textContent = `${anomalySign}${anomaly.toFixed(1)}° from normal`;
+        detailAnomaly.className = 'detail-anomaly' + (anomaly > 0 ? ' positive' : anomaly < 0 ? ' negative' : '');
 
         // Accuracy (only for historical days with predictions)
         if (dayData.accuracy) {
-            this.detailAccuracy.style.display = 'block';
-            const accuracyPercent = Math.round(dayData.accuracy.tempScore * 100);
-            this.accuracyValue.textContent = `${accuracyPercent}%`;
-            this.accuracyValue.style.color = this.getAccuracyColor(accuracyPercent);
+            detailAccuracy.style.display = 'block';
+            // tempScore is always set alongside accuracy by enrichWithAccuracy().
+            const tempScore = /** @type {number} */ (dayData.accuracy.tempScore);
+            const accuracyPercent = Math.round(tempScore * 100);
+            accuracyValue.textContent = `${accuracyPercent}%`;
+            accuracyValue.style.color = this.getAccuracyColor(accuracyPercent);
         } else {
-            this.detailAccuracy.style.display = 'none';
+            detailAccuracy.style.display = 'none';
         }
 
         // Show panel
-        this.detailPanel.classList.add('visible');
+        detailPanel.classList.add('visible');
     }
 
     /**

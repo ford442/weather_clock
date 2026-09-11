@@ -46,6 +46,14 @@ export function getDailyScenePreset(quality = 'focused') {
     return QUALITY_PRESETS[quality] || QUALITY_PRESETS.focused;
 }
 
+/**
+ * @param {TimelineDayData|DailyForecastDay} day
+ * @param {import('./astronomy.js').AstronomyService} astronomyService
+ * @param {number} lat
+ * @param {number} lon
+ * @param {Date|string|number|null} [representativeTime]
+ * @returns {Date}
+ */
 export function getRepresentativeTimeForDailyScene(day, astronomyService, lat, lon, representativeTime = null) {
     if (representativeTime instanceof Date) return new Date(representativeTime);
     if (typeof representativeTime === 'string' || typeof representativeTime === 'number') {
@@ -69,19 +77,36 @@ export function getRepresentativeTimeForDailyScene(day, astronomyService, lat, l
     return astronomyService.getSolarNoon(baseDate, lat, lon);
 }
 
+/**
+ * @param {TimelineDayData|DailyForecastDay|null|undefined} day
+ * @param {Date|null} [representativeTime]
+ * @returns {WeatherSnapshot & {effectConfig: EffectConfig}}
+ */
 export function buildDailySceneSnapshot(day, representativeTime = null) {
-    const source = day || {};
+    // day may come from either the 21-day timeline or the 10-day forecast strip,
+    // which use different field names for some overlapping concepts (e.g.
+    // cloudCover vs meanCloudCover) — read defensively from the union of both,
+    // plus a few legacy field-name fallbacks kept for older cached payloads.
+    const source =
+        /**
+         * @type {Partial<TimelineDayData> & Partial<DailyForecastDay> &
+         *   {meanCloudCover?: number, windSpeed?: number, precipitationSum?: number, temperature?: number}}
+         */
+        (day || {});
     const hour = representativeTime instanceof Date ? representativeTime.getHours() : 12;
     const hourly =
-        Array.isArray(source.hourly) && source.hourly.length
-            ? source.hourly.reduce((best, item) => {
-                  const itemDate = item?.time ? new Date(item.time) : null;
-                  const itemHour = itemDate && Number.isFinite(itemDate.getTime()) ? itemDate.getHours() : hour;
-                  const bestDate = best?.time ? new Date(best.time) : null;
-                  const bestHour = bestDate && Number.isFinite(bestDate.getTime()) ? bestDate.getHours() : hour;
-                  return Math.abs(itemHour - hour) < Math.abs(bestHour - hour) ? item : best;
-              }, source.hourly[0])
-            : {};
+        /** @type {Partial<TimelineHourlyPoint> & Partial<WeatherSnapshot>} */
+        (
+            Array.isArray(source.hourly) && source.hourly.length
+                ? source.hourly.reduce((best, item) => {
+                      const itemDate = item?.time ? new Date(item.time) : null;
+                      const itemHour = itemDate && Number.isFinite(itemDate.getTime()) ? itemDate.getHours() : hour;
+                      const bestDate = best?.time ? new Date(best.time) : null;
+                      const bestHour = bestDate && Number.isFinite(bestDate.getTime()) ? bestDate.getHours() : hour;
+                      return Math.abs(itemHour - hour) < Math.abs(bestHour - hour) ? item : best;
+                  }, source.hourly[0])
+                : {}
+        );
 
     const weatherCode = source.weatherCode ?? hourly.weatherCode ?? 0;
     const cloudCover = clamp(hourly.cloudCover ?? source.cloudCover ?? source.meanCloudCover ?? 35, 0, 100);
@@ -103,7 +128,7 @@ export function buildDailySceneSnapshot(day, representativeTime = null) {
         windSpeed,
         windDirection,
         visibility,
-        temp: hourly.temp ?? source.tempMax ?? source.temperature ?? null,
+        temp: hourly.temp ?? source.tempMax ?? source.temperature ?? undefined,
         severity: getSeverity(weatherCode),
         rain,
         showers,
