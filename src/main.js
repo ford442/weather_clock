@@ -81,8 +81,20 @@ const PREF_KEYS = {
     location: 'weatherclock_location',
     unit: 'weatherclock_unit',
     windUnit: 'weatherclock_wind_unit',
-    ambienceMuted: 'weatherclock_ambience_muted'
+    ambienceMuted: 'weatherclock_ambience_muted',
+    nightSky: 'weatherclock_night_sky'
 };
+
+/**
+ * Night-sky overlay levels, cycled with `C`. Stars themselves are always on —
+ * this only controls how much extra scaffolding is drawn over them.
+ * @type {readonly {constellations: boolean, labels: boolean, toast: 'nightSkyOff'|'nightSkyLines'|'nightSkyLabels'}[]}
+ */
+const NIGHT_SKY_LEVELS = Object.freeze([
+    { constellations: false, labels: false, toast: 'nightSkyOff' },
+    { constellations: true, labels: false, toast: 'nightSkyLines' },
+    { constellations: true, labels: true, toast: 'nightSkyLabels' }
+]);
 
 // localStorage can throw (quota exceeded, private browsing, blocked storage)
 // on either the origin's own weather cache or another app sharing the
@@ -431,6 +443,24 @@ async function bootstrap() {
     }
 
     // UI Event Callbacks
+    // Night sky overlays: stars and planets always render, the constellation
+    // scaffolding is opt-in so the sky does not get cluttered.
+    let nightSkyLevel = (() => {
+        const saved = readPref(PREF_KEYS.nightSky);
+        if (saved === null) return 1;
+        const level = Number(saved);
+        return Number.isInteger(level) && level >= 0 && level < NIGHT_SKY_LEVELS.length ? level : 1;
+    })();
+
+    function applyNightSkyLevel() {
+        const level = NIGHT_SKY_LEVELS[nightSkyLevel];
+        weatherEffects.setSkyLayers?.({
+            constellations: level.constellations,
+            labels: level.labels,
+            planets: true
+        });
+    }
+
     function setupUICallbacks() {
         return {
             onRetryLocation: async () => {
@@ -458,6 +488,13 @@ async function bootstrap() {
             },
 
             onSetQuality: (tier) => changeQuality(tier),
+
+            onCycleNightSky: () => {
+                nightSkyLevel = (nightSkyLevel + 1) % NIGHT_SKY_LEVELS.length;
+                applyNightSkyLevel();
+                writePref(PREF_KEYS.nightSky, String(nightSkyLevel));
+                showToast(t(NIGHT_SKY_LEVELS[nightSkyLevel].toast));
+            },
 
             onSearch: async (query) => {
                 if (!query) return;
@@ -666,6 +703,8 @@ async function bootstrap() {
         reducedMotionQuery.addEventListener('change', (event) => {
             applyReducedMotionPreference(event.matches);
         });
+
+        applyNightSkyLevel();
 
         const callbacks = setupUICallbacks();
         setupEventListeners(callbacks, modeController);

@@ -5,7 +5,8 @@ export function createStarFieldMaterial() {
     return new THREE.ShaderMaterial({
         uniforms: {
             uTime: { value: 0 },
-            uOpacity: { value: 0.0 }
+            uOpacity: { value: 0.0 },
+            uHorizonRadius: { value: 1.0 }
         },
         vertexShader: starFieldVertexShader,
         fragmentShader: starFieldFragmentShader,
@@ -21,6 +22,10 @@ export function createStarFieldMaterial() {
  * Parity notes vs. the WebGL shader pair above:
  *  - Twinkle uses the same position hash and the same `0.7 + 0.3 * sin(t * 2 + hash * 100)`
  *    curve, so both backends shimmer at the same rate and depth.
+ *  - Both fade stars out through the horizon using world-space Y over
+ *    `uHorizonRadius`, so the half of the catalog that is underfoot never shines
+ *    up through the ground.
+ *  - Star colour comes from the same `aColor` attribute the WebGL path reads.
  *  - The per-star `size` attribute cannot drive point size here: Three's WebGPU backend
  *    renders `THREE.Points` as 1-pixel point primitives and ignores `sizeNode`
  *    (see PointsNodeMaterial docs). Star size is folded into brightness instead, so
@@ -29,20 +34,22 @@ export function createStarFieldMaterial() {
  *    has no sprite UV to shape.
  *
  * Drive it through `material.userData.starUniforms`, which mirrors the shape of the
- * WebGL material's `uniforms` block (`{ uTime: { value }, uOpacity: { value } }`).
+ * WebGL material's `uniforms` block.
  */
 export async function createStarFieldMaterialWebGPU() {
     const { PointsNodeMaterial } = await import('three/webgpu');
-    const { attribute, float, positionLocal, sin, uniform, vec3 } = await import('three/tsl');
+    const { attribute, float, positionLocal, positionWorld, sin, smoothstep, uniform } = await import('three/tsl');
 
     const uTime = uniform(0);
     const uOpacity = uniform(0);
+    const uHorizonRadius = uniform(1);
 
     const hash = sin(positionLocal.x.mul(12.9898).add(positionLocal.y.mul(78.233)).add(positionLocal.z.mul(45.164)));
     const twinkle = float(0.7).add(sin(uTime.mul(2.0).add(hash.mul(100.0))).mul(0.3));
+    const horizon = smoothstep(-0.03, 0.04, positionWorld.y.div(uHorizonRadius.max(1.0)));
 
-    // Geometry sizes run 0.5–2.0; map that onto a 0.35–1.0 brightness range.
-    const brightness = attribute('size', 'float').div(2.0).clamp(0.35, 1.0);
+    // Geometry sizes run ~1–9; map that onto a 0.35–1.0 brightness range.
+    const brightness = attribute('size', 'float').div(9.0).clamp(0.35, 1.0);
 
     const material = new PointsNodeMaterial({
         transparent: true,
@@ -51,8 +58,8 @@ export async function createStarFieldMaterialWebGPU() {
     });
     // Blended, not coverage-based: alpha-to-coverage would quantise the twinkle.
     material.alphaToCoverage = false;
-    material.colorNode = vec3(1, 1, 1);
-    material.opacityNode = uOpacity.mul(twinkle).mul(brightness);
-    material.userData.starUniforms = { uTime, uOpacity };
+    material.colorNode = attribute('aColor', 'vec3');
+    material.opacityNode = uOpacity.mul(twinkle).mul(brightness).mul(horizon);
+    material.userData.starUniforms = { uTime, uOpacity, uHorizonRadius };
     return material;
 }

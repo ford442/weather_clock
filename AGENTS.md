@@ -73,6 +73,8 @@ The app has three viewing modes:
 | `forecast/` | ForecastController + ForecastUI + DailyPreview (2D). New mode for immersive future-day vignettes. |
 | `capture/` | Photo mode + time-lapse export. `photo.js` renders one frame at 2× pixel ratio and captures it via same-task `canvas.toBlob()` (no `preserveDrawingBuffer`), composites a caption strip (`caption.js`), and shares/downloads (`share.js`). `timelapse.js` records a deterministic 00:00→24:00 sweep (720 fixed-timestep frames) via `MediaRecorder` on `canvas.captureStream()`. Shortcuts: `P` = photo, `L` = time-lapse (hidden under reduced motion). `ModeController.setLocked()` blocks mode switching while recording. |
 | `webgpu/` | Renderer capability detection/factory, WebGL and WebGPU post-processing adapters, and TSL/WebGPU material adapters. WebGL remains the fallback. Rain/snow/splash are the exception: they are separate per-backend classes, not dual-material adapters — see `docs/WEBGPU_ARCHITECTURE.md`. |
+| `sky/` | Night-sky astronomy, all pure math with no Three.js: `celestialCoordinates.js` (Julian dates, sidereal time, IAU 1976 precession, equatorial→horizontal, and the single rotation matrix that maps the whole equatorial catalog into the scene frame), `starCatalog.js` (~190 bright stars at J2000 plus 37 stylized constellation figures and B–V→RGB tinting), and `planets.js` (JPL approximate Keplerian elements for Mercury–Neptune, geocentric RA/Dec and apparent magnitude, accurate to well under 1°). |
+| `effects/star-field.js` | The night-sky layer. Real stars in true positions, constellation lines, and the naked-eye planets, all parented to one group whose matrix carries observer latitude + local sidereal time — so per-star alt/az is never recomputed. Fades with twilight, cloud cover, and a light-pollution knob; constellations/labels toggle with `C`. |
 | `vendor/suncalc.js` | Vendored SunCalc library patched for ES module compatibility. |
 
 ### Timeline Subsystem (`src/timeline/`)
@@ -86,6 +88,7 @@ The app has three viewing modes:
 
 ### Tests (`src/tests/`)
 - Unit tests cover astronomy, weather, forecast logic, rendering quality/recovery, weather effects, and lighting.
+- `nightSky.test.js` cross-checks the star/planet astronomy against independent references: the Sun's ecliptic longitude at known equinox/solstice instants (within ~1.5 arcminutes), SunCalc's own sun position, Polaris sitting at the observer's latitude, and the scene rotation matrix agreeing with the alt/az formula to 12 decimals.
 
 ### Shaders (`shaders/`)
 - Experimental WGSL compute shaders: `rain-compute.wgsl`, `snow-compute.wgsl`, `splash-compute.wgsl`, `cloud-post.wgsl`, `star-field.wgsl`.
@@ -192,6 +195,9 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
      window.aetherDebug.getWeatherData();
      window.aetherDebug.getSunPosition();
      window.aetherDebug.getMoonPosition();
+     window.aetherDebug.getPlanetPositions();   // RA/Dec + apparent magnitude per planet
+     window.aetherDebug.getNightSkyState();     // observer, cloud cover, overlay toggles
+     window.aetherDebug.setLightPollution(0.8); // wash the faint stars out
      ```
 
 5. **CI must stay green**

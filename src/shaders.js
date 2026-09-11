@@ -175,12 +175,15 @@ export const cloudShaderInjection = {
 export const starFieldVertexShader = `
 uniform float uTime;
 uniform float uOpacity;
+uniform float uHorizonRadius;
 attribute float size;
+attribute vec3 aColor;
 varying float vOpacity;
+varying vec3 vColor;
 
 void main() {
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_Position = projectionMatrix * mvPosition;
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
 
     // Twinkle logic: Random offset based on position
     float random = sin(position.x * 12.9898 + position.y * 78.233 + position.z * 45.164);
@@ -188,13 +191,20 @@ void main() {
     // Twinkle speed and intensity
     float twinkle = 0.7 + 0.3 * sin(uTime * 2.0 + random * 100.0);
 
-    vOpacity = uOpacity * twinkle;
+    // The catalog covers the whole celestial sphere, so half of it is underfoot
+    // at any moment. Fade it out through the horizon instead of letting stars
+    // shine up through the ground.
+    float horizon = smoothstep(-0.03, 0.04, worldPosition.y / max(1.0, uHorizonRadius));
+
+    vOpacity = uOpacity * twinkle * horizon;
+    vColor = aColor;
     gl_PointSize = size;
 }
 `;
 
 export const starFieldFragmentShader = `
 varying float vOpacity;
+varying vec3 vColor;
 void main() {
     if (vOpacity <= 0.01) discard;
 
@@ -207,6 +217,6 @@ void main() {
     float strength = 1.0 - (dist * 2.0);
     strength = pow(strength, 1.5);
 
-    gl_FragColor = vec4(1.0, 1.0, 1.0, vOpacity * strength);
+    gl_FragColor = vec4(vColor, vOpacity * strength);
 }
 `;

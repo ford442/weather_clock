@@ -7,7 +7,8 @@
  *   onPause?: () => void,
  *   onToggleUnit?: () => void,
  *   onCapturePhoto?: () => void,
- *   onToggleTimelapse?: () => void
+ *   onToggleTimelapse?: () => void,
+ *   onCycleNightSky?: () => void
  * }} callbacks
  */
 export function setupKeyboardShortcuts(callbacks) {
@@ -35,6 +36,9 @@ export function setupKeyboardShortcuts(callbacks) {
                 break;
             case 'l':
                 callbacks.onToggleTimelapse?.();
+                break;
+            case 'c':
+                callbacks.onCycleNightSky?.();
                 break;
         }
     });
