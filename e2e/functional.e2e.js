@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { launchApp, mockExternalAPIs, buildForecastDays } from './helpers.js';
+import {
+    launchApp,
+    mockExternalAPIs,
+    mockHealthData,
+    mockSearchResult,
+    searchForLocation,
+    buildForecastDays
+} from './helpers.js';
 
 /**
  * Functional e2e specs — cheap behavior checks beyond screenshots.
@@ -112,5 +119,81 @@ test.describe('functional', () => {
         // The badge becomes visible together with the FPS stats on backtick.
         await page.keyboard.press('`');
         await expect(page.locator('#quality-stats-badge')).toBeVisible();
+    });
+
+    test('health drawer and chips render mocked AQI / UV / pollen', async ({ page }) => {
+        await mockHealthData(page, { current: { uv_index: 9 } });
+        await mockSearchResult(page, {
+            displayName: 'New York, United States',
+            lat: '40.7128',
+            lon: '-74.006',
+            countryCode: 'us'
+        });
+        await launchApp(page);
+        // Searching re-runs the weather + air-quality load for the selected place.
+        await searchForLocation(page, 'New York');
+        await expect(page.locator('#location')).toHaveText('New York', { timeout: 30_000 });
+
+        // Chips: a US location leads with the US index.
+        const aqiChip = page.locator('#current-aqi');
+        await expect(aqiChip).toBeVisible({ timeout: 30_000 });
+        await expect(aqiChip).toHaveText('AQI 82');
+        await expect(aqiChip).toHaveAttribute('title', 'US AQI: Moderate');
+
+        const pollenChip = page.locator('#current-pollen');
+        await expect(pollenChip).toBeVisible();
+        await expect(pollenChip).toHaveText('Pollen: High');
+
+        await expect(page.locator('#current-uv')).toHaveText('UV 9');
+
+        // Health tab of the advanced drawer.
+        await page.locator('#panel-advanced .tab-btn[data-tab="health"]').click();
+        await expect(page.locator('#tab-health')).toHaveClass(/active/);
+
+        await expect(page.locator('#health-uv-value')).toHaveText('9');
+        await expect(page.locator('#health-uv-label')).toContainText('Very High');
+
+        await expect(page.locator('#health-aqi-us-value')).toHaveText('82');
+        await expect(page.locator('#health-aqi-us-label')).toHaveText('Moderate');
+        await expect(page.locator('#health-aqi-eu-value')).toHaveText('38');
+        await expect(page.locator('#health-aqi-eu-label')).toHaveText('Fair');
+        await expect(page.locator('#health-aqi-us')).toHaveClass(/primary-scale/);
+        await expect(page.locator('#health-aqi-eu')).not.toHaveClass(/primary-scale/);
+
+        await expect(page.locator('#health-pm25')).toContainText('12.3');
+        await expect(page.locator('#health-pm10')).toContainText('24.5');
+        await expect(page.locator('#health-ozone')).toContainText('68');
+
+        const rows = page.locator('#health-pollen-list .pollen-row');
+        await expect(rows).toHaveCount(3);
+        await expect(rows.filter({ hasText: 'Grass' }).locator('.pollen-row-value')).toHaveText('High');
+
+        // The pollen motes fade in for the high grass-pollen reading (55 grains/m³).
+        await expect
+            .poll(
+                () =>
+                    page.evaluate(() => {
+                        const pollen = window.aetherDebug.weatherEffects.currPollen;
+                        return pollen ? pollen.mesh.visible && pollen.mesh.material.opacity : null;
+                    }),
+                { timeout: 20_000 }
+            )
+            .toBeTruthy();
+    });
+
+    test('European AQI leads outside US-scale countries', async ({ page }) => {
+        await mockHealthData(page);
+        await launchApp(page);
+
+        // The default Nominatim fixture is London (country_code "gb").
+        await searchForLocation(page, 'London');
+        await expect(page.locator('#location')).toHaveText('London', { timeout: 30_000 });
+
+        await expect(page.locator('#current-aqi')).toHaveText('EU AQI 38', { timeout: 30_000 });
+        await expect(page.locator('#current-aqi')).toHaveAttribute('title', 'European AQI: Fair');
+
+        await page.locator('#panel-advanced .tab-btn[data-tab="health"]').click();
+        await expect(page.locator('#health-aqi-eu')).toHaveClass(/primary-scale/);
+        await expect(page.locator('#health-aqi-us')).not.toHaveClass(/primary-scale/);
     });
 });

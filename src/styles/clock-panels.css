@@ -233,6 +233,84 @@
     opacity: 0.8;
     color: var(--text-secondary);
 }
+.health-section + .health-section {
+    margin-top: 14px;
+}
+.health-aqi-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 6px 0;
+}
+.health-aqi {
+    border: 1px solid var(--panel-border, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    padding: 6px 4px;
+}
+.health-aqi.primary-scale {
+    border-color: var(--accent-text-rgb, rgba(255, 255, 255, 0.45));
+    background: rgba(255, 255, 255, 0.06);
+}
+.health-aqi-scale {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    color: var(--text-secondary);
+}
+.health-aqi-value {
+    font-size: 20px;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+}
+.health-pollutants {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin: 0;
+    font-size: 12px;
+}
+.health-pollutants dt {
+    opacity: 0.7;
+    color: var(--text-secondary);
+}
+.health-pollutants dd {
+    margin: 2px 0 0;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+}
+.health-pollen-list {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+    text-align: left;
+}
+.pollen-row {
+    display: grid;
+    grid-template-columns: 6.5em 1fr 5em;
+    align-items: center;
+    gap: 8px;
+}
+.pollen-row-name {
+    color: var(--text-secondary);
+}
+.pollen-row-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+.pollen-row-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+.pollen-row-value {
+    text-align: right;
+    font-weight: 600;
+}
+
 .regional-list {
     font-size: 13px;
     text-align: left;

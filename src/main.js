@@ -46,7 +46,8 @@ import {
     setupKeyboardShortcuts,
     setReducedMotionPreference,
     updateAirQualityDisplay,
-    updateAlertBanner
+    updateAlertBanner,
+    updateHealthPanel
 } from './ui.js';
 import { t, formatTime, formatTemp } from './i18n/strings.js';
 import { AnimationController } from './animation.js';
@@ -468,6 +469,7 @@ async function bootstrap() {
                     if (results && results.length > 0) {
                         const best = results[0];
                         const isUS = best.address?.country_code === 'us';
+                        weatherService.countryCode = best.address?.country_code ?? null;
                         weatherService.setWindUnit(isUS ? 'imperial' : 'metric');
                         weatherService.setManualLocation(best.lat, best.lon, best.display_name.split(',')[0]);
 
@@ -574,7 +576,8 @@ async function bootstrap() {
                 state.weatherData.airQuality = airQuality;
                 state.weatherData.alerts = alerts;
             }
-            updateAirQualityDisplay(airQuality);
+            updateAirQualityDisplay(airQuality, weatherService.countryCode);
+            updateHealthPanel(airQuality, state.weatherData?.current?.uvIndex, weatherService.countryCode);
             updateAlertBanner(alerts);
         } catch (error) {
             console.warn('Failed to load air quality / alerts:', error);

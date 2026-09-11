@@ -1,3 +1,5 @@
+import { getAlertTier, getAlertTierTheme } from './air-quality.js';
+
 // ── Smooth interpolation state ──
 const target = {
     skyR: 10,
@@ -145,15 +147,20 @@ function clampAccentForContrast(color, background = PANEL_BG_REFERENCE) {
     return { r, g, b };
 }
 
-// A severe/extreme active alert pulses --accent brightness at this rate.
-const ALERT_PULSE_SEVERITIES = new Set(['Severe', 'Extreme']);
+// Active alerts pulse --accent brightness. Watch / warning / emergency each get
+// their own pulse rate and amplitude (see getAlertTierTheme).
+const TIER_RANK = { watch: 0, warning: 1, emergency: 2 };
 
-function getAlertPulseFactor(weatherData) {
+function getAlertPulse(weatherData) {
     const alerts = weatherData?.alerts;
-    if (!alerts || alerts.length === 0) return 0;
-    const hasPulseAlert = alerts.some((a) => ALERT_PULSE_SEVERITIES.has(a.severity));
-    if (!hasPulseAlert) return 0;
-    return (Math.sin(performance.now() * 0.004) + 1) / 2; // 0..1
+    if (!alerts || alerts.length === 0) return { factor: 0, boost: 0 };
+    const tier = alerts.map((a) => getAlertTier(a)).reduce((a, b) => (TIER_RANK[b] > TIER_RANK[a] ? b : a), 'watch');
+    const theme = getAlertTierTheme(tier);
+    if (!theme.pulse) {
+        // A watch is a steady, slightly warmer accent rather than a pulse.
+        return { factor: 1, boost: theme.accentBoost };
+    }
+    return { factor: (Math.sin(performance.now() * theme.pulseSpeed) + 1) / 2, boost: theme.accentBoost };
 }
 
 /**
@@ -189,9 +196,10 @@ export function updateAtmosphereTheme(renderer, scene, weatherData) {
     current.accentG += (target.accentG - current.accentG) * LERP_FACTOR;
     current.accentB += (target.accentB - current.accentB) * LERP_FACTOR;
 
-    // Severe/extreme alerts pulse the accent brighter, on top of the temp-driven color.
-    const pulse = getAlertPulseFactor(weatherData);
-    const pulseBoost = 1 + pulse * 0.35;
+    // Active alerts brighten the accent on top of the temp-driven color: a steady
+    // lift for a watch, a pulse (faster for an emergency) for warnings and above.
+    const pulse = getAlertPulse(weatherData);
+    const pulseBoost = 1 + pulse.factor * pulse.boost;
     const accentR = Math.min(255, current.accentR * pulseBoost);
     const accentG = Math.min(255, current.accentG * pulseBoost);
     const accentB = Math.min(255, current.accentB * pulseBoost);

@@ -636,12 +636,13 @@ body.time-warping .time-display {
 }
 
 .uv-badge {
-    background: rgba(255, 200, 50, 0.15);
-    border: 1px solid rgba(255, 200, 50, 0.3);
+    /* Tinted by the WHO UV category once a reading arrives (see weather-panels.js). */
+    background: rgba(var(--badge-rgb, 255, 200, 50), 0.15);
+    border: 1px solid rgba(var(--badge-rgb, 255, 200, 50), 0.3);
     border-radius: 8px;
     padding: 1px 7px;
     font-size: 11px;
-    color: #ffd060;
+    color: var(--badge-color, #ffd060);
     font-weight: 600;
 }
 
@@ -717,6 +718,28 @@ body.time-warping .time-display {
 
 .alert-banner.pulse {
     animation: alert-banner-pulse 1.6s ease-in-out infinite;
+}
+
+/* Emergencies pulse faster than warnings; watches don't pulse at all. */
+.alert-banner.pulse.pulse-fast {
+    animation-duration: 0.8s;
+}
+
+.alert-banner[data-alert-tier='watch'] {
+    background: rgba(232, 216, 74, 0.14);
+    border-color: rgba(232, 216, 74, 0.4);
+    color: #fdf6cf;
+}
+
+.alert-banner[data-alert-tier='emergency'] {
+    background: rgba(224, 54, 74, 0.2);
+    border-color: rgba(224, 54, 74, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .alert-banner.pulse {
+        animation: none;
+    }
 }
 
 @keyframes alert-banner-pulse {

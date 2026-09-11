@@ -1,5 +1,6 @@
 // Weather simulation: interpolation and data management
 import { getSeverity } from './weatherLighting.js';
+import { getPollenIntensity } from './air-quality.js';
 
 /**
  * Ensure weather data object has rainIntensity, snowIntensity, and fogIntensity
@@ -192,6 +193,8 @@ export function getActiveWeatherData(simulationTime, weatherData) {
     // Air quality is only ever "current" (no hourly/forecast timeline for it), so it's
     // attached directly rather than interpolated like the rest of `current`.
     current.aqi = weatherData.airQuality?.usAqi ?? null;
+    current.europeanAqi = weatherData.airQuality?.europeanAqi ?? null;
+    current.pollenIntensity = getPollenIntensity(weatherData.airQuality?.pollen);
 
     return {
         current,

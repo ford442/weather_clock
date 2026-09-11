@@ -1,7 +1,18 @@
 import { calculateMoonPhase } from '../moonPhase.js';
 import { drawPressureGauge } from './gauge.js';
 import { formatTime12 } from './time-display.js';
-import { getUsAqiCategory, getDominantPollen, getAlertSeverityStyle, isPulseSeverity } from '../air-quality.js';
+import {
+    getUsAqiCategory,
+    getEuropeanAqiCategory,
+    getPrimaryAqi,
+    getDominantPollen,
+    getPollenSeverity,
+    getUvCategory,
+    getAlertSeverityStyle,
+    getAlertTier,
+    getAlertTierTheme,
+    isPulseSeverity
+} from '../air-quality.js';
 import { t, formatNumber, formatTemp } from '../i18n/strings.js';
 
 function hexToRgbTriplet(hex) {
@@ -123,7 +134,16 @@ export function updateWeatherDisplay(data, weatherService) {
         setTemp('current-feels-like', data.current.apparentTemp ?? data.current.temp);
 
         const uvEl = document.getElementById('current-uv');
-        if (uvEl) uvEl.textContent = `UV ${Math.round(data.current.uvIndex ?? 0)}`;
+        const uvCategory = getUvCategory(data.current.uvIndex);
+        if (uvEl) {
+            uvEl.textContent = `UV ${formatNumber(Math.round(data.current.uvIndex ?? 0))}`;
+            uvEl.title = uvCategory ? `UV ${uvCategory.label} — ${uvCategory.advice}` : 'UV index';
+            if (uvCategory) {
+                uvEl.style.setProperty('--badge-color', uvCategory.color);
+                uvEl.style.setProperty('--badge-rgb', hexToRgbTriplet(uvCategory.color));
+            }
+        }
+        updateHealthPanel(undefined, data.current.uvIndex ?? null, undefined);
 
         setNum('current-wind', data.current.windSpeed, ' km/h');
 
@@ -364,20 +384,39 @@ export function updatePanelTheme(dayFactor, weatherSeverity, tempTrend = 0) {
     }
 }
 
-// ── Air quality / pollen chips ───────────────────────────────────────────────
+// ── Air quality / pollen chips + health drawer ───────────────────────────────
 /**
- * @param {{usAqi?: number|null, europeanAqi?: number|null, pollen?: {birch?: number|null, grass?: number|null, ragweed?: number|null}}|null} airQuality
+ * @typedef {Object} AirQualityReading
+ * @property {number|null} [usAqi]
+ * @property {number|null} [europeanAqi]
+ * @property {number|null} [pm2_5]
+ * @property {number|null} [pm10]
+ * @property {number|null} [ozone]
+ * @property {{birch?: number|null, grass?: number|null, ragweed?: number|null}|null} [pollen]
  */
-export function updateAirQualityDisplay(airQuality) {
+
+// Last values seen, so the health tab can re-render when either half (the air
+// quality fetch or the per-frame weather snapshot carrying UV) updates alone.
+/** @type {{airQuality: AirQualityReading|null, countryCode: string|null, uvIndex: number|null}} */
+const _healthState = { airQuality: null, countryCode: null, uvIndex: null };
+
+/**
+ * @param {AirQualityReading|null} airQuality
+ * @param {string|null} [countryCode] ISO 3166-1 alpha-2 for the active location
+ */
+export function updateAirQualityDisplay(airQuality, countryCode = null) {
+    _healthState.airQuality = airQuality ?? null;
+    _healthState.countryCode = countryCode;
+
     const aqiEl = document.getElementById('current-aqi');
     if (aqiEl) {
-        const category = getUsAqiCategory(airQuality?.usAqi);
-        if (category) {
+        const primary = getPrimaryAqi(airQuality, countryCode);
+        if (primary) {
             aqiEl.hidden = false;
-            aqiEl.textContent = `AQI ${Math.round(/** @type {number} */ (airQuality?.usAqi))}`;
-            aqiEl.title = category.label;
-            aqiEl.style.setProperty('--badge-color', category.color);
-            aqiEl.style.setProperty('--badge-rgb', hexToRgbTriplet(category.color));
+            aqiEl.textContent = `${primary.scale === 'EU' ? 'EU AQI' : 'AQI'} ${formatNumber(Math.round(primary.value))}`;
+            aqiEl.title = `${primary.scale === 'EU' ? 'European' : 'US'} AQI: ${primary.label}`;
+            aqiEl.style.setProperty('--badge-color', primary.color);
+            aqiEl.style.setProperty('--badge-rgb', hexToRgbTriplet(primary.color));
         } else {
             aqiEl.hidden = true;
         }
@@ -396,6 +435,125 @@ export function updateAirQualityDisplay(airQuality) {
             pollenEl.hidden = true;
         }
     }
+
+    renderHealthPanel();
+}
+
+const POLLEN_LABELS = { birch: 'Tree (birch)', grass: 'Grass', ragweed: 'Weed (ragweed)' };
+// Bar scale: the top of the "Very High" band, so the fill stays comparable across types.
+const POLLEN_BAR_MAX = 100;
+
+/**
+ * Fill the Health tab of the advanced drawer: UV index, both AQI scales,
+ * particulates, and a per-type pollen breakdown.
+ * @param {AirQualityReading|null} [airQuality]
+ * @param {number|null} [uvIndex]
+ * @param {string|null} [countryCode]
+ */
+export function updateHealthPanel(airQuality, uvIndex, countryCode) {
+    if (airQuality !== undefined) _healthState.airQuality = airQuality;
+    if (uvIndex !== undefined) _healthState.uvIndex = uvIndex ?? null;
+    if (countryCode !== undefined) _healthState.countryCode = countryCode;
+    renderHealthPanel();
+}
+
+function setHealthValue(id, text, color) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = color ?? '';
+}
+
+function renderHealthPanel() {
+    const { airQuality, countryCode, uvIndex } = _healthState;
+
+    // ── UV ──
+    const uv = getUvCategory(uvIndex);
+    setHealthValue('health-uv-value', uv ? formatNumber(Math.round(/** @type {number} */ (uvIndex))) : '--', uv?.color);
+    setHealthValue('health-uv-label', uv ? `${uv.label} — ${uv.advice}` : '--');
+
+    // ── AQI, both scales side by side; the locale's primary index is marked. ──
+    const primary = getPrimaryAqi(airQuality, countryCode);
+    const us = getUsAqiCategory(airQuality?.usAqi);
+    const eu = getEuropeanAqiCategory(airQuality?.europeanAqi);
+    setHealthValue(
+        'health-aqi-us-value',
+        us ? formatNumber(Math.round(/** @type {number} */ (airQuality?.usAqi))) : '--',
+        us?.color
+    );
+    setHealthValue('health-aqi-us-label', us?.label ?? '--');
+    setHealthValue(
+        'health-aqi-eu-value',
+        eu ? formatNumber(Math.round(/** @type {number} */ (airQuality?.europeanAqi))) : '--',
+        eu?.color
+    );
+    setHealthValue('health-aqi-eu-label', eu?.label ?? '--');
+    for (const [scale, id] of [
+        ['US', 'health-aqi-us'],
+        ['EU', 'health-aqi-eu']
+    ]) {
+        const block = document.getElementById(id);
+        if (block) block.classList.toggle('primary-scale', primary?.scale === scale);
+    }
+
+    // ── Particulates ──
+    const num = (v, unit) =>
+        v == null || Number.isNaN(v) ? '--' : `${formatNumber(v, { maximumFractionDigits: 1 })} ${unit}`;
+    setHealthValue('health-pm25', num(airQuality?.pm2_5, 'µg/m³'));
+    setHealthValue('health-pm10', num(airQuality?.pm10, 'µg/m³'));
+    setHealthValue('health-ozone', num(airQuality?.ozone, 'µg/m³'));
+
+    // ── Pollen breakdown with severity bars ──
+    const list = document.getElementById('health-pollen-list');
+    if (!list) return;
+    const pollen = airQuality?.pollen;
+    const rows = Object.entries(POLLEN_LABELS)
+        .map(([key, label]) => ({ key, label, value: pollen?.[key] ?? null }))
+        .filter((row) => row.value != null && !Number.isNaN(row.value));
+
+    if (rows.length === 0) {
+        list.replaceChildren(
+            Object.assign(document.createElement('div'), {
+                className: 'adv-sub',
+                textContent: 'No pollen data for this location'
+            })
+        );
+        return;
+    }
+
+    list.replaceChildren(
+        ...rows.map((row) => {
+            const severity = getPollenSeverity(row.value);
+            const item = document.createElement('div');
+            item.className = 'pollen-row';
+            item.dataset.pollenType = row.key;
+
+            const name = document.createElement('span');
+            name.className = 'pollen-row-name';
+            name.textContent = row.label;
+
+            const bar = document.createElement('div');
+            bar.className = 'pollen-row-bar';
+            bar.setAttribute('role', 'img');
+            bar.setAttribute(
+                'aria-label',
+                `${row.label} pollen ${formatNumber(/** @type {number} */ (row.value))} grains per cubic metre, ${severity?.label ?? 'unknown'}`
+            );
+            const fill = document.createElement('div');
+            fill.className = 'pollen-row-fill';
+            fill.style.width = `${Math.min(100, ((row.value ?? 0) / POLLEN_BAR_MAX) * 100)}%`;
+            fill.style.background = severity?.color ?? '#888';
+            bar.append(fill);
+
+            const value = document.createElement('span');
+            value.className = 'pollen-row-value';
+            value.textContent = severity?.label ?? '--';
+            value.style.color = severity?.color ?? '';
+
+            item.append(name, bar, value);
+            return item;
+        })
+    );
 }
 
 let alertBannerToggleBound = false;
@@ -420,11 +578,17 @@ export function updateAlertBanner(alerts) {
     const order = ['Extreme', 'Severe', 'Moderate', 'Minor', 'Unknown'];
     const sorted = [...alerts].sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity));
     const top = sorted[0];
+    const tier = getAlertTier(top);
+    const theme = getAlertTierTheme(tier);
+    // Severity styling falls back to the NWS severity field when the event name
+    // carries no watch/warning wording.
     const style = getAlertSeverityStyle(top.severity);
 
     banner.hidden = false;
-    banner.classList.toggle('pulse', isPulseSeverity(top.severity));
-    banner.style.setProperty('--badge-color', style.color);
+    banner.dataset.alertTier = tier;
+    banner.classList.toggle('pulse', theme.pulse || isPulseSeverity(top.severity));
+    banner.classList.toggle('pulse-fast', tier === 'emergency');
+    banner.style.setProperty('--badge-color', theme.color || style.color);
     headlineEl.textContent = `${top.event}${sorted.length > 1 ? ` (+${sorted.length - 1} more)` : ''}`;
 
     // Built via DOM APIs (not innerHTML) since alert text comes from an external

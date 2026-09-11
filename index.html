@@ -417,12 +417,13 @@
         <!-- Advanced Drawer -->
         <div id="panel-advanced" class="advanced-drawer">
             <div class="drawer-handle-grip">
-                <span class="drawer-handle-grip-label">History • Accuracy • Nearby</span>
+                <span class="drawer-handle-grip-label">History • Accuracy • Nearby • Health</span>
             </div>
             <div class="drawer-tabs">
                 <button class="tab-btn active" data-tab="history">History</button>
                 <button class="tab-btn" data-tab="accuracy">Accuracy</button>
                 <button class="tab-btn" data-tab="nearby">Nearby</button>
+                <button class="tab-btn" data-tab="health">Health</button>
             </div>
             <div class="tab-panels">
                 <div class="tab-content active" id="tab-history">
@@ -440,6 +441,46 @@
                         <h3>Forecast Accuracy</h3>
                         <div id="accuracy-delta" class="adv-val-big">--</div>
                         <div id="accuracy-score" class="adv-sub">Score: --%</div>
+                    </div>
+                </div>
+                <div class="tab-content" id="tab-health">
+                    <div class="adv-section health-section">
+                        <h3>UV Index</h3>
+                        <div id="health-uv-value" class="adv-val-big">--</div>
+                        <div id="health-uv-label" class="adv-sub">--</div>
+                    </div>
+                    <div class="adv-section health-section">
+                        <h3>Air Quality</h3>
+                        <div class="health-aqi-pair">
+                            <div class="health-aqi" id="health-aqi-us">
+                                <div class="health-aqi-scale">US AQI</div>
+                                <div id="health-aqi-us-value" class="health-aqi-value">--</div>
+                                <div id="health-aqi-us-label" class="adv-sub">--</div>
+                            </div>
+                            <div class="health-aqi" id="health-aqi-eu">
+                                <div class="health-aqi-scale">European AQI</div>
+                                <div id="health-aqi-eu-value" class="health-aqi-value">--</div>
+                                <div id="health-aqi-eu-label" class="adv-sub">--</div>
+                            </div>
+                        </div>
+                        <dl class="health-pollutants">
+                            <div>
+                                <dt>PM2.5</dt>
+                                <dd id="health-pm25">--</dd>
+                            </div>
+                            <div>
+                                <dt>PM10</dt>
+                                <dd id="health-pm10">--</dd>
+                            </div>
+                            <div>
+                                <dt>Ozone</dt>
+                                <dd id="health-ozone">--</dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div class="adv-section health-section">
+                        <h3>Pollen</h3>
+                        <div id="health-pollen-list" class="health-pollen-list"></div>
                     </div>
                 </div>
                 <div class="tab-content" id="tab-nearby">

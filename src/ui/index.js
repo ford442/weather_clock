@@ -14,7 +14,8 @@ export {
     updateWeatherDisplay,
     updateWindCompass,
     updateAirQualityDisplay,
-    updateAlertBanner
+    updateAlertBanner,
+    updateHealthPanel
 } from './weather-panels.js';
 export { drawSparkline } from './sparkline.js';
 export { drawPressureGauge } from './gauge.js';
