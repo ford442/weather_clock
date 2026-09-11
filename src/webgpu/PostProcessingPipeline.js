@@ -13,6 +13,21 @@
 import * as THREE from 'three';
 
 /**
+ * The contract both backends implement, and the only surface callers may use.
+ * Every member is present on every branch below — including the WebGPU
+ * fallback returned when bloom setup throws — so call sites do not need to
+ * feature-detect individual methods.
+ *
+ * @typedef {object} PostProcessingPipeline
+ * @property {() => void} render Draw one frame (composited, or direct when bloom is off).
+ * @property {(width: number, height: number) => void} setSize
+ * @property {(pixelRatio: number) => void} setPixelRatio
+ * @property {(options?: {enabled?: boolean, strength?: number, radius?: number, threshold?: number}) => void} setBloom
+ * @property {(options?: {enabled?: boolean, intensity?: number}) => void} setHeatShimmer
+ * @property {() => void} dispose
+ */
+
+/**
  * Build a post-processing pipeline appropriate for the active renderer.
  *
  * @param {THREE.WebGLRenderer|import('three/webgpu').WebGPURenderer} renderer
@@ -20,7 +35,7 @@ import * as THREE from 'three';
  * @param {THREE.Camera} camera
  * @param {boolean} isWebGPU
  * @param {{strength?: number, radius?: number, threshold?: number, disableBloom?: boolean}} [bloomOptions]
- * @returns {Promise<{render: Function, setSize: Function, setPixelRatio: Function, setBloom: Function, setHeatShimmer: Function, dispose: Function}>}
+ * @returns {Promise<PostProcessingPipeline>}
  */
 export async function createPostProcessingPipeline(renderer, scene, camera, isWebGPU, bloomOptions = {}) {
     const strength = bloomOptions.strength ?? 0.5;

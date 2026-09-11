@@ -53,5 +53,5 @@ These items deepen the core philosophy of a mostly graphical representation of w
 
 ## Research and performance experiments
 
-- [#87 — WebGPU compute particles](https://github.com/ford442/weather_clock/issues/87): decide whether to wire up the standalone WGSL experiments or replace them with TSL compute nodes.
+- [#87 — WebGPU compute particles](https://github.com/ford442/weather_clock/issues/87): decide whether to wire up the standalone WGSL experiments or replace them with TSL compute nodes. TSL compute is now the canonical WebGPU particle path (`docs/WEBGPU_ARCHITECTURE.md`); the `shaders/*.wgsl` files remain unwired.
 - [#88 — Benchmark a scoped C++/WebAssembly particle/noise module](https://github.com/ford442/weather_clock/issues/88): keep the JavaScript path first-class unless measurements justify the added toolchain.

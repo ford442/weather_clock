@@ -39,6 +39,16 @@ test.describe('functional', () => {
         await expect(page).toHaveURL(/[?&]mode=timeline/);
     });
 
+    test('?forceWebGL=1 pins the renderer to the WebGL particle path', async ({ page }) => {
+        await launchApp(page, { query: 'forceWebGL=1' });
+
+        // CI runs SwiftShader (WebGL only), so this guards the flag's plumbing rather
+        // than the backend switch itself — on WebGPU-capable hardware it also proves
+        // the fallback is reachable for side-by-side comparison.
+        const particles = await page.evaluate(() => window.aetherDebug.getPerformanceMetrics().particles);
+        expect(particles.backend).toBe('cpu');
+    });
+
     test('unit toggle persists across reload', async ({ page }) => {
         await launchApp(page);
 
