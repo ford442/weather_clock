@@ -217,7 +217,7 @@ export class AmbienceEngine {
 
     /**
      * @param {number} delta - seconds since last frame
-     * @param {object} weather - current interpolated weather snapshot (rainIntensity, windSpeed)
+     * @param {WeatherSnapshot} weather - current interpolated weather snapshot (rainIntensity, windSpeed)
      * @param {number} sunElevationNorm - sun height roughly in -1 (deep night) .. 1 (noon)
      * @param {number} lightningFlash - current flash intensity (0 when idle)
      */

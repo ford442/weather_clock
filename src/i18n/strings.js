@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Minimal i18n layer: a string table keyed by locale, plus Intl-backed
  * date/time/number formatting helpers shared across the app.
@@ -6,6 +5,39 @@
  * Add a new locale by adding a key to STRINGS with the same shape as `en`.
  */
 
+/**
+ * @typedef {Object} StringTable
+ * @property {string} offline
+ * @property {(time: string) => string} offlineWithTime
+ * @property {string} offlineCachedData
+ * @property {(time: string) => string} offlineCachedWeatherAt
+ * @property {string} offlineNoCachedData
+ * @property {string} weatherLoadFailed
+ * @property {string} locationNotDetected
+ * @property {(query: string) => string} noResultsFor
+ * @property {string} timeWarpDisabledReducedMotion
+ * @property {(tier: string, reason: string) => string} qualityChanged
+ * @property {(tier: string) => string} qualityChangeFailed
+ * @property {string} graphicsInitFailed
+ * @property {string} graphicsRecoveryFailed
+ * @property {string} graphicsDeviceReset
+ * @property {string} photoSaved
+ * @property {string} photoShared
+ * @property {string} photoCaptureFailed
+ * @property {string} timelapseDisabledReducedMotion
+ * @property {string} videoRecordingUnsupported
+ * @property {string} noWebmCodec
+ * @property {string} timelapseCancelled
+ * @property {string} timelapseSaved
+ * @property {string} timelapseNoData
+ * @property {string} timelapseExportFailed
+ * @property {string} newVersionAvailable
+ * @property {string} reload
+ * @property {string} appReadyOffline
+ * @property {(args: {description?: string, temp?: number|string, unit?: string, precip?: string, sunset?: string}) => string} sceneSummary
+ */
+
+/** @type {Record<string, StringTable>} */
 const STRINGS = {
     en: {
         offline: 'Offline',
@@ -84,6 +116,7 @@ const SUPPORTED_LOCALES = Object.keys(STRINGS);
 const FALLBACK_LOCALE = 'en';
 const LOCALE_STORAGE_KEY = 'weatherclock_locale';
 
+/** @param {string} [tag] */
 function baseLanguage(tag) {
     return String(tag || '')
         .split('-')[0]
@@ -114,6 +147,7 @@ export function getIntlLocale() {
     return (typeof navigator !== 'undefined' && navigator.language) || getLocale();
 }
 
+/** @param {string} locale */
 export function setLocale(locale) {
     if (!SUPPORTED_LOCALES.includes(locale)) return;
     currentLocale = locale;
@@ -126,20 +160,25 @@ export function setLocale(locale) {
 
 /**
  * Look up a string (or string-builder function) by key for the active locale.
- * @param {string} key
+ * @param {keyof StringTable} key
  * @param {...any} args passed through when the entry is a function
+ * @returns {string}
  */
 export function t(key, ...args) {
     const table = STRINGS[getLocale()] || STRINGS[FALLBACK_LOCALE];
     const entry = table[key] ?? STRINGS[FALLBACK_LOCALE][key];
-    if (typeof entry === 'function') return entry(...args);
+    if (typeof entry === 'function') return /** @type {(...a: any[]) => string} */ (entry)(...args);
     return entry ?? key;
 }
 
 // ── Intl-backed formatting helpers ──────────────────────────────────────────
 
+/**
+ * @param {Date|null|undefined} date
+ * @param {Intl.DateTimeFormatOptions} [options]
+ */
 export function formatTime(date, options = {}) {
-    if (!(date instanceof Date) || isNaN(date)) return '--:--';
+    if (!(date instanceof Date) || isNaN(date.getTime())) return '--:--';
     return new Intl.DateTimeFormat(getIntlLocale(), {
         hour: 'numeric',
         minute: '2-digit',
@@ -147,8 +186,12 @@ export function formatTime(date, options = {}) {
     }).format(date);
 }
 
+/**
+ * @param {Date|null|undefined} date
+ * @param {Intl.DateTimeFormatOptions} [options]
+ */
 export function formatDate(date, options = {}) {
-    if (!(date instanceof Date) || isNaN(date)) return '--';
+    if (!(date instanceof Date) || isNaN(date.getTime())) return '--';
     return new Intl.DateTimeFormat(getIntlLocale(), {
         weekday: 'short',
         month: 'short',
@@ -157,12 +200,21 @@ export function formatDate(date, options = {}) {
     }).format(date);
 }
 
+/**
+ * @param {number|null|undefined} value
+ * @param {Intl.NumberFormatOptions} [options]
+ */
 export function formatNumber(value, options = {}) {
     if (value == null || isNaN(value)) return '--';
     return new Intl.NumberFormat(getIntlLocale(), options).format(value);
 }
 
-/** Format a temperature value with its degree unit (°C / °F), locale-aware digit grouping. */
+/**
+ * Format a temperature value with its degree unit (°C / °F), locale-aware digit grouping.
+ * @param {number|null|undefined} value
+ * @param {string} [unit]
+ * @param {Intl.NumberFormatOptions} [options]
+ */
 export function formatTemp(value, unit = 'C', options = {}) {
     if (value == null || isNaN(value)) return '--°';
     return `${formatNumber(value, { maximumFractionDigits: 0, ...options })}°${unit}`;

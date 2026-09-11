@@ -1,5 +1,3 @@
-// @ts-nocheck
-// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 /**
  * AnomalyCalculator.js
  *
@@ -24,6 +22,9 @@
  * @property {string} date - ISO date string (YYYY-MM-DD)
  * @property {number} temperature - Daily temperature value
  * @property {number} [zScore] - Pre-calculated z-score
+ * @property {number} [anomaly] - Set by processDays()
+ * @property {string} [classification] - Set by processDays(), see classifyZScore()
+ * @property {number} [_originalIndex] - Optional index into the caller's source array, echoed onto detected events
  */
 
 /**
@@ -164,7 +165,7 @@ export class AnomalyCalculator {
      * Classifies a z-score into meteorological categories.
      *
      * @param {number} zScore - The z-score to classify
-     * @returns {string} Classification category
+     * @returns {'significantly_above_normal'|'above_normal'|'near_normal'|'below_normal'|'significantly_below_normal'} Classification category
      */
     classifyZScore(zScore) {
         if (zScore > ZSCORE_THRESHOLDS.EXTREMELY_HOT) {

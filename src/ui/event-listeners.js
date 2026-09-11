@@ -1,5 +1,17 @@
-// @ts-nocheck
 // ── setupEventListeners ──────────────────────────────────────────────────────
+/**
+ * @param {{
+ *   onRetryLocation?: (e: MouseEvent) => void,
+ *   onToggleUnit?: () => void,
+ *   onSetQuality?: (tier: string|undefined) => void,
+ *   onSearch: (query: string) => void,
+ *   onToggleTimeWarp?: () => void,
+ *   onCycleSpeed?: () => void,
+ *   onScrub?: (pct: number) => void,
+ *   onLoadNearby?: () => void
+ * }} callbacks
+ * @param {import('../ModeController.js').ModeController|null|undefined} modeController
+ */
 export function setupEventListeners(callbacks, modeController) {
     const retryBtn = document.getElementById('retry-location');
     if (retryBtn) retryBtn.addEventListener('click', callbacks.onRetryLocation);
@@ -15,7 +27,7 @@ export function setupEventListeners(callbacks, modeController) {
         });
     }
 
-    const qualityBtns = document.querySelectorAll('.quality-btn');
+    const qualityBtns = /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.quality-btn'));
     qualityBtns.forEach((btn) => {
         btn.addEventListener('click', () => {
             const tier = btn.dataset.quality;
@@ -25,7 +37,7 @@ export function setupEventListeners(callbacks, modeController) {
         });
     });
 
-    const searchInput = document.getElementById('location-search');
+    const searchInput = /** @type {HTMLInputElement|null} */ (document.getElementById('location-search'));
     const searchBtn = document.getElementById('search-btn');
     const searchContainer = searchInput?.closest('.search-container');
 
@@ -90,7 +102,7 @@ export function setupEventListeners(callbacks, modeController) {
         });
 
         track.addEventListener('click', (e) => {
-            if (e.target === playhead || playhead.contains(e.target)) return;
+            if (e.target === playhead || (e.target instanceof Node && playhead.contains(e.target))) return;
             const rect = track.getBoundingClientRect();
             const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
             callbacks.onScrub(pct);

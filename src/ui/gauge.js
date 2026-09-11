@@ -1,10 +1,15 @@
-// @ts-nocheck
 // Draws a circular pressure gauge on #pressure-gauge canvas with past/current/future arcs
+/**
+ * @param {number} currentPressure
+ * @param {number} pastPressure
+ * @param {number} futurePressure
+ */
 export function drawPressureGauge(currentPressure, pastPressure, futurePressure) {
-    const canvas = document.getElementById('pressure-gauge');
+    const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById('pressure-gauge'));
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const W = canvas.width;
     const H = canvas.height;
     const centerX = W / 2;

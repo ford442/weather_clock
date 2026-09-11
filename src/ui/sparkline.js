@@ -1,12 +1,18 @@
-// @ts-nocheck
 import { getWeatherAtTime } from '../weather-simulation.js';
 
-// Draws a ±6 h bezier temperature curve on #sparkline canvas.
+/**
+ * Draws a ±6 h bezier temperature curve on #sparkline canvas.
+ *
+ * @param {Date} simulationTime
+ * @param {{timeline?: WeatherSnapshot[]}|null|undefined} weatherData
+ * @param {import('../weather.js').WeatherService|null} [weatherService]
+ */
 export function drawSparkline(simulationTime, weatherData, weatherService) {
-    const canvas = document.getElementById('sparkline');
+    const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById('sparkline'));
     if (!canvas || !weatherData || !weatherData.timeline) return;
 
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const W = canvas.width;
     const H = canvas.height;
     ctx.clearRect(0, 0, W, H);

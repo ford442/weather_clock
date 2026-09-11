@@ -151,7 +151,7 @@ export function getWeatherAtTime(time, timeline) {
 /**
  * Get weather data for current, past, and forecast times
  * @param {Date} simulationTime - Current simulation time
- * @param {{timeline?: WeatherSnapshot[], current?: WeatherSnapshot, past?: WeatherSnapshot, forecast?: WeatherSnapshot}|null} weatherData
+ * @param {{timeline?: WeatherSnapshot[], current?: WeatherSnapshot, past?: WeatherSnapshot, forecast?: WeatherSnapshot, airQuality?: {usAqi?: number | null}}|null} weatherData
  * @returns {{current: WeatherSnapshot, past: WeatherSnapshot, forecast: WeatherSnapshot}|null}
  */
 export function getActiveWeatherData(simulationTime, weatherData) {

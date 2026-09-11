@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { calculateMoonPhase } from '../moonPhase.js';
 import { drawPressureGauge } from './gauge.js';
 import { formatTime12 } from './time-display.js';
@@ -12,13 +11,35 @@ function hexToRgbTriplet(hex) {
 
 let prefersReducedMotion = false;
 
+/** @param {boolean} reducedMotion */
 export function setReducedMotionPreference(reducedMotion) {
     prefersReducedMotion = reducedMotion;
 }
 
+/**
+ * Aggregate panel data consumed by {@link updateWeatherDisplay}. Assembled by
+ * main.js from WeatherService + AstronomyService + timeline accuracy output.
+ * @typedef {Object} WeatherDisplayData
+ * @property {string} [location]
+ * @property {WeatherSnapshot} [current]
+ * @property {WeatherSnapshot} [past]
+ * @property {WeatherSnapshot} [forecast]
+ * @property {Date|string} [sunrise]
+ * @property {Date|string} [sunset]
+ * @property {{temp?: number, description?: string}} [historicalYearAgo]
+ * @property {ClockForecastAccuracy} [accuracy]
+ * @property {Array<{name: string, temp: number}>} [regional]
+ */
+
 // ── countTo: rAF-driven number animation (800 ms, ease-out cubic) ──────────
+/** @type {Map<HTMLElement, number>} */
 const _countState = new Map();
 
+/**
+ * @param {HTMLElement|null} el
+ * @param {number} newVal
+ * @param {string} [suffix]
+ */
 export function countTo(el, newVal, suffix = '') {
     if (!el) return;
     const currentVal = parseFloat(el.dataset.animVal ?? el.textContent) || 0;
@@ -65,6 +86,10 @@ export function countTo(el, newVal, suffix = '') {
 }
 
 // ── updateWeatherDisplay ─────────────────────────────────────────────────────
+/**
+ * @param {WeatherDisplayData|null|undefined} data
+ * @param {import('../weather.js').WeatherService} weatherService
+ */
 export function updateWeatherDisplay(data, weatherService) {
     if (!data) return;
 
@@ -154,7 +179,7 @@ export function updateWeatherDisplay(data, weatherService) {
 
     // ── Advanced: accuracy ──
     const accuracyDeltaEl = document.getElementById('accuracy-delta');
-    const accuracyTabBtn = document.querySelector('.tab-btn[data-tab="accuracy"]');
+    const accuracyTabBtn = /** @type {HTMLElement|null} */ (document.querySelector('.tab-btn[data-tab="accuracy"]'));
 
     if (data.accuracy) {
         // MAE is a temperature *delta*: °C → °F scales by 9/5 with no offset
@@ -222,6 +247,10 @@ export function updateWeatherDisplay(data, weatherService) {
 // Offscreen text alternative for the 3D scene: screen-reader users get an
 // equivalent summary of what's rendered, built from the same panel data
 // above rather than duplicating any weather logic.
+/**
+ * @param {WeatherDisplayData|null|undefined} data
+ * @param {import('../weather.js').WeatherService} weatherService
+ */
 export function updateSceneSummary(data, weatherService) {
     const el = document.getElementById('scene-summary');
     if (!el || !data?.current) return;
@@ -244,6 +273,7 @@ export function updateSceneSummary(data, weatherService) {
 }
 
 // ── updateUnitButton ─────────────────────────────────────────────────────────
+/** @param {import('../weather.js').WeatherService} weatherService */
 export function updateUnitButton(weatherService) {
     const toggle = document.getElementById('unit-toggle');
     if (!toggle) return;
@@ -255,8 +285,9 @@ export function updateUnitButton(weatherService) {
 }
 
 // ── updateQualityButton ──────────────────────────────────────────────────────
+/** @param {QualityTier} tier */
 export function updateQualityButton(tier) {
-    const btns = document.querySelectorAll('.quality-btn');
+    const btns = /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.quality-btn'));
     btns.forEach((btn) => {
         if (btn.dataset.quality === tier) {
             btn.classList.add('active');
@@ -276,6 +307,7 @@ export function updateQualityButton(tier) {
 window.updateQualityButton = updateQualityButton;
 
 // ── updateWindCompass ────────────────────────────────────────────────────────
+/** @param {number} degrees */
 export function updateWindCompass(degrees) {
     const arrow = document.getElementById('wind-arrow');
     if (!arrow) return;
@@ -286,6 +318,11 @@ export function updateWindCompass(degrees) {
 // dayFactor: -1 = deep night, 0 = dawn/dusk, 1 = noon
 // weatherSeverity: 0 = clear, 1 = storm
 // tempTrend: -1 = much cooler than year-ago, +1 = much warmer
+/**
+ * @param {number} dayFactor
+ * @param {number} weatherSeverity
+ * @param {number} [tempTrend]
+ */
 export function updatePanelTheme(dayFactor, weatherSeverity, tempTrend = 0) {
     const root = document.documentElement;
     const day = Math.max(-1, Math.min(1, dayFactor || 0));

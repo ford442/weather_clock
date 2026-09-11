@@ -45,6 +45,8 @@ interface WeatherSnapshot {
     fogIntensity?: number;
     precipType?: PrecipitationType;
     atmosphere?: AtmosphereUniforms;
+    /** US AQI, attached only to the "current" snapshot (no hourly/forecast timeline for it). */
+    aqi?: number | null;
 }
 
 interface DailyForecastDay {
@@ -173,6 +175,7 @@ interface HTMLDivElement {
 }
 
 interface Window {
+    webkitAudioContext?: typeof AudioContext;
     __IS_WEBGPU__?: boolean;
     __NATIVE_BACKEND__?: string;
     __NATIVE_BACKENDS__?: Record<string, string>;

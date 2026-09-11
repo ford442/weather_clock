@@ -15,11 +15,11 @@ function clamp01(v) {
 
 export class GroundEffects {
     /**
-     * @param {THREE.Scene} scene
-     * @param {{mesh: THREE.Mesh, material: THREE.Material}} ground
-     * @param {{group: THREE.Group, base: THREE.Mesh, face: THREE.Mesh}} sundial
-     * @param {THREE.Camera} camera
-     * @param {THREE.WebGLRenderer|import('three/webgpu').WebGPURenderer} renderer
+     * @param {import('three').Scene} scene
+     * @param {{mesh: import('three').Mesh, material: import('three').Material}} ground
+     * @param {{group: import('three').Group, base: import('three').Mesh, face: import('three').Mesh}} sundial
+     * @param {import('three').Camera} camera
+     * @param {import('three').WebGLRenderer|import('three/webgpu').WebGPURenderer} renderer
      * @param {boolean} isWebGPU
      */
     constructor(scene, ground, sundial, camera, renderer, isWebGPU = false) {
@@ -87,7 +87,7 @@ export class GroundEffects {
      * @param {{temp?: number, rainIntensity?: number, snowIntensity?: number, windSpeed?: number, windDirection?: number}} currentWeather
      * @param {Date} simulationTime
      * @param {number} delta wall-clock seconds since last frame
-     * @param {{sunPosition?: THREE.Vector3}|null} astroData
+     * @param {{sunPosition?: import('three').Vector3}|null} astroData
      */
     update(currentWeather, simulationTime, delta, astroData) {
         integrate(this.accumulator, currentWeather, simulationTime.getTime());

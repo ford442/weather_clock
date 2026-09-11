@@ -1,5 +1,15 @@
-// @ts-nocheck
-/** Set up global application keyboard shortcuts. */
+/**
+ * Set up global application keyboard shortcuts.
+ *
+ * @param {{
+ *   onToggleTimeWarp?: () => void,
+ *   onCycleSpeed?: () => void,
+ *   onPause?: () => void,
+ *   onToggleUnit?: () => void,
+ *   onCapturePhoto?: () => void,
+ *   onToggleTimelapse?: () => void
+ * }} callbacks
+ */
 export function setupKeyboardShortcuts(callbacks) {
     document.addEventListener('keydown', (e) => {
         // Don't fire when user is typing in an input
