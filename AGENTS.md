@@ -60,12 +60,13 @@ The app has three viewing modes:
 | `weather-simulation.js` | Weather interpolation over the hourly timeline (`getWeatherAtTime`), plus `getActiveWeatherData` for past/current/forecast snapshots. |
 | `weather.js` | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timelines, handles geolocation/search, unit conversion, and advanced analytics. Forecast accuracy (`getPredictionAccuracy`) compares Previous Runs API predictions against observed temperatures (cached once per day per location) using the shared math in `accuracy.js`. |
 | `accuracy.js` | Shared forecast-accuracy math used by both `weather.js` (clock mode) and `timeline/TimelineData.js` (timeline mode): mean-absolute-error pairing/gating, MAE+RMSE+skill-vs-persistence scoring, and the once-per-day cache TTL/key suffix — kept in one place so the two modes never compute accuracy differently. |
-| `astronomy.js` | `AstronomyService` class. Wraps SunCalc to compute sun/moon positions and illumination, converting spherical coordinates to Three.js Cartesian. |
+| `astronomy.js` | `AstronomyService` class. Wraps SunCalc to compute sun/moon positions and illumination, converting spherical coordinates to Three.js Cartesian. Also returns the `sunlight`/`moonlight` models from `celestialLighting.js` for the instant it was asked about. |
+| `celestialLighting.js` | Pure physical models for the sun/moon light contrast: Earth–Sun distance from orbital elements (SunCalc has no such field) and its ~±3.4% irradiance swing, Allen's lunar brightness law (a half moon is ~1/11th of a full moon, not 1/2), the super/micromoon distance factor, and Kasten–Young atmospheric extinction + reddening. No Three.js, no DOM. |
 | `effects/weather-effects.js`, `effects/` | Weather-effect coordinator plus pooled rain, snow, dust, cloud, fog, star, and splash systems. |
-| `weatherLighting.js` | `updateWeatherLighting()` — calculates day/night factor, weighted cloud cover, severity, fog density, sky shader uniforms, and smoothly interpolates sun/moon/ambient colors and intensities. |
+| `weatherLighting.js` | `updateWeatherLighting()` — calculates day/night factor, weighted cloud cover, severity, fog density, sky shader uniforms, and smoothly interpolates sun/moon/ambient colors and intensities. Applies the `celestialLighting.js` models on top of the weather terms, so clock, forecast, and timeline modes all share one lighting formula. |
 | `shaders.js` | GLSL shader strings used by rain and cloud materials. |
 | `sundial.js` | 3D sundial geometry (base, clock face, hour markers, gnomon, analog hands) with an `update(time)` method. |
-| `moonPhase.js` | Moon phase math and visual moon mesh creation. |
+| `moonPhase.js` | Moon phase math and the moon mesh/terminator shader. `updateMoonVisuals()` drives the disk's Lommel–Seeliger photometry, earthshine, horizon warmth, and apparent size from the current `MoonlightModel`. |
 | `atmosphereTheme.js` | Updates CSS custom properties (`--accent`, `--glow`, `--trend-glow`, etc.) based on time of day and weather severity. |
 | `debug.js` | Exposes `window.setDebugWeather(code)`, `window.setDebugTime(hour)`, and `window.aetherDebug` for runtime inspection. |
 | `ModeController.js`, `modes/` | Mode orchestration, adapters, camera transitions, UI visibility, and browser history for Clock, Timeline, and Forecast modes. |
@@ -244,6 +245,11 @@ Consumers: `effects/weather-effects.js` feeds each zone's slice to that zone's `
 Cloud fields deliberately overlap their zone bounds by `CLOUD_ZONE_OVERLAP` and fade at those overlap edges, so the sky reads as one continuous scene rather than three cut-off blocks. Precipitation and fog still wrap on the hard zone bounds — only clouds overlap.
 
 Prefer graphical language over HUD text for anything in this vocabulary.
+
+### Celestial Lighting Model
+`celestialLighting.js` holds the physics (pure functions, no Three.js): the Earth–Sun distance and its ~±3.4% irradiance swing, the lunar phase curve (Allen's law — the opposition surge makes a full moon ~11× a half moon, which a naive `illuminatedFraction` multiplier gets wrong), the Earth–Moon distance factor from SunCalc's own `moonPosition.distance`, and Kasten–Young airmass for extinction/reddening. `AstronomyService.update()` attaches the resulting `SunlightModel`/`MoonlightModel` to every astro snapshot; `weatherLighting.js` multiplies them into the light intensities and colours, and `moonPhase.js#updateMoonVisuals()` feeds the moon disk's shader uniforms from them.
+
+Keep the modulations small and continuous — the point is nuance, not drama. Scene-level tuning constants belong in `CELESTIAL_LIGHT_CONFIG` (weatherLighting.js) or `MOON_DISK_CONFIG` (moonPhase.js); the physics constants stay in `CELESTIAL_CONFIG`. Because every mode reaches the lights through `updateSingleWeatherLighting()`, a change here lands in clock, forecast, and timeline modes at once.
 
 ### Coordinate Systems
 `SunCalc` uses spherical coordinates (azimuth/altitude). These are converted to Three.js Cartesian in `astronomy.js`. Azimuth 0° (South) maps to Z-, meaning North is Z+.

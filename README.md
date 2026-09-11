@@ -21,7 +21,7 @@ Instead of reading a clock, *witness* time passing through nature. Every scale o
 
 *   **Seconds:** Wind rustles invisible currents, rain splashes on the sundial, lights flicker.
 *   **Hours:** The sky gradient shifts smoothly from dawn orange to noon blue to dusk purple via atmospheric scattering.
-*   **Days:** Moon phases cast varying "silver" light; seasons affect sun altitude.
+*   **Days:** Moon phases cast varying "silver" light — the lunar phase curve, the perigee/apogee distance swing, and atmospheric extinction all feed it, so a full moon is far brighter than a half and a setting moon fades to amber. Seasons affect sun altitude, and Earth's orbital eccentricity subtly brightens the January sun over the July one.
 
 The goal: make time *visible* and *tactile*—a living, breathing environment instead of static data.
 

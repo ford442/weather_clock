@@ -1,6 +1,7 @@
 // Aether Architect: Verified
 import SunCalc from 'suncalc';
 import * as THREE from 'three';
+import { CELESTIAL_CONFIG, getMoonlightModel, getSunlightModel } from './celestialLighting.js';
 
 export class AstronomyService {
     constructor() {
@@ -10,53 +11,78 @@ export class AstronomyService {
     }
 
     /**
-     * Calculate Sun and Moon positions for a given date and location.
-     * @param {Date} date - The date/time to calculate for.
+     * Calculate Sun and Moon positions for a given date and location, along with
+     * the physical sunlight/moonlight models (orbital distances, lunar phase
+     * curve, atmospheric extinction) that drive the scene's lighting nuance.
+     * @param {Date|string|number} date - The date/time to calculate for.
      * @param {number|null} lat - Latitude. Falls back to New York when null/falsy.
      * @param {number|null} lon - Longitude. Falls back to New York when null/falsy.
      * @param {number} distance - Distance from origin for the returned vectors.
-     * @returns {{sunPosition: THREE.Vector3, moonPosition: THREE.Vector3, moonIllumination: {fraction: number, phase: number, angle: number}, sunrise: Date, sunset: Date}}
+     * @returns {AstroSnapshot}
      */
     update(date, lat, lon, distance = 20) {
         // Default to New York if no location
         const latitude = lat || 40.7128;
         const longitude = lon || -74.006;
+        // SunCalc only takes Date instances; callers (forecast/timeline scrubbing)
+        // routinely pass date strings.
+        const when = date instanceof Date ? date : new Date(date);
 
         // Get Sun position
-        const sunPos = SunCalc.getPosition(date, latitude, longitude);
+        const sunPos = SunCalc.getPosition(when, latitude, longitude);
         this.sphericalToCartesian(sunPos.azimuth, sunPos.altitude, distance, this.sunPosition);
 
-        // Get Moon position
-        const moonPos = SunCalc.getMoonPosition(date, latitude, longitude);
+        // Get Moon position (SunCalc also reports the current Earth–Moon distance,
+        // which drives the super/micromoon brightness swing).
+        const moonPos = SunCalc.getMoonPosition(when, latitude, longitude);
         this.sphericalToCartesian(moonPos.azimuth, moonPos.altitude, distance, this.moonPosition);
 
         // Get Moon Illumination (Phase)
-        const moonIllum = SunCalc.getMoonIllumination(date);
+        const moonIllum = SunCalc.getMoonIllumination(when);
 
         // Get sunrise/sunset times for this date and location
-        const sunTimes = SunCalc.getTimes(date, latitude, longitude);
+        const sunTimes = SunCalc.getTimes(when, latitude, longitude);
+
+        this.moonPhase = moonIllum.phase;
+        const moonDistanceKm = Number.isFinite(moonPos.distance)
+            ? moonPos.distance
+            : CELESTIAL_CONFIG.moonMeanDistanceKm;
 
         return {
             sunPosition: this.sunPosition,
             moonPosition: this.moonPosition,
             moonIllumination: moonIllum,
             sunrise: sunTimes.sunrise,
-            sunset: sunTimes.sunset
+            sunset: sunTimes.sunset,
+            sunAltitude: sunPos.altitude,
+            moonAltitude: moonPos.altitude,
+            moonDistanceKm,
+            sunlight: getSunlightModel(when, sunPos.altitude),
+            moonlight: getMoonlightModel(moonIllum, {
+                altitudeRad: moonPos.altitude,
+                distanceKm: moonDistanceKm
+            })
         };
     }
 
     /**
      * Calculate positions for an arbitrary date without exposing mutable service vectors.
      * Useful for forecast vignettes, thumbnails, and tests that need stable snapshots.
+     * @param {Date|string|number} date
+     * @param {number|null} lat
+     * @param {number|null} lon
+     * @param {number} [distance]
+     * @returns {AstroSnapshot}
      */
     getPositionsForDate(date, lat, lon, distance = 20) {
         const data = this.update(date, lat, lon, distance);
         return {
+            ...data,
             sunPosition: data.sunPosition.clone(),
             moonPosition: data.moonPosition.clone(),
             moonIllumination: { ...data.moonIllumination },
-            sunrise: data.sunrise,
-            sunset: data.sunset
+            sunlight: { ...data.sunlight },
+            moonlight: { ...data.moonlight }
         };
     }
 

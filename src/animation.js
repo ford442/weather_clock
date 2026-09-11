@@ -212,7 +212,7 @@ export class AnimationController {
         } // end !inForecastVignette guard for sundial/astro
 
         if (astroData?.sunPosition) {
-            updateMoonVisuals(moonGroup, astroData.sunPosition);
+            updateMoonVisuals(moonGroup, astroData.sunPosition, astroData.moonlight);
         }
 
         // ── Time display ──

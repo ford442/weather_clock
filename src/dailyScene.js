@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { updateSingleWeatherLighting, getSeverity, deriveDailyAtmosphere } from './weatherLighting.js';
+import { updateMoonVisuals } from './moonPhase.js';
 import { AstronomyService } from './astronomy.js';
 import { buildWeatherEffectConfig } from './effects/weather-effects.js';
 
@@ -251,6 +252,9 @@ export class DailyScene {
         if (this.moonGroup) {
             this.moonGroup.position.copy(astro.moonPosition);
             this.moonGroup.lookAt(0, 0, 0);
+            // Scrubbed days get the same phase-driven terminator, earthshine and
+            // apparent size as clock mode.
+            updateMoonVisuals(this.moonGroup, astro.sunPosition, astro.moonlight);
         }
 
         updateSingleWeatherLighting(
