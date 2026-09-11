@@ -28,6 +28,13 @@ import { meanAbsoluteError, meanAbsoluteErrorGated, accuracyCacheSuffix, ACCURAC
 const CACHE_STORAGE_PREFIX = 'weatherclock_cache_v1_';
 const MAX_CACHE_ENTRIES = 24;
 
+// `navigator` isn't defined in every environment this module can load in
+// (Node's test runner, SSR, older Node versions), so geocoding requests
+// fall back to English rather than throwing a ReferenceError.
+function getBrowserLanguage() {
+    return (typeof navigator !== 'undefined' && navigator.language) || 'en';
+}
+
 export { WeatherServiceError };
 
 export class WeatherService {
@@ -96,7 +103,7 @@ export class WeatherService {
         this.searchController = controller;
 
         try {
-            return await this.#fetchJSON(geocodeSearchUrl(query, navigator.language || 'en'), {
+            return await this.#fetchJSON(geocodeSearchUrl(query, getBrowserLanguage()), {
                 signal: controller.signal
             });
         } catch (error) {
@@ -171,7 +178,7 @@ export class WeatherService {
 
     async reverseGeocode(lat, lon) {
         try {
-            const data = await this.#fetchJSON(reverseGeocodeUrl(lat, lon, navigator.language || 'en'));
+            const data = await this.#fetchJSON(reverseGeocodeUrl(lat, lon, getBrowserLanguage()));
 
             if (data.address) {
                 const city = data.address.city || data.address.town || data.address.village;
