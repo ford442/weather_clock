@@ -12,9 +12,9 @@
 import SunCalc from 'suncalc';
 import { fetchJSON, forecastUrl, archiveUrl, climateUrl, previousRunsUrl } from '../net/openMeteoClient.js';
 import { TTLCache } from '../net/weatherCache.js';
+import { calculateAccuracyMetrics, ACCURACY_CACHE_TTL_MS } from '../accuracy.js';
 
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
-const ACCURACY_CACHE_TTL = 24 * 60 * 60 * 1000; // Once per day per location
 const ACCURACY_MIN_SAMPLE_SIZE = 8; // Hours of valid comparison pairs required per day
 // Memory-only cache (see src/net/weatherCache.js for the documented policy
 // split between this and WeatherService's localStorage-backed cache).
@@ -447,7 +447,7 @@ export class TimelineData {
      */
     async fetchAccuracyData(lat, lon) {
         const cacheKey = this.getCacheKey(lat, lon, 'accuracy');
-        const cached = this.getFromCache(cacheKey, false, ACCURACY_CACHE_TTL);
+        const cached = this.getFromCache(cacheKey, false, ACCURACY_CACHE_TTL_MS);
 
         if (cached) {
             return cached.data;
@@ -467,7 +467,7 @@ export class TimelineData {
         } catch (error) {
             console.error('Previous runs fetch failed:', error);
 
-            const stale = this.getFromCache(cacheKey, true, ACCURACY_CACHE_TTL);
+            const stale = this.getFromCache(cacheKey, true, ACCURACY_CACHE_TTL_MS);
             return stale ? stale.data : null;
         }
     }
@@ -532,34 +532,16 @@ export class TimelineData {
     }
 
     /**
-     * Calculate accuracy metrics between actual and predicted values
+     * Calculate accuracy metrics between actual and predicted values.
+     * Thin wrapper around the shared {@link calculateAccuracyMetrics} so both
+     * the clock (WeatherService) and timeline modes score forecasts the same way.
      *
      * @param {number[]} actual - Array of actual values
      * @param {number[]} predicted - Array of predicted values
      * @returns {{mae: number|null, rmse: number|null, skill: number|null}} Accuracy metrics (MAE, RMSE, Skill)
      */
     calculateAccuracy(actual, predicted) {
-        if (actual.length !== predicted.length || actual.length === 0) {
-            return { mae: null, rmse: null, skill: null };
-        }
-
-        const n = actual.length;
-
-        // Mean Absolute Error
-        const mae = actual.reduce((sum, act, i) => sum + Math.abs(act - predicted[i]), 0) / n;
-
-        // Root Mean Square Error
-        const rmse = Math.sqrt(actual.reduce((sum, act, i) => sum + Math.pow(act - predicted[i], 2), 0) / n);
-
-        // Skill score vs persistence (using actual[0] as reference)
-        const persistenceError = actual.reduce((sum, act) => sum + Math.abs(act - actual[0]), 0) / n;
-        const skill = persistenceError > 0 ? (persistenceError - mae) / persistenceError : mae === 0 ? 1 : 0;
-
-        return {
-            mae: parseFloat(mae.toFixed(2)),
-            rmse: parseFloat(rmse.toFixed(2)),
-            skill: parseFloat(skill.toFixed(2))
-        };
+        return calculateAccuracyMetrics(actual, predicted);
     }
 
     // ==================== Helper Methods ====================

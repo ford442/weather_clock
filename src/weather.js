@@ -20,12 +20,20 @@ import {
     alertsUrl
 } from './net/openMeteoClient.js';
 import { TTLCache } from './net/weatherCache.js';
+import { meanAbsoluteError, meanAbsoluteErrorGated, accuracyCacheSuffix, ACCURACY_CACHE_TTL_MS } from './accuracy.js';
 
 // localStorage is shared by the whole origin (other apps on the same host
 // included), so the weather cache must stay bounded rather than growing
 // forever as the user visits new locations.
 const CACHE_STORAGE_PREFIX = 'weatherclock_cache_v1_';
 const MAX_CACHE_ENTRIES = 24;
+
+// `navigator` isn't defined in every environment this module can load in
+// (Node's test runner, SSR, older Node versions), so geocoding requests
+// fall back to English rather than throwing a ReferenceError.
+function getBrowserLanguage() {
+    return (typeof navigator !== 'undefined' && navigator.language) || 'en';
+}
 
 export { WeatherServiceError };
 
@@ -95,7 +103,7 @@ export class WeatherService {
         this.searchController = controller;
 
         try {
-            return await this.#fetchJSON(geocodeSearchUrl(query, navigator.language || 'en'), {
+            return await this.#fetchJSON(geocodeSearchUrl(query, getBrowserLanguage()), {
                 signal: controller.signal
             });
         } catch (error) {
@@ -170,7 +178,7 @@ export class WeatherService {
 
     async reverseGeocode(lat, lon) {
         try {
-            const data = await this.#fetchJSON(reverseGeocodeUrl(lat, lon, navigator.language || 'en'));
+            const data = await this.#fetchJSON(reverseGeocodeUrl(lat, lon, getBrowserLanguage()));
 
             if (data.address) {
                 const city = data.address.city || data.address.town || data.address.village;
@@ -665,15 +673,13 @@ export class WeatherService {
      *   score is 0–100 (100 minus 10 points per °C of day-1 MAE).
      */
     async getPredictionAccuracy() {
-        const ACCURACY_CACHE_TTL = 24 * 60 * 60 * 1000; // Once per day per location
         const MIN_SAMPLE_SIZE = 12; // Hours of valid comparison pairs required
 
         const now = new Date();
-        const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const cacheKey = this.getCacheKey(this.latitude, this.longitude, `accuracy_${dateStr}`);
+        const cacheKey = this.getCacheKey(this.latitude, this.longitude, accuracyCacheSuffix('accuracy', now));
 
         try {
-            const cached = this.getFromCache(cacheKey, false, ACCURACY_CACHE_TTL);
+            const cached = this.getFromCache(cacheKey, false, ACCURACY_CACHE_TTL_MS);
             if (cached) return cached.data;
 
             const data = await this.#fetchJSON(
@@ -702,23 +708,9 @@ export class WeatherService {
             }
             const sample = observedIndices.slice(-24);
 
-            const computeMae = (predicted) => {
-                let sum = 0;
-                let n = 0;
-                for (const i of sample) {
-                    const a = actual[i];
-                    const p = Array.isArray(predicted) ? predicted[i] : null;
-                    if (typeof a === 'number' && typeof p === 'number') {
-                        sum += Math.abs(a - p);
-                        n++;
-                    }
-                }
-                return n > 0 ? { value: sum / n, n } : null;
-            };
-
-            const day1Stats = computeMae(day1);
-            if (!day1Stats || day1Stats.n < MIN_SAMPLE_SIZE) return null;
-            const day3Stats = computeMae(day3);
+            const day1Stats = meanAbsoluteErrorGated(actual, day1, MIN_SAMPLE_SIZE, sample);
+            if (!day1Stats) return null;
+            const day3Stats = meanAbsoluteError(actual, day3, sample);
 
             const result = {
                 mae: Math.round(day1Stats.value * 10) / 10,
