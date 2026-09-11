@@ -99,36 +99,34 @@ npm test
 
 Tests cover sun/moon position calculations, weather state transitions, and atmospheric physics.
 
-### Visual Regression Testing
+### Visual Regression & Functional E2E Testing
 
-This project uses **Playwright**, **Python**, and **Pillow** to perform automated visual regression testing. The test suite renders deterministic test scenarios (various times of day and weather codes), takes screenshots, and compares them against committed baselines pixel-by-pixel.
+This project uses **[Playwright Test](https://playwright.dev/)** for both visual regression and functional end-to-end testing (see `e2e/`). The suite renders deterministic scenarios (various times of day and weather codes), takes screenshots, and compares them against committed baselines pixel-by-pixel, alongside functional specs for mode cycling, unit/search/quality persistence, and forecast-mode smoke checks.
 
-**Prerequisites:**
+**Prerequisites (one-time):**
 ```bash
-pip install playwright Pillow
-playwright install chromium
+npx playwright install chromium
 ```
 
-**Running Visual Verification:**
+**Running Verification:**
 
-Ensure the dev server is running (`npm run dev`), then run the consolidated verification suite:
-
-```bash
-# Run all visual tests and compare against baselines
-python3 verification/suite/run_all.py
-
-# Run the fast app/forecast smoke checks without pixel comparisons
-python3 verification/suite/run_all.py --smoke-only
-```
-
-If visual regressions are expected or intended (e.g., after updating shaders or lighting), you can update the committed baseline images locally using the `VISUAL_UPDATE` environment flag:
+Playwright starts the dev server automatically, so no separate `npm run dev` step is needed:
 
 ```bash
-# Update committed baseline screenshots
-VISUAL_UPDATE=1 python3 verification/suite/run_all.py
+# Run the full suite: screenshots + smoke + functional specs
+npm run test:e2e
+
+# Run only the fast functional specs (no screenshots)
+npx playwright test e2e/functional.e2e.js
 ```
 
-On CI, if the visual regression job fails, PR diffs showing highlighted mismatches are automatically saved and uploaded as a workflow run artifact (`visual-regression-diffs`).
+If visual regressions are expected or intended (e.g., after updating shaders or lighting), update the committed baselines with:
+
+```bash
+npm run test:e2e:update
+```
+
+On CI, if the visual regression job fails, the Playwright HTML report and diff artifacts are automatically uploaded as a workflow run artifact (`playwright-report`). See [AGENTS.md](./AGENTS.md#visual--functional-e2e-e2e) for more detail.
 
 ## 🐞 Debugging Tools
 
@@ -185,7 +183,7 @@ Perfect for quickly testing edge cases (midnight snow, sunset storms, etc.) with
 We welcome contributions! Here's how to get started:
 
 1. **Read [AGENTS.md](./AGENTS.md)** for architecture and development guidelines
-2. **Run tests locally:** `npm test` and visual verification with `python3 verification/suite/run_all.py`
+2. **Run tests locally:** `npm test` and visual/functional verification with `npm run test:e2e`
 3. **Test your changes** across the development, testing, and production workflows
 4. **Follow the code style** in existing modules—keep shaders modular, use object pooling for particles, comment complex math
 
