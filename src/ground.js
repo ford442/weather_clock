@@ -1,9 +1,10 @@
 // Ground disc the sundial sits on — the surface snow/wetness/foliage react against.
 import * as THREE from 'three';
+import { SCENE_LAYOUT } from './scene-layout.js';
 
 export const GROUND_CONFIG = {
-    radius: 3.6,
-    y: -0.02,
+    radius: SCENE_LAYOUT.ground.radius,
+    y: SCENE_LAYOUT.ground.y,
     color: 0x4a5a3a,
     roughness: 0.9,
     metalness: 0.05

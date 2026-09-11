@@ -1,3 +1,5 @@
+import { SCENE_LAYOUT } from '../scene-layout.js';
+
 export const NATIVE_KERNELS = Object.freeze({
     CLOUD_NOISE: 'cloudNoise',
     PARTICLES: 'particles',
@@ -82,7 +84,12 @@ function curlComponents(x, y, z, time) {
 
 // mode: 0 = snow points, 1 = rain line-segment pairs, 2 = dust points.
 export function stepParticlesJS(positions, velocities, offsets, count, windX, windZ, dt, options = {}) {
-    const { mode = 0, minX = -8, maxX = 8, time = 0 } = options;
+    const {
+        mode = 0,
+        minX = SCENE_LAYOUT.zones.current.minX,
+        maxX = SCENE_LAYOUT.zones.current.maxX,
+        time = 0
+    } = options;
     const frameScale = Math.max(0, Math.min(3, dt * 60));
     for (let i = 0; i < count; i++) {
         const velocityIndex = i * 3;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createFogTexture } from './cloud-resources.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 export class FogEffect {
     constructor(scene, zone) {
@@ -70,8 +71,8 @@ export class FogEffect {
             mesh.position.z += wz + driftZ * delta;
             if (mesh.position.x > this.zone.maxX + 1) mesh.position.x = this.zone.minX - 1;
             if (mesh.position.x < this.zone.minX - 1) mesh.position.x = this.zone.maxX + 1;
-            if (mesh.position.z > 8) mesh.position.z = -8;
-            if (mesh.position.z < -8) mesh.position.z = 8;
+            if (mesh.position.z > SCENE_LAYOUT.fog.maxZ) mesh.position.z = SCENE_LAYOUT.fog.minZ;
+            if (mesh.position.z < SCENE_LAYOUT.fog.minZ) mesh.position.z = SCENE_LAYOUT.fog.maxZ;
         });
     }
 

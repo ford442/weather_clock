@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createRenderer, createPostProcessingPipeline, requestWebGLFallback } from './webgpu/index.js';
 import { t } from './i18n/strings.js';
+import { SCENE_LAYOUT } from './scene-layout.js';
 
 // Quality configuration
 /** @type {Record<QualityTier, {pixelRatioCap: number, disableBloom: boolean, bloomStrengthMultiplier: number, shadowMapSize: number, moonShadowMapSize: number, particleDivisor: number}>} */
@@ -113,11 +114,11 @@ export async function applyQualityTier(tier, scene3d) {
 const RENDERING_CONFIG = {
     fogColor: 0xaaaaaa,
     fogDensity: 0.0001,
-    cameraNear: 0.1,
-    cameraFar: 2000000,
-    cameraFOV: 75,
-    cameraPosition: { x: 0, y: 5, z: 8 },
-    cameraLookAt: { x: 0, y: 0, z: 0 },
+    cameraNear: SCENE_LAYOUT.camera.near,
+    cameraFar: SCENE_LAYOUT.camera.far,
+    cameraFOV: SCENE_LAYOUT.camera.fov,
+    cameraPosition: SCENE_LAYOUT.camera.position,
+    cameraLookAt: SCENE_LAYOUT.camera.lookAt,
     clearColor: 0x000000,
     toneMappingExposure: 0.5,
     shadowMapSize: 2048,

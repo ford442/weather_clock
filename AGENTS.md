@@ -221,12 +221,12 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
 4. `weatherLighting.js` computes severity, cloud weighting, and smoothly transitions colors/intensities over ~5 seconds.
 
 ### Three Temporal Zones
-The scene is visually divided into three time-offset zones:
-- **Past (Left):** `x: -8` — weather from ~3 hours ago
-- **Present (Center):** `x: 0` — current weather
-- **Future (Right):** `x: 8` — weather from ~3 hours ahead
+The scene is visually divided into three time-offset zones, defined as the single source of truth in `src/scene-layout.js`'s `SCENE_LAYOUT.zones`:
+- **Past (Left):** `x: -12 to -4` — weather from ~3 hours ago
+- **Present (Center):** `x: -4 to 4` — current weather
+- **Future (Right):** `x: 4 to 12` — weather from ~3 hours ahead
 
-Particle systems (rain, snow) are constrained to zone boundaries. When modifying particle physics, ensure position wrapping uses the zone's `minX`/`maxX` bounds, not global bounds, or weather will "leak" between time periods.
+Particle systems (rain, snow, dust, fog) are constrained to zone boundaries. When modifying particle physics, ensure position wrapping uses the zone's `minX`/`maxX` bounds, not global bounds, or weather will "leak" between time periods. Lightning strikes only spawn in `SCENE_LAYOUT.lightning`, which matches the present zone. Every spatial constant in `SCENE_LAYOUT` (zones, fog Z-wrap, lightning bounds, ground radius, camera setup) should be imported from `src/scene-layout.js` rather than hardcoded — call `aetherDebug.getSceneLayout()` in the browser console to inspect it live.
 
 Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Forecast (30%). Do not set `sunLight.position` in `weatherLighting.js`; position is handled exclusively by `astronomy.js`.
 
@@ -243,9 +243,6 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 
 ### Mode Switching
 `ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
-
-### Known Limitations
-- **Hardcoded zone offsets:** The visual separation of temporal zones relies on hardcoded X offsets (e.g., `-8`, `0`, `8`) in multiple files. Changing scene scale requires updating these values consistently. Tracked as [#109](https://github.com/ford442/weather_clock/issues/109) (centralize into a `SCENE_LAYOUT` config).
 
 ### Known Issues / Blockers
 _Last verified 2026-09-11 by running `lint`, `typecheck`, `format:check`, `test`, and `build` directly._

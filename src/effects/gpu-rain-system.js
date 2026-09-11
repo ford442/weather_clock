@@ -17,11 +17,12 @@ import {
 } from 'three/tsl';
 import { SUNDIAL_DIMENSIONS } from '../sundial.js';
 import { ParticleSystemBase } from './particle-base.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 export class GPURainSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 10000, renderer = null) {
         super(scene);
-        this.zone = zone || { minX: -8, maxX: 8 };
+        this.zone = zone || SCENE_LAYOUT.zones.current;
         this.maxParticles = maxParticles;
         this.renderer = renderer;
         this.currentIntensity = 0;

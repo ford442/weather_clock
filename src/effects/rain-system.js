@@ -3,6 +3,7 @@ import { createRainMaterial, createRainMaterialWebGPU } from '../webgpu/material
 import { SUNDIAL_DIMENSIONS } from '../sundial.js';
 import { getNativeRuntime } from '../native/native-runtime.js';
 import { ParticleSystemBase } from './particle-base.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 export class RainSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 1500) {
@@ -10,7 +11,7 @@ export class RainSystem extends ParticleSystemBase {
         this.currentIntensity = 0;
         this.activeCount = 0;
         this.maxParticles = maxParticles;
-        this.zone = zone || { minX: -8, maxX: 8 };
+        this.zone = zone || SCENE_LAYOUT.zones.current;
 
         this.nativeRuntime = getNativeRuntime();
         /** @type {{backend: string, positions: Float32Array, velocities: Float32Array, offsets: Float32Array, disposed: boolean, dispose(): void}|null} */
