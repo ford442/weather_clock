@@ -79,7 +79,7 @@ export function createDebugWeatherData(simulationTime, weatherCode, timeline) {
  */
 export function setupDebugAPI(state, services, scene3d) {
     const { weatherService, astronomyService } = services;
-    const { scene, sky, weatherEffects, sunLight, moonLight, ambientLight } = scene3d;
+    const { scene, sky, weatherEffects, sunLight, moonLight, ambientLight, ambienceEngine } = scene3d;
 
     // Debug function: set weather code
     window.setDebugWeather = (weatherCode) => {
@@ -139,7 +139,14 @@ export function setupDebugAPI(state, services, scene3d) {
         getMode: () => window.modeController?.getMode?.(),
         spawnBolt: () => {
             weatherEffects.createLightning();
-        }
+        },
+        getAudioState: () => ambienceEngine?.getState?.() ?? null,
+        forceAudioMute: (muted = true) => {
+            ambienceEngine?.ensureStarted?.();
+            ambienceEngine?.setMuted(muted);
+        },
+        forceAudioWeather: (overrides) => ambienceEngine?.forceWeatherBed?.(overrides),
+        clearForcedAudioWeather: () => ambienceEngine?.forceWeatherBed?.(null)
     };
 
     // Debug: jump into forecast mode focused on a day index (0-9) at a given hour
