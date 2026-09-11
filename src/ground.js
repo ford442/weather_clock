@@ -10,10 +10,10 @@ export const GROUND_CONFIG = {
 };
 
 /**
- * @param {boolean} isWebGPU
- * @param {THREE.Texture|null} [snowMaskTexture]
+ * @param {boolean} _isWebGPU
+ * @param {THREE.Texture|null} [_snowMaskTexture]
  */
-export function createGround(isWebGPU = false, snowMaskTexture = null) {
+export function createGround(_isWebGPU = false, _snowMaskTexture = null) {
     const geometry = new THREE.CircleGeometry(GROUND_CONFIG.radius, 96);
     geometry.rotateX(-Math.PI / 2);
 

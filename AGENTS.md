@@ -191,6 +191,9 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
      window.aetherDebug.getMoonPosition();
      ```
 
+5. **CI must stay green**
+   - `npm run lint`, `npm run typecheck`, and `npm run format:check` are required CI gates in addition to `npm test`. Run all four locally before pushing — a change that adds a new export, parameter, or field (e.g. to `WeatherSnapshot` or a post-processing adapter) must update `src/types.d.ts` and remove/underscore-prefix any now-unused parameters in the same commit.
+
 ---
 
 ## Security Considerations
