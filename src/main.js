@@ -176,10 +176,10 @@ async function bootstrap() {
         if (lat && lon && location) {
             weatherService.setManualLocation(lat, lon, location);
         }
-        if (unit) {
+        if (unit === 'metric' || unit === 'imperial') {
             weatherService.unit = unit;
         }
-        if (windUnit) {
+        if (windUnit === 'metric' || windUnit === 'imperial') {
             weatherService.windUnit = windUnit;
         }
         return !!(lat && lon);

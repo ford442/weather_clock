@@ -1,9 +1,9 @@
-// @ts-nocheck
 /**
  * Shared mode chrome: toggle button, drawers, cross-fade, and keyboard controls.
  * Mode state and transitions remain owned by ModeController and its adapters.
  */
 export class ModeShell {
+    /** @param {import('../ModeController.js').ModeController} owner */
     constructor(owner) {
         this.owner = owner;
     }
@@ -20,6 +20,7 @@ export class ModeShell {
         return this.owner.toggleMode();
     }
 
+    /** @param {import('../ModeController.js').AppMode} mode */
     switchMode(mode) {
         return this.owner.switchMode(mode);
     }
@@ -72,6 +73,7 @@ export class ModeShell {
     /**
      * Add will-change: transform during CSS transitions and remove after
      */
+    /** @param {HTMLElement|null} el */
     _setWillChange(el) {
         if (!el) return;
         el.style.willChange = 'transform';
@@ -302,7 +304,8 @@ export class ModeShell {
     setupKeyboardShortcuts() {
         window.addEventListener('keydown', (e) => {
             // Don't trigger if user is typing in an input
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            const tag = /** @type {HTMLElement|null} */ (e.target)?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') {
                 return;
             }
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as THREE from 'three';
 
 export const MODE_CAMERA = {
@@ -13,8 +12,17 @@ export const MODE_CAMERA = {
 };
 
 const TRANSITION_DURATION_MS = 1500;
+/** @param {number} t */
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
+/**
+ * @param {import('../ModeController.js').ModeController} owner
+ * @param {THREE.Vector3} fromPosition
+ * @param {THREE.Vector3} fromTarget
+ * @param {THREE.Vector3} toPosition
+ * @param {THREE.Vector3} toTarget
+ * @returns {Promise<void>}
+ */
 export function animateModeCamera(owner, fromPosition, fromTarget, toPosition, toTarget) {
     return new Promise((resolve) => {
         const startTime = performance.now();

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Thin mode state machine. Per-mode adapters own camera and UI transitions;
  * ModeShell owns shared toggle/drawer chrome.
@@ -10,9 +9,19 @@ import { ModeShell } from './modes/ModeShell.js';
 import { TimelineModeAdapter } from './modes/TimelineModeAdapter.js';
 import { animateModeCamera } from './modes/camera-transition.js';
 
+/** @typedef {'clock'|'timeline'|'forecast'} AppMode */
+
 const MODES = ['clock', 'timeline', 'forecast'];
 
 export class ModeController {
+    /**
+     * @param {THREE.Scene} scene
+     * @param {THREE.Camera} camera
+     * @param {import('three/addons/controls/OrbitControls.js').OrbitControls} controls
+     * @param {THREE.WebGLRenderer|import('three/webgpu').WebGPURenderer} renderer
+     * @param {import('./weather.js').WeatherService} weatherService
+     * @param {AppState|null} [state]
+     */
     constructor(scene, camera, controls, renderer, weatherService, state = null) {
         this.scene = scene;
         this.camera = camera;
@@ -21,6 +30,7 @@ export class ModeController {
         this.weatherService = weatherService;
         this.state = state;
 
+        /** @type {AppMode} */
         this.currentMode = 'clock';
         this.isTransitioning = false;
         this.locked = false; // blocks mode switching (e.g. during time-lapse recording)
@@ -69,15 +79,18 @@ export class ModeController {
         this.shell.setupKeyboardShortcuts();
     }
 
+    /** @param {boolean} reducedMotion */
     setReducedMotion(reducedMotion) {
         if (this.state) this.state.reducedMotion = reducedMotion;
     }
 
-    /** Block/unblock all mode switching (button, T key, popstate) — used while recording a time-lapse. */
+    /** Block/unblock all mode switching (button, T key, popstate) — used while recording a time-lapse.
+     * @param {boolean} locked */
     setLocked(locked) {
         this.locked = locked;
     }
 
+    /** @param {() => Promise<unknown>} loader */
     setForecastSceneLoader(loader) {
         this.forecastAdapter.setSceneLoader(loader);
     }
@@ -120,9 +133,10 @@ export class ModeController {
 
     toggleMode() {
         const currentIndex = MODES.indexOf(this.currentMode);
-        return this.switchMode(MODES[(currentIndex + 1) % MODES.length]);
+        return this.switchMode(/** @type {AppMode} */ (MODES[(currentIndex + 1) % MODES.length]));
     }
 
+    /** @param {AppMode} newMode */
     async switchMode(newMode) {
         if (!MODES.includes(newMode) || newMode === this.currentMode || this.isTransitioning || this.locked) return;
 
@@ -158,18 +172,27 @@ export class ModeController {
         return this.timelineAdapter.init();
     }
 
+    /**
+     * @param {THREE.Vector3} fromPosition
+     * @param {THREE.Vector3} fromTarget
+     * @param {THREE.Vector3} toPosition
+     * @param {THREE.Vector3} toTarget
+     */
     animateCamera(fromPosition, fromTarget, toPosition, toTarget) {
         return animateModeCamera(this, fromPosition, fromTarget, toPosition, toTarget);
     }
 
+    /** @param {boolean} visible */
     setClockUIVisibility(visible) {
         this.clockAdapter.setVisible(visible);
     }
 
+    /** @param {boolean} visible */
     setTimelineUIVisibility(visible) {
         this.timelineAdapter.setVisible(visible);
     }
 
+    /** @param {boolean} visible */
     setForecastUIVisibility(visible) {
         this.forecastAdapter.setVisible(visible);
     }
@@ -178,6 +201,7 @@ export class ModeController {
         this.shell.updateToggleUI();
     }
 
+    /** @param {AppMode} mode */
     updateHistory(mode) {
         const url = new URL(window.location.href);
         if (mode === 'clock') {
@@ -196,7 +220,9 @@ export class ModeController {
         });
 
         const initialMode = new URLSearchParams(window.location.search).get('mode') || 'clock';
-        if (MODES.includes(initialMode) && initialMode !== 'clock') this.switchMode(initialMode);
+        if (MODES.includes(initialMode) && initialMode !== 'clock') {
+            this.switchMode(/** @type {AppMode} */ (initialMode));
+        }
     }
 
     setupKeyboardShortcuts() {

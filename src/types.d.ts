@@ -79,6 +79,36 @@ interface DailyForecastDay {
 }
 
 /**
+ * Result of {@link WeatherService.fetchWeather}, assembled in
+ * `weather.js#_fetchWeatherOnce` and enriched in `main.js` with air quality,
+ * alerts and the 10-day daily forecast once those lazily-loaded pieces
+ * arrive. This is `state.weatherData`'s shape.
+ */
+interface WeatherData {
+    location: string | null;
+    current: WeatherSnapshot;
+    past: WeatherSnapshot;
+    forecast: WeatherSnapshot;
+    timeline: WeatherSnapshot[];
+    sunrise: Date;
+    sunset: Date;
+    historicalYearAgo: { temp: number; weatherCode: number; description: string; date: string } | null;
+    /** Populated by fetchRegionalWeather() when the Nearby tab is opened. */
+    regional: Array<{ name: string; temp: number }> | null;
+    accuracy: ClockForecastAccuracy | null;
+    /** Attached by main.js after the Air Quality API resolves. */
+    airQuality?: { usAqi?: number | null; europeanAqi?: number | null; pollen?: Record<string, number | null> } | null;
+    /** Attached by main.js after the NWS alerts fetch resolves. */
+    alerts?: Array<{ event: string; severity: string; headline: string; description: string }>;
+    /** Attached by main.js once the 10-Day Forecast View lazily loads it. */
+    dailyForecast?: DailyForecastDay[];
+    /** Set when fetchWeather() fell back to a stale cache entry after a fetch failure. */
+    isCached?: boolean;
+    isOffline?: boolean;
+    cachedAt?: number;
+}
+
+/**
  * Canonical hourly point used by the 21-day timeline and 10-day forecast
  * strip (src/timeline/TimelineData.js). Deliberately narrower than
  * {@link WeatherSnapshot}, which is the clock/current-conditions hourly
@@ -172,6 +202,16 @@ interface Navigator {
 
 interface HTMLDivElement {
     _dayData?: DailyForecastDay;
+}
+
+/** Shared mutable app state owned by main.js and threaded through ModeController/AnimationController. */
+interface AppState {
+    weatherData: WeatherData | null;
+    simulationTime: Date;
+    isTimeWarping: boolean;
+    isDebugMode: boolean;
+    timeSpeed: number;
+    reducedMotion: boolean;
 }
 
 interface Window {

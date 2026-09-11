@@ -1,16 +1,22 @@
-// @ts-nocheck
 import { animateModeCamera, MODE_CAMERA } from './camera-transition.js';
 
 export class ForecastModeAdapter {
+    /** @param {import('../ModeController.js').ModeController} owner */
     constructor(owner) {
         this.owner = owner;
+        /** @type {import('../forecast/ForecastController.js').ForecastController|null} */
         this.controller = null;
+        /** @type {import('../forecast/ForecastUI.js').ForecastUI|null} */
         this.ui = null;
+        /** @type {Promise<{ForecastController: typeof import('../forecast/ForecastController.js').ForecastController, ForecastUI: typeof import('../forecast/ForecastUI.js').ForecastUI}>|null} */
         this.modulesPromise = null;
+        /** @type {(() => Promise<unknown>)|null} */
         this.prepareScene = null;
+        /** @type {{index: number, day: DailyForecastDay, repDate: Date}|null} */
         this.focusedForecast = null;
     }
 
+    /** @param {() => Promise<unknown>} loader */
     setSceneLoader(loader) {
         this.prepareScene = loader;
     }
@@ -28,6 +34,7 @@ export class ForecastModeAdapter {
         return this.modulesPromise;
     }
 
+    /** @returns {HTMLElement} */
     getContainer() {
         let container = document.getElementById('forecast-ui-container');
         if (!container) {
@@ -39,6 +46,10 @@ export class ForecastModeAdapter {
         return container;
     }
 
+    /**
+     * @param {HTMLElement} container
+     * @param {{ForecastController: typeof import('../forecast/ForecastController.js').ForecastController, ForecastUI: typeof import('../forecast/ForecastUI.js').ForecastUI}} modules
+     */
     async init(container, modules) {
         if (this.controller) return;
         this.controller = new modules.ForecastController(
@@ -55,12 +66,14 @@ export class ForecastModeAdapter {
         };
     }
 
+    /** @param {boolean} visible */
     setVisible(visible) {
         const container = document.getElementById('forecast-ui-container');
         if (container) container.style.display = visible ? '' : 'none';
     }
 
-    async enter() {
+    /** @param {{from?: import('../ModeController.js').AppMode}} [_transition] */
+    async enter(_transition) {
         this.owner.controls.enabled = false;
         const [modules] = await Promise.all([this.loadModules(), this.prepareScene?.()]);
         const container = this.getContainer();
@@ -84,7 +97,8 @@ export class ForecastModeAdapter {
         );
     }
 
-    exit() {
+    /** @param {{to?: import('../ModeController.js').AppMode}} [_transition] */
+    exit(_transition) {
         this.setVisible(false);
     }
 
