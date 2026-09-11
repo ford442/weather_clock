@@ -1,5 +1,8 @@
 // @ts-nocheck
-// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
+// Phase 1 opt-out: full strict typing of this file's control flow is out of
+// scope for this refactor, but its data shapes are now canonical types in
+// src/types.d.ts (TimelineDayData, TimelineHourlyPoint, Climatology,
+// TimelineForecastAccuracy) rather than local @typedefs.
 /**
  * TimelineData.js - Data fetching service for the 21-day weather timeline
  *
@@ -12,46 +15,23 @@
  */
 
 import SunCalc from 'suncalc';
+import { fetchJSON, forecastUrl, archiveUrl, climateUrl, previousRunsUrl } from '../net/openMeteoClient.js';
+import { TTLCache } from '../net/weatherCache.js';
 
-const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1';
-const OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1';
-const OPEN_METEO_CLIMATE = 'https://climate-api.open-meteo.com/v1';
-const OPEN_METEO_PREVIOUS_RUNS = 'https://previous-runs-api.open-meteo.com/v1';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
 const ACCURACY_CACHE_TTL = 24 * 60 * 60 * 1000; // Once per day per location
 const ACCURACY_MIN_SAMPLE_SIZE = 8; // Hours of valid comparison pairs required per day
+// Memory-only cache (see src/net/weatherCache.js for the documented policy
+// split between this and WeatherService's localStorage-backed cache).
+const MAX_MEMORY_ENTRIES = 50;
 
-/**
- * DayData interface:
- * @typedef {Object} DayData
- * @property {string} date - ISO date string (YYYY-MM-DD)
- * @property {'historical'|'forecast'} type - Data source type
- * @property {number} tempMax - Maximum temperature (°C)
- * @property {number} tempMin - Minimum temperature (°C)
- * @property {number} tempAvg - Average temperature (°C)
- * @property {number} tempAnomaly - Deviation from climatology (°C)
- * @property {number} zScore - Standard deviations from normal
- * @property {number} weatherCode - WMO weather code
- * @property {'clear'|'cloudy'|'rain'|'snow'|'storm'} condition - Simplified condition
- * @property {HourlyData[]} hourly - Hourly data points
- * @property {Object} [prediction] - For historical days: what was predicted
- * @property {Object} [accuracy] - For historical days: forecast accuracy metrics
- */
-
-/**
- * HourlyData interface:
- * @typedef {Object} HourlyData
- * @property {string} time - ISO datetime string
- * @property {number} temp - Temperature (°C)
- * @property {number} weatherCode - WMO weather code
- * @property {number} cloudCover - Cloud cover percentage
- * @property {number} windSpeed - Wind speed (km/h)
- * @property {number} precipitation - Precipitation amount (mm)
- */
+// DayData -> global TimelineDayData (src/types.d.ts)
+// HourlyData -> global TimelineHourlyPoint (src/types.d.ts)
 
 export class TimelineData {
     constructor() {
-        this.cache = new Map();
+        this._cacheStore = new TTLCache({ defaultTtlMs: CACHE_TTL });
+        this.cache = this._cacheStore.memory;
         this.climatologyCache = null; // Cache climatology separately (rarely changes)
     }
 
@@ -61,7 +41,7 @@ export class TimelineData {
      *
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
-     * @returns {Promise<DayData[]>} Array of 21 DayData objects (-10 to +10 days)
+     * @returns {Promise<TimelineDayData[]>} Array of 21 DayData objects (-10 to +10 days)
      */
     async fetchTimelineData(lat, lon) {
         try {
@@ -120,26 +100,16 @@ export class TimelineData {
         const startStr = startDate.toISOString().split('T')[0];
         const endStr = endDate.toISOString().split('T')[0];
 
-        const url = new URL(`${OPEN_METEO_ARCHIVE}/archive`);
-        url.searchParams.append('latitude', lat);
-        url.searchParams.append('longitude', lon);
-        url.searchParams.append('start_date', startStr);
-        url.searchParams.append('end_date', endStr);
-        url.searchParams.append(
-            'daily',
-            'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum'
-        );
-        url.searchParams.append('hourly', 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation');
-        url.searchParams.append('timezone', 'auto');
+        const url = archiveUrl(lat, lon, {
+            start_date: startStr,
+            end_date: endStr,
+            daily: 'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum',
+            hourly: 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation',
+            timezone: 'auto'
+        });
 
         try {
-            const response = await fetch(url.toString());
-
-            if (!response.ok) {
-                throw new Error(`Archive API error: ${response.status} ${response.statusText}`);
-            }
-
-            const data = await response.json();
+            const data = await fetchJSON(url);
             this.setCache(cacheKey, data);
             return data;
         } catch (error) {
@@ -170,26 +140,16 @@ export class TimelineData {
             return cached.data;
         }
 
-        const url = new URL(`${OPEN_METEO_BASE}/forecast`);
-        url.searchParams.append('latitude', lat);
-        url.searchParams.append('longitude', lon);
-        url.searchParams.append('forecast_days', days);
-        url.searchParams.append('past_days', 10); // Include past forecast data for comparison
-        url.searchParams.append(
-            'daily',
-            'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum'
-        );
-        url.searchParams.append('hourly', 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation');
-        url.searchParams.append('timezone', 'auto');
+        const url = forecastUrl(lat, lon, {
+            forecast_days: days,
+            past_days: 10, // Include past forecast data for comparison
+            daily: 'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum',
+            hourly: 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation',
+            timezone: 'auto'
+        });
 
         try {
-            const response = await fetch(url.toString());
-
-            if (!response.ok) {
-                throw new Error(`Forecast API error: ${response.status} ${response.statusText}`);
-            }
-
-            const data = await response.json();
+            const data = await fetchJSON(url);
             this.setCache(cacheKey, data);
             return data;
         } catch (error) {
@@ -226,25 +186,16 @@ export class TimelineData {
 
         // Open-Meteo climate API endpoint for 30-year normals
         // Using ERA5-Land for high-resolution temperature data
-        const url = new URL(`${OPEN_METEO_CLIMATE}/climate`);
-        url.searchParams.append('latitude', lat);
-        url.searchParams.append('longitude', lon);
-        url.searchParams.append('models', 'era5_land');
-        url.searchParams.append('start_date', '1991-01-01');
-        url.searchParams.append('end_date', '2020-12-31');
-        url.searchParams.append('daily', 'temperature_2m_mean,temperature_2m_max,temperature_2m_min');
-        url.searchParams.append('timezone', 'auto');
+        const url = climateUrl(lat, lon, {
+            models: 'era5_land',
+            start_date: '1991-01-01',
+            end_date: '2020-12-31',
+            daily: 'temperature_2m_mean,temperature_2m_max,temperature_2m_min',
+            timezone: 'auto'
+        });
 
         try {
-            const response = await fetch(url.toString());
-
-            if (!response.ok) {
-                // Climate API may not be available everywhere, use fallback
-                console.warn('Climate API unavailable, using fallback estimation');
-                return this.generateFallbackClimatology(lat, lon);
-            }
-
-            const data = await response.json();
+            const data = await fetchJSON(url);
             const processed = this.processClimatologyData(data);
 
             this.climatologyCache = processed;
@@ -358,7 +309,7 @@ export class TimelineData {
      * @param {Object} historical - Raw historical API response
      * @param {Object} forecast - Raw forecast API response  
      * @param {Object} climatology - Processed climatology data
-     * @returns {DayData[]} Unified array of 21 days
+     * @returns {TimelineDayData[]} Unified array of 21 days
      */
     mergeTimelineData(historical, forecast, climatology) {
         const days = [];
@@ -411,7 +362,7 @@ export class TimelineData {
      * @param {number} index - Index in the daily arrays
      * @param {'historical'|'forecast'} type - Data type
      * @param {Object} climatology - Climatology data for anomaly calc
-     * @returns {DayData} Transformed day data
+     * @returns {TimelineDayData} Transformed day data
      */
     transformToDayData(rawData, index, type, climatology) {
         const daily = rawData.daily;
@@ -462,7 +413,7 @@ export class TimelineData {
      *
      * @param {Object} hourlyData - Raw hourly data from API
      * @param {string} dateStr - Date string to filter (YYYY-MM-DD)
-     * @returns {HourlyData[]} Hourly data for the day
+     * @returns {TimelineHourlyPoint[]} Hourly data for the day
      */
     extractHourlyData(hourlyData, dateStr) {
         if (!hourlyData?.time) return [];
@@ -507,22 +458,15 @@ export class TimelineData {
             return cached.data;
         }
 
-        const url = new URL(`${OPEN_METEO_PREVIOUS_RUNS}/forecast`);
-        url.searchParams.append('latitude', lat);
-        url.searchParams.append('longitude', lon);
-        url.searchParams.append('hourly', 'temperature_2m,temperature_2m_previous_day1');
-        url.searchParams.append('past_days', 10);
-        url.searchParams.append('forecast_days', 0);
-        url.searchParams.append('timezone', 'auto');
+        const url = previousRunsUrl(lat, lon, {
+            hourly: 'temperature_2m,temperature_2m_previous_day1',
+            past_days: 10,
+            forecast_days: 0,
+            timezone: 'auto'
+        });
 
         try {
-            const response = await fetch(url.toString());
-
-            if (!response.ok) {
-                throw new Error(`Previous Runs API error: ${response.status} ${response.statusText}`);
-            }
-
-            const data = await response.json();
+            const data = await fetchJSON(url);
             this.setCache(cacheKey, data);
             return data;
         } catch (error) {
@@ -541,7 +485,7 @@ export class TimelineData {
      * are left without an `accuracy` field, which the timeline UI treats as
      * "no data" rather than showing a fabricated number.
      *
-     * @param {DayData[]} days - Array of day data (mutated in place)
+     * @param {TimelineDayData[]} days - Array of day data (mutated in place)
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
      */
@@ -718,7 +662,7 @@ export class TimelineData {
      * @param {number} lat
      * @param {number} lon
      * @param {number} count - Number of days (default 10)
-     * @returns {Promise<DayData[]>}
+     * @returns {Promise<TimelineDayData[]>}
      */
     async getForecastDays(lat, lon, count = 10) {
         const all = await this.fetchTimelineData(lat, lon);
@@ -824,19 +768,7 @@ export class TimelineData {
      * @returns {Object|null} Cached data or null
      */
     getFromCache(key, allowExpired = false, ttlMs = CACHE_TTL) {
-        const cached = this.cache.get(key);
-
-        if (!cached) return null;
-
-        const now = Date.now();
-        const isExpired = now - cached.timestamp > ttlMs;
-
-        if (isExpired && !allowExpired) {
-            this.cache.delete(key);
-            return null;
-        }
-
-        return cached;
+        return this._cacheStore.get(key, { allowExpired, ttlMs });
     }
 
     /**
@@ -846,13 +778,10 @@ export class TimelineData {
      * @param {Object} data - Data to cache
      */
     setCache(key, data) {
-        this.cache.set(key, {
-            data,
-            timestamp: Date.now()
-        });
+        this._cacheStore.set(key, data);
 
         // Clean up old cache entries periodically
-        if (this.cache.size > 50) {
+        if (this.cache.size > MAX_MEMORY_ENTRIES) {
             this.cleanupCache();
         }
     }
@@ -861,19 +790,14 @@ export class TimelineData {
      * Remove expired cache entries
      */
     cleanupCache() {
-        const now = Date.now();
-        for (const [key, value] of this.cache.entries()) {
-            if (now - value.timestamp > CACHE_TTL) {
-                this.cache.delete(key);
-            }
-        }
+        this._cacheStore.pruneMemoryExpired(CACHE_TTL);
     }
 
     /**
      * Clear all cached data
      */
     clearCache() {
-        this.cache.clear();
+        this._cacheStore.clear();
         this.climatologyCache = null;
     }
 }
