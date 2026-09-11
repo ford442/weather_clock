@@ -10,6 +10,8 @@
 
 // @ts-nocheck
 // Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
+import { formatDate } from '../i18n/strings.js';
+
 export class TimelineUI {
     constructor(container) {
         this.container = container;
@@ -77,6 +79,12 @@ export class TimelineUI {
                 <div class="timeline-controls">
                     <button class="timeline-btn" id="timeline-help" title="Help">?</button>
                 </div>
+
+                <!-- Keyboard-accessible proxies for the raycast-driven 3D day columns.
+                     Visually hidden until one receives focus (sr-only-until-focus pattern),
+                     so keyboard/screen-reader users can reach and select every day without
+                     a pointer. -->
+                <div class="timeline-day-proxies" id="timeline-day-proxies" role="group" aria-label="Timeline days"></div>
             </div>
         `;
 
@@ -97,6 +105,50 @@ export class TimelineUI {
         this.detailAccuracy = this.container.querySelector('#detail-accuracy');
         this.accuracyValue = this.container.querySelector('#accuracy-value');
         this.detailClose = this.container.querySelector('#detail-close');
+        this.dayProxyList = this.container.querySelector('#timeline-day-proxies');
+    }
+
+    /**
+     * Populate keyboard-focusable proxy buttons, one per day column, so every
+     * day is reachable and selectable without a pointer/raycast. Called after
+     * the 3D day columns are (re)created.
+     * @param {import('./DayColumn.js').DayColumn[]} dayColumns
+     * @param {(column: import('./DayColumn.js').DayColumn) => void} onSelect
+     */
+    setDayProxies(dayColumns, onSelect) {
+        if (!this.dayProxyList) return;
+        this.dayProxyList.innerHTML = '';
+        (dayColumns || []).forEach((column, i) => {
+            const data = column.getData ? column.getData() : column.data;
+            const date = data?.date ? new Date(data.date) : null;
+            const label =
+                date && !isNaN(date)
+                    ? formatDate(date, { weekday: 'short', month: 'short', day: 'numeric' })
+                    : `Day ${i + 1}`;
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'timeline-day-proxy';
+            btn.textContent = label;
+            btn.setAttribute('aria-label', `Select ${label} on the timeline`);
+            btn.addEventListener('click', () => onSelect?.(column));
+            btn.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onSelect?.(column);
+                } else if (event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    this.dayProxyList.children[Math.min(this.dayProxyList.children.length - 1, i + 1)]?.focus();
+                } else if (event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    this.dayProxyList.children[Math.max(0, i - 1)]?.focus();
+                }
+            });
+            btn.addEventListener('focus', () => column.setHovered?.(true));
+            btn.addEventListener('blur', () => column.setHovered?.(false));
+
+            this.dayProxyList.appendChild(btn);
+        });
     }
 
     /**
@@ -348,7 +400,51 @@ export class TimelineUI {
                 background: rgba(255, 255, 255, 0.1);
                 transform: scale(1.1);
             }
-            
+
+            /* Keyboard proxies for the raycast-driven day columns: each button is
+               visually hidden (sr-only) until it receives keyboard focus, at which
+               point it becomes visible so sighted keyboard users can see where
+               focus is too. */
+            .timeline-day-proxies {
+                position: absolute;
+                top: 0;
+                left: 0;
+                display: flex;
+                gap: 4px;
+                z-index: 20;
+            }
+
+            .timeline-day-proxy {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                white-space: nowrap;
+                border: 0;
+                background: rgba(0, 0, 0, 0.85);
+                color: white;
+                font-family: 'Inter', sans-serif;
+                font-size: 13px;
+                cursor: pointer;
+            }
+
+            .timeline-day-proxy:focus-visible {
+                position: static;
+                width: auto;
+                height: auto;
+                padding: 8px 14px;
+                margin: 0;
+                overflow: visible;
+                clip: auto;
+                white-space: normal;
+                border-radius: 8px;
+                outline: 2px solid #7dd3fc;
+                outline-offset: 2px;
+            }
+
             /* Responsive adjustments */
             @media (max-width: 768px) {
                 .timeline-legend {
@@ -381,12 +477,7 @@ export class TimelineUI {
 
         // Format date
         const date = new Date(dayData.date);
-        const dateStr = date.toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
+        const dateStr = formatDate(date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
         // Update content
         this.detailDate.textContent = dateStr;

@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { formatDate, formatTime } from '../i18n/strings.js';
+
 const UI_CONFIG = {
     timeWarpColorActive: 'rgba(255, 100, 100, 0.8)',
     timeWarpColorInactive: 'rgba(100, 255, 100, 0.4)',
@@ -11,12 +13,11 @@ const UI_CONFIG = {
 };
 
 // ── formatTime12 ─────────────────────────────────────────────────────────────
+// Name kept for compatibility with existing callers; formatting is now
+// locale-aware via Intl.DateTimeFormat (falls back to a 24h-style display
+// for locales that don't use 12-hour clocks).
 export function formatTime12(date) {
-    let hours = date.getHours();
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12 || 12;
-    return `${hours}:${minutes} ${ampm}`;
+    return formatTime(date, { hour: 'numeric', minute: '2-digit' });
 }
 
 // ── updateTimeDisplay ────────────────────────────────────────────────────────
@@ -28,8 +29,7 @@ export function updateTimeDisplay(simulationTime, isTimeWarping) {
 
     const dateDisplay = document.getElementById('date-display');
     if (dateDisplay) {
-        const options = { weekday: 'short', month: 'short', day: 'numeric' };
-        dateDisplay.textContent = simulationTime.toLocaleDateString('en-US', options);
+        dateDisplay.textContent = formatDate(simulationTime);
     }
 
     timeDisplay.style.color = isTimeWarping ? UI_CONFIG.timeWarningColor : UI_CONFIG.timeNormalColor;

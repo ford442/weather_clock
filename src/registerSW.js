@@ -1,5 +1,6 @@
 import { registerSW } from 'virtual:pwa-register';
 import { showActionToast, showToast } from './ui/toast.js';
+import { t } from './i18n/strings.js';
 
 const isTestMode = new URLSearchParams(window.location.search).has('test');
 
@@ -10,12 +11,12 @@ export function initServiceWorker() {
     const updateSW = registerSW({
         immediate: false,
         onNeedRefresh() {
-            showActionToast('A new version is available.', 'info', 'Reload', () => {
+            showActionToast(t('newVersionAvailable'), 'info', t('reload'), () => {
                 updateSW(true);
             });
         },
         onOfflineReady() {
-            showToast('App ready for offline use.', 'success', 3000);
+            showToast(t('appReadyOffline'), 'success', 3000);
         },
         onRegisteredSW(swUrl, registration) {
             console.log('Service worker registered:', swUrl);

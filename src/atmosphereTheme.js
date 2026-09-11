@@ -109,6 +109,42 @@ function deriveSkyColor(scene, weatherData) {
     return { r, g, b };
 }
 
+// ── Contrast clamp ──
+// --accent drives panel heading/text color (see clock-panels.css) and ranges
+// from arctic blue to hot red depending on temperature. Against the dark
+// glass panel background some of those hues (e.g. the cold end) drop below
+// WCAG AA contrast. Brighten the color toward white, preserving hue, until
+// it clears a 4.5:1 contrast ratio against the panel background.
+const PANEL_BG_REFERENCE = { r: 14, g: 16, b: 22 };
+const MIN_TEXT_CONTRAST = 4.5;
+
+function srgbChannelToLinear(c) {
+    const cs = c / 255;
+    return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
+}
+
+function relativeLuminance({ r, g, b }) {
+    return 0.2126 * srgbChannelToLinear(r) + 0.7152 * srgbChannelToLinear(g) + 0.0722 * srgbChannelToLinear(b);
+}
+
+function contrastRatio(colorA, colorB) {
+    const lA = relativeLuminance(colorA) + 0.05;
+    const lB = relativeLuminance(colorB) + 0.05;
+    return lA > lB ? lA / lB : lB / lA;
+}
+
+function clampAccentForContrast(color, background = PANEL_BG_REFERENCE) {
+    let { r, g, b } = color;
+    let iterations = 0;
+    while (contrastRatio({ r, g, b }, background) < MIN_TEXT_CONTRAST && iterations < 24) {
+        r = Math.min(255, r + (255 - r) * 0.12 + 2);
+        g = Math.min(255, g + (255 - g) * 0.12 + 2);
+        b = Math.min(255, b + (255 - b) * 0.12 + 2);
+        iterations++;
+    }
+    return { r, g, b };
+}
+
 // A severe/extreme active alert pulses --accent brightness at this rate.
 const ALERT_PULSE_SEVERITIES = new Set(['Severe', 'Extreme']);
 
@@ -160,11 +196,24 @@ export function updateAtmosphereTheme(renderer, scene, weatherData) {
     const accentG = Math.min(255, current.accentG * pulseBoost);
     const accentB = Math.min(255, current.accentB * pulseBoost);
 
+    // --accent-text is a contrast-clamped copy of the accent color, used only
+    // where the temperature-driven accent is rendered as panel text (rather
+    // than as a glow/border/background) so headings stay readable against the
+    // dark glass panels across the whole hue range.
+    const textSafe = clampAccentForContrast({ r: accentR, g: accentG, b: accentB });
+
     const root = document.documentElement;
     root.style.setProperty(
         '--sky-dominant',
         `rgba(${Math.round(current.skyR)}, ${Math.round(current.skyG)}, ${Math.round(current.skyB)}, 0.6)`
     );
     root.style.setProperty('--accent', `${Math.round(accentR)}, ${Math.round(accentG)}, ${Math.round(accentB)}`);
-    root.style.setProperty('--glow', `rgba(${Math.round(accentR)}, ${Math.round(accentG)}, ${Math.round(accentB)}, 0.4)`);
+    root.style.setProperty(
+        '--glow',
+        `rgba(${Math.round(accentR)}, ${Math.round(accentG)}, ${Math.round(accentB)}, 0.4)`
+    );
+    root.style.setProperty(
+        '--accent-text',
+        `${Math.round(textSafe.r)}, ${Math.round(textSafe.g)}, ${Math.round(textSafe.b)}`
+    );
 }

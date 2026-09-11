@@ -1,5 +1,6 @@
 // Caption strip: pure text builder plus 2D compositing for share-card captures.
 import { CAPTURE_CONFIG } from './capture-config.js';
+import { formatDate, formatTime } from '../i18n/strings.js';
 
 const FALLBACK_LOCATION = 'Unknown location';
 
@@ -12,8 +13,8 @@ const FALLBACK_LOCATION = 'Unknown location';
 export function buildCaptionLines({ simulationTime, locationName, tempText, descriptionText }) {
     const location = (locationName || '').trim() || FALLBACK_LOCATION;
     const date = simulationTime instanceof Date ? simulationTime : new Date(simulationTime);
-    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const day = date.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+    const time = formatTime(date);
+    const day = formatDate(date, { weekday: 'short', day: 'numeric', month: 'short' });
     const title = `${location} — ${time}, ${day}`;
 
     const parts = [];

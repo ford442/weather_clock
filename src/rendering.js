@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createRenderer, createPostProcessingPipeline, requestWebGLFallback } from './webgpu/index.js';
+import { t } from './i18n/strings.js';
 
 // Quality configuration
 /** @type {Record<QualityTier, {pixelRatioCap: number, disableBloom: boolean, bloomStrengthMultiplier: number, shadowMapSize: number, moonShadowMapSize: number, particleDivisor: number}>} */
@@ -206,7 +207,7 @@ export function setupRendererRecovery(scene3d, animationController, { showToast 
 
     const failRecovery = (message, error) => {
         console.error(message, error);
-        showToast('Graphics recovery failed. Reload the page to continue.', 'error', 8000);
+        showToast(t('graphicsRecoveryFailed'), 'error', 8000);
     };
 
     const handleContextLost = (event) => {
@@ -241,7 +242,7 @@ export function setupRendererRecovery(scene3d, animationController, { showToast 
                     if (disposed) return;
                     animationController.suspend('graphics-context');
                     console.warn('[Rendering] WebGPU device lost; reinitializing with WebGL:', info);
-                    showToast('Graphics device reset. Recovering with WebGL…', 'warning', 5000);
+                    showToast(t('graphicsDeviceReset'), 'warning', 5000);
                     try {
                         requestWebGLFallback();
                     } catch (error) {

@@ -95,7 +95,7 @@
 }
 
 .tab-btn.active {
-    color: rgb(var(--accent));
+    color: rgb(var(--accent-text));
     border-bottom-color: rgb(var(--accent));
 }
 
@@ -155,7 +155,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 2px;
-    color: rgb(var(--accent));
+    color: rgb(var(--accent-text));
     padding-bottom: 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     margin: 0 0 16px 0;
