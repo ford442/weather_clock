@@ -2,6 +2,7 @@
  * ForecastUI.js - DOM strip of 10 daily vignette cards + focus/scrub UI
  */
 import { disposeDailyPreview, renderDailyPreview } from './DailyPreview.js';
+import { formatDate } from '../i18n/strings.js';
 
 export class ForecastUI {
     constructor(container, controller) {
@@ -122,7 +123,7 @@ export class ForecastUI {
             el.setAttribute('role', 'button');
             el.setAttribute('aria-label', `Focus forecast for ${day.date}`);
             const date = new Date(day.date);
-            const dayLabel = date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            const dayLabel = formatDate(date);
             const hi = day.tempMax != null ? Math.round(day.tempMax) : '--';
             const lo = day.tempMin != null ? Math.round(day.tempMin) : '--';
             const cond = day.condition || 'clear';

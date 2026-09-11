@@ -2,7 +2,7 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>3D Weather Clock</title>
         <meta name="theme-color" content="#2E1A47" />
         <link rel="stylesheet" href="/src/styles/main.css" />
@@ -35,8 +35,9 @@
                         </svg>
                     </button>
                 </div>
-                <div id="offline-status" class="offline-status" hidden>Offline</div>
-                <script>
+                <div id="offline-status" class="offline-status" role="status" aria-live="polite" hidden>Offline</div>
+                <script type="module">
+                    import { t, formatTime } from '/src/i18n/strings.js';
                     (function () {
                         const el = document.getElementById('offline-status');
                         if (!el) return;
@@ -44,23 +45,19 @@
                             try {
                                 const lat = localStorage.getItem('weatherclock_lat');
                                 const lon = localStorage.getItem('weatherclock_lon');
-                                if (!lat || !lon) return 'Offline';
+                                if (!lat || !lon) return t('offline');
                                 const roundedLat = Math.round(Number(lat) * 100) / 100;
                                 const roundedLon = Math.round(Number(lon) * 100) / 100;
                                 const cached = JSON.parse(
                                     localStorage.getItem(`weatherclock_${roundedLat}_${roundedLon}_weather`)
                                 );
                                 if (cached && cached.timestamp) {
-                                    const timeStr = new Date(cached.timestamp).toLocaleTimeString([], {
-                                        hour: 'numeric',
-                                        minute: '2-digit'
-                                    });
-                                    return `Offline — showing data from ${timeStr}`;
+                                    return t('offlineWithTime', formatTime(new Date(cached.timestamp)));
                                 }
                             } catch (error) {
                                 // Fall through to generic offline label
                             }
-                            return 'Offline';
+                            return t('offline');
                         }
                         function sync() {
                             if (!navigator.onLine) {
@@ -483,7 +480,11 @@
 
         <!-- DEV hint -->
         <div id="dev-hint">` — toggle stats</div>
-        <div id="toast-container"></div>
+        <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
+
+        <!-- Offscreen text alternative for the 3D scene, kept in sync with the current
+             weather panel data so screen-reader users get an equivalent summary. -->
+        <p id="scene-summary" class="sr-only" aria-live="polite">Loading weather…</p>
 
         <!-- Time-lapse recording progress -->
         <div id="timelapse-progress" class="timelapse-progress" hidden>

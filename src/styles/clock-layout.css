@@ -8,6 +8,9 @@
     --accent-cool: #5aacb8;
     --accent: 232, 168, 56;
     --glow: rgba(232, 168, 56, 0.4);
+    /* Contrast-clamped copy of --accent for text (see atmosphereTheme.js); safe
+       default matches --accent since the un-clamped default already passes AA. */
+    --accent-text: 232, 168, 56;
     --transition-base: cubic-bezier(0.16, 1, 0.3, 1);
     --header-color: #88d8f9;
     --trend-glow: transparent;
@@ -19,6 +22,28 @@ body {
     overflow: hidden;
     font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: #050608;
+}
+
+/* ── Accessibility helpers ── */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Visible keyboard-focus ring, distinct from mouse hover styles, on every
+   interactive element (buttons, links, custom-role controls, canvas-scene
+   proxies) so keyboard users can always see where focus is. */
+:focus-visible {
+    outline: 2px solid #7dd3fc;
+    outline-offset: 2px;
+    border-radius: 2px;
 }
 
 #canvas-container {
@@ -377,7 +402,7 @@ body.drawers-open #center-overlay {
 .speed-chip {
     font-size: 11px;
     font-weight: 600;
-    color: rgb(var(--accent));
+    color: rgb(var(--accent-text));
     background: rgba(var(--accent), 0.1);
     border: 1px solid rgba(var(--accent), 0.3);
     padding: 2px 8px;

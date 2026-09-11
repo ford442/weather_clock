@@ -37,6 +37,7 @@ export class TimelineModeAdapter {
         this.ui = new TimelineUI(container);
         await this.controller.loadData(location.lat, location.lon);
         this.controller.onDaySelect = (dayData) => this.ui.showDayDetails(dayData);
+        this.ui.setDayProxies(this.controller.dayColumns, (column) => this.controller.selectDay(column));
     }
 
     setVisible(visible) {

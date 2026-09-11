@@ -130,7 +130,7 @@ export class WeatherService {
 
         try {
             return await this.#fetchJSON(
-                `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(query)}`,
+                `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&accept-language=${encodeURIComponent(navigator.language || 'en')}&q=${encodeURIComponent(query)}`,
                 { signal: controller.signal }
             );
         } catch (error) {
@@ -206,7 +206,7 @@ export class WeatherService {
     async reverseGeocode(lat, lon) {
         try {
             const data = await this.#fetchJSON(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=${encodeURIComponent(navigator.language || 'en')}`
             );
 
             if (data.address) {

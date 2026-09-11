@@ -1,6 +1,7 @@
 // Time-lapse export: deterministic 00:00 -> 24:00 sweep recorded via MediaRecorder.
 import { TIMELAPSE_CONFIG, CAPTURE_CONFIG, getTimelapseFrameCount } from './capture-config.js';
 import { shareOrDownload } from './share.js';
+import { t } from '../i18n/strings.js';
 
 /**
  * Pick the first MIME type the browser can record, or null.
@@ -41,18 +42,18 @@ export class TimelapseRecorder {
     async start() {
         if (this._recording) return;
         if (this.state.reducedMotion) {
-            this.showToast('Time-lapse export is disabled while reduced motion is enabled.', 'info', 3000);
+            this.showToast(t('timelapseDisabledReducedMotion'), 'info', 3000);
             return;
         }
         if (typeof MediaRecorder === 'undefined' || typeof this.canvas.captureStream !== 'function') {
-            this.showToast('Video recording is not supported in this browser.', 'error');
+            this.showToast(t('videoRecordingUnsupported'), 'error');
             return;
         }
         const mimeType = pickSupportedMimeType(TIMELAPSE_CONFIG.mimeCandidates, (type) =>
             MediaRecorder.isTypeSupported(type)
         );
         if (!mimeType) {
-            this.showToast('No supported WebM codec found for time-lapse export.', 'error');
+            this.showToast(t('noWebmCodec'), 'error');
             return;
         }
 
@@ -112,7 +113,7 @@ export class TimelapseRecorder {
             await stopped;
 
             if (this._cancelled) {
-                this.showToast('Time-lapse cancelled.', 'info', 2500);
+                this.showToast(t('timelapseCancelled'), 'info', 2500);
             } else {
                 const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
                 if (blob.size > 0) {
@@ -121,14 +122,14 @@ export class TimelapseRecorder {
                     const stamp = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
                     const filename = `${CAPTURE_CONFIG.filenamePrefix}-timelapse-${stamp}.webm`;
                     const result = await shareOrDownload(blob, filename);
-                    if (result !== 'aborted') this.showToast('Time-lapse saved.', 'success', 3000);
+                    if (result !== 'aborted') this.showToast(t('timelapseSaved'), 'success', 3000);
                 } else {
-                    this.showToast('Time-lapse failed — no video data was recorded.', 'error');
+                    this.showToast(t('timelapseNoData'), 'error');
                 }
             }
         } catch (error) {
             console.error('Time-lapse export failed:', error);
-            this.showToast('Time-lapse export failed. Try again.', 'error');
+            this.showToast(t('timelapseExportFailed'), 'error');
         } finally {
             this._cleanup();
         }

@@ -48,6 +48,7 @@ import {
     updateAirQualityDisplay,
     updateAlertBanner
 } from './ui.js';
+import { t, formatTime, formatTemp } from './i18n/strings.js';
 import { AnimationController } from './animation.js';
 import { setupDebugAPI } from './debug.js';
 import { setupCapture } from './capture/index.js';
@@ -264,12 +265,12 @@ async function bootstrap() {
             setQualityTier(tier);
             updateQualityButton(tier);
             const reason = automatic ? ` after averaging ${fps} FPS` : '';
-            showToast(`Quality changed to ${tier.toUpperCase()}${reason}.`, automatic ? 'warning' : 'success');
+            showToast(t('qualityChanged', tier.toUpperCase(), reason), automatic ? 'warning' : 'success');
             animationController.start(clock, stats);
         } catch (error) {
             console.error('Live quality change failed; reloading as a fallback:', error);
             setQualityTier(tier);
-            showToast(`Could not apply ${tier.toUpperCase()} quality live. Reloading scene...`, 'warning');
+            showToast(t('qualityChangeFailed', tier.toUpperCase()), 'warning');
             setTimeout(() => window.location.reload(), 1500);
         } finally {
             qualityChangeInProgress = false;
@@ -284,15 +285,12 @@ async function bootstrap() {
     function updateOfflineStatus(isOffline, cachedAt = null) {
         if (!offlineStatus) return;
         if (isOffline && cachedAt) {
-            const timeStr = new Date(cachedAt).toLocaleTimeString([], {
-                hour: 'numeric',
-                minute: '2-digit'
-            });
-            offlineStatus.textContent = `Offline — showing data from ${timeStr}`;
+            const timeStr = formatTime(new Date(cachedAt));
+            offlineStatus.textContent = t('offlineWithTime', timeStr);
             offlineStatus.hidden = false;
             offlineStatus.classList.add('visible');
         } else if (isOffline) {
-            offlineStatus.textContent = 'Offline';
+            offlineStatus.textContent = t('offline');
             offlineStatus.hidden = false;
             offlineStatus.classList.add('visible');
         } else {
@@ -325,13 +323,10 @@ async function bootstrap() {
         if (data?.isCached) {
             updateOfflineStatus(data.isOffline, data.cachedAt);
             if (data.isOffline) {
-                showToast('Offline — showing cached data', 'info');
+                showToast(t('offlineCachedData'), 'info');
             } else {
-                const timeStr = new Date(data.cachedAt).toLocaleTimeString([], {
-                    hour: 'numeric',
-                    minute: '2-digit'
-                });
-                showToast(`Showing cached weather from ${timeStr}`, 'info');
+                const timeStr = formatTime(new Date(data.cachedAt));
+                showToast(t('offlineCachedWeatherAt', timeStr), 'info');
             }
         } else if (!navigator.onLine) {
             showLatestOfflineStatus();
@@ -439,7 +434,7 @@ async function bootstrap() {
                 } catch (error) {
                     console.error('Location retry failed:', error);
                     document.getElementById('location').textContent = 'Location unavailable';
-                    showToast('Could not detect location. Try searching for a city.', 'error');
+                    showToast(t('locationNotDetected'), 'error');
                 }
             },
 
@@ -478,7 +473,7 @@ async function bootstrap() {
                         );
                         if (searchInput) searchInput.value = '';
                     } else {
-                        showToast(`No results found for "${query}"`, 'error');
+                        showToast(t('noResultsFor', query), 'error');
                     }
                 } catch (error) {
                     if (error?.code === 'ABORTED') return;
@@ -496,7 +491,7 @@ async function bootstrap() {
 
             onToggleTimeWarp: () => {
                 if (state.reducedMotion && !state.isTimeWarping) {
-                    showToast('Time warp is disabled while reduced motion is enabled.', 'info', 2500);
+                    showToast(t('timeWarpDisabledReducedMotion'), 'info', 2500);
                     return;
                 }
                 state.isTimeWarping = !state.isTimeWarping;
@@ -539,7 +534,7 @@ async function bootstrap() {
                             regional.forEach((reg) => {
                                 const div = document.createElement('div');
                                 const tempVal = weatherService.convertTemp(reg.temp);
-                                div.innerHTML = `<b>${reg.name}:</b> ${tempVal.toFixed(1)}°${deg}`;
+                                div.innerHTML = `<b>${reg.name}:</b> ${formatTemp(tempVal, deg, { maximumFractionDigits: 1 })}`;
                                 list.appendChild(div);
                             });
                         } else {
@@ -617,10 +612,10 @@ async function bootstrap() {
             const isOffline = error?.isOffline || !navigator.onLine;
             if (isOffline) {
                 showLatestOfflineStatus();
-                showToast('Offline — no cached weather data available', 'error');
+                showToast(t('offlineNoCachedData'), 'error');
             } else {
                 updateOfflineStatus(false);
-                showToast('Failed to load weather data. Check your connection.', 'error');
+                showToast(t('weatherLoadFailed'), 'error');
             }
         }
     }
@@ -706,10 +701,7 @@ async function bootstrap() {
                 await applyWeatherData(data);
             } catch (error) {
                 console.error('Weather update failed:', error);
-                showToast(
-                    error?.isOffline ? 'Offline — no cached weather data available' : 'Weather update failed.',
-                    'error'
-                );
+                showToast(error?.isOffline ? t('offlineNoCachedData') : 'Weather update failed.', 'error');
             }
         }
 
@@ -723,5 +715,5 @@ async function bootstrap() {
 
 bootstrap().catch((error) => {
     console.error('Application initialization failed:', error);
-    showToast('Graphics initialization failed. Reload the page to try again.', 'error', 8000);
+    showToast(t('graphicsInitFailed'), 'error', 8000);
 });

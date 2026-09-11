@@ -2,6 +2,7 @@
 import { CAPTURE_CONFIG, computeExportPixelRatio } from './capture-config.js';
 import { buildCaptionLines, compositeCaption } from './caption.js';
 import { shareOrDownload } from './share.js';
+import { t } from '../i18n/strings.js';
 
 /** Read caption inputs from the live UI, with localStorage as location fallback. */
 function readCaptionContext(state) {
@@ -65,11 +66,11 @@ export async function capturePhoto({ renderer, pipeline, state, showToast = () =
 
         const filename = `${CAPTURE_CONFIG.filenamePrefix}-${formatTimestamp(state.simulationTime)}.png`;
         const result = await shareOrDownload(pngBlob, filename);
-        if (result === 'downloaded') showToast('Photo saved.', 'success', 2500);
-        else if (result === 'shared') showToast('Photo shared.', 'success', 2500);
+        if (result === 'downloaded') showToast(t('photoSaved'), 'success', 2500);
+        else if (result === 'shared') showToast(t('photoShared'), 'success', 2500);
     } catch (error) {
         console.error('Photo capture failed:', error);
-        showToast('Photo capture failed. Try again.', 'error');
+        showToast(t('photoCaptureFailed'), 'error');
     } finally {
         renderer.setPixelRatio(previousRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);

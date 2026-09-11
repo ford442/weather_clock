@@ -3,6 +3,7 @@ import { calculateMoonPhase } from '../moonPhase.js';
 import { drawPressureGauge } from './gauge.js';
 import { formatTime12 } from './time-display.js';
 import { getUsAqiCategory, getDominantPollen, getAlertSeverityStyle, isPulseSeverity } from '../air-quality.js';
+import { t, formatNumber, formatTemp } from '../i18n/strings.js';
 
 function hexToRgbTriplet(hex) {
     const n = parseInt(hex.replace('#', ''), 16);
@@ -159,8 +160,8 @@ export function updateWeatherDisplay(data, weatherService) {
         // MAE is a temperature *delta*: °C → °F scales by 9/5 with no offset
         const maeDisplay =
             weatherService.unit === 'imperial'
-                ? `${((data.accuracy.mae * 9) / 5).toFixed(1)}°F`
-                : `${data.accuracy.mae.toFixed(1)}°C`;
+                ? formatTemp((data.accuracy.mae * 9) / 5, 'F', { maximumFractionDigits: 1 })
+                : formatTemp(data.accuracy.mae, 'C', { maximumFractionDigits: 1 });
         if (accuracyDeltaEl) {
             accuracyDeltaEl.textContent = `±${maeDisplay} over last 24h`;
             accuracyDeltaEl.style.color = '';
@@ -213,6 +214,33 @@ export function updateWeatherDisplay(data, weatherService) {
             data.forecast.pressure ?? 1013.25
         );
     }
+
+    updateSceneSummary(data, weatherService);
+}
+
+// ── updateSceneSummary ───────────────────────────────────────────────────────
+// Offscreen text alternative for the 3D scene: screen-reader users get an
+// equivalent summary of what's rendered, built from the same panel data
+// above rather than duplicating any weather logic.
+export function updateSceneSummary(data, weatherService) {
+    const el = document.getElementById('scene-summary');
+    if (!el || !data?.current) return;
+
+    const unit = weatherService.unit === 'imperial' ? 'F' : 'C';
+    const temp = formatNumber(Math.round(weatherService.convertTemp(data.current.temp)), {
+        maximumFractionDigits: 0
+    });
+    const precipProb = data.current.precipProb ?? data.forecast?.precipProb;
+    const precip = precipProb > 20 ? `${Math.round(precipProb)}% chance of precipitation` : '';
+    const sunset = data.sunset ? formatTime12(new Date(data.sunset)) : '';
+
+    el.textContent = t('sceneSummary', {
+        description: data.current.description || 'Weather',
+        temp,
+        unit,
+        precip,
+        sunset
+    });
 }
 
 // ── updateUnitButton ─────────────────────────────────────────────────────────
