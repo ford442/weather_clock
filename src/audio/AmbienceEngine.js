@@ -3,6 +3,18 @@
 // No AudioContext (and no nodes) are created until ensureStarted() runs,
 // which only happens from a real user gesture (autoplay policy).
 
+import {
+    clamp01,
+    REDUCED_MOTION_ATTENUATION,
+    rainGainForIntensity,
+    rainFilterFrequencyForIntensity,
+    windGainForSpeed,
+    windFilterFrequencyForSpeed,
+    birdBedGainForSunAltitude,
+    cricketBedGainForSunAltitude,
+    thunderPeakGainForIntensity
+} from './gain-curves.js';
+
 const NOISE_BUFFER_SECONDS = 4;
 
 function createNoiseBuffer(ctx, seconds = NOISE_BUFFER_SECONDS) {
@@ -49,17 +61,17 @@ function loopingSource(ctx, buffer) {
     return source;
 }
 
-const clamp01 = (v) => Math.max(0, Math.min(1, v));
-
 export class AmbienceEngine {
     constructor() {
         this.ctx = null;
         this.started = false;
         this.muted = true;
         this.volume = 0.6;
+        this.reducedMotion = false;
         this._nextThunderAt = 0;
         this._lastFlash = 0;
         this._visibilityBound = false;
+        this._forcedWeather = null;
     }
 
     /** Create the audio graph. Must be called from within a user-gesture handler. */
@@ -176,11 +188,15 @@ export class AmbienceEngine {
         });
     }
 
+    _effectiveVolume() {
+        if (this.muted) return 0;
+        return this.reducedMotion ? this.volume * REDUCED_MOTION_ATTENUATION : this.volume;
+    }
+
     _applyMute() {
         if (!this.ctx) return;
-        const target = this.muted ? 0 : this.volume;
         // Guarded by this.ctx above; master is built alongside ctx in _buildGraph().
-        /** @type {GainNode} */ (this.master).gain.setTargetAtTime(target, this.ctx.currentTime, 0.15);
+        /** @type {GainNode} */ (this.master).gain.setTargetAtTime(this._effectiveVolume(), this.ctx.currentTime, 0.15);
         if (this.muted) {
             this.ctx.suspend();
         } else if (document.visibilityState !== 'hidden') {
@@ -193,13 +209,48 @@ export class AmbienceEngine {
         if (this.started) this._applyMute();
     }
 
+    /** Reduced-motion preference heavily attenuates ambience without a separate mute state. */
+    setReducedMotion(reducedMotion) {
+        this.reducedMotion = reducedMotion;
+        if (this.started && !this.muted) {
+            const ctx = /** @type {AudioContext} */ (this.ctx);
+            /** @type {GainNode} */ (this.master).gain.setTargetAtTime(this._effectiveVolume(), ctx.currentTime, 0.15);
+        }
+    }
+
     setVolume(volume) {
         this.volume = clamp01(volume);
         if (this.started && !this.muted) {
             // this.started implies _buildGraph() has run, so ctx/master are set.
             const ctx = /** @type {AudioContext} */ (this.ctx);
-            /** @type {GainNode} */ (this.master).gain.setTargetAtTime(this.volume, ctx.currentTime, 0.15);
+            /** @type {GainNode} */ (this.master).gain.setTargetAtTime(this._effectiveVolume(), ctx.currentTime, 0.15);
         }
+    }
+
+    /**
+     * Debug/QA hook: pin the ambience bed to a synthetic weather scene, bypassing
+     * whatever the real weather/astronomy services report. Pass null to release it.
+     * @param {{rainIntensity?: number, windSpeed?: number, sunElevationNorm?: number, lightningFlash?: number}|null} overrides
+     */
+    forceWeatherBed(overrides) {
+        this._forcedWeather = overrides ? { ...overrides } : null;
+    }
+
+    /** Snapshot of engine state for debug tooling (aetherDebug.getAudioState()). */
+    getState() {
+        return {
+            started: this.started,
+            muted: this.muted,
+            volume: this.volume,
+            reducedMotion: this.reducedMotion,
+            effectiveVolume: this._effectiveVolume(),
+            forcedWeather: this._forcedWeather,
+            rainGain: this.rainGain?.gain.value ?? 0,
+            windGain: this.windGain?.gain.value ?? 0,
+            birdGain: this.birdGain?.gain.value ?? 0,
+            cricketGain: this.cricketGain?.gain.value ?? 0,
+            nextThunderAt: this._nextThunderAt
+        };
     }
 
     _triggerThunder(intensity) {
@@ -216,7 +267,7 @@ export class AmbienceEngine {
         lowpass.frequency.value = 180 + Math.random() * 120;
 
         const gain = ctx.createGain();
-        const peak = 0.4 + 0.5 * clamp01(intensity);
+        const peak = thunderPeakGainForIntensity(intensity);
         gain.gain.setValueAtTime(0, startAt);
         gain.gain.linearRampToValueAtTime(peak, startAt + 0.3);
         gain.gain.exponentialRampToValueAtTime(0.001, startAt + 2.2);
@@ -241,6 +292,12 @@ export class AmbienceEngine {
         const t = ctx.currentTime;
         const smoothing = 0.4;
 
+        // A forced weather bed (debug/QA) overrides the live snapshot per-field.
+        const fw = this._forcedWeather;
+        const effectiveWeather = fw ? { ...weather, ...fw } : weather;
+        const effectiveSun = fw?.sunElevationNorm ?? sunElevationNorm;
+        const effectiveFlash = fw?.lightningFlash ?? lightningFlash;
+
         // Guarded by the `!this.started || !this.ctx` early return above; all graph
         // nodes below are built together with ctx in _buildGraph().
         const rainGain = /** @type {GainNode} */ (this.rainGain);
@@ -250,28 +307,24 @@ export class AmbienceEngine {
         const birdGain = /** @type {GainNode} */ (this.birdGain);
         const cricketGain = /** @type {GainNode} */ (this.cricketGain);
 
-        const rainIntensity = clamp01(weather?.rainIntensity ?? 0);
-        rainGain.gain.setTargetAtTime(rainIntensity * 0.7, t, smoothing);
-        rainFilter.frequency.setTargetAtTime(2000 + rainIntensity * 3000, t, smoothing);
+        const rainIntensity = clamp01(effectiveWeather?.rainIntensity ?? 0);
+        rainGain.gain.setTargetAtTime(rainGainForIntensity(rainIntensity), t, smoothing);
+        rainFilter.frequency.setTargetAtTime(rainFilterFrequencyForIntensity(rainIntensity), t, smoothing);
 
-        const windSpeed = Math.max(0, weather?.windSpeed ?? 0);
-        const windNorm = clamp01(windSpeed / 50);
-        windGain.gain.setTargetAtTime(windNorm * 0.5, t, smoothing);
-        windFilter.frequency.setTargetAtTime(150 + windNorm * 1500, t, smoothing);
+        const windSpeed = Math.max(0, effectiveWeather?.windSpeed ?? 0);
+        windGain.gain.setTargetAtTime(windGainForSpeed(windSpeed), t, smoothing);
+        windFilter.frequency.setTargetAtTime(windFilterFrequencyForSpeed(windSpeed), t, smoothing);
 
         // Diurnal bed: birds gate in the hour after sunrise, crickets after dusk.
-        const dayFactor = sunElevationNorm ?? 0;
-        const birdWindow = dayFactor > -0.05 && dayFactor < 0.4 ? 1 - Math.abs((dayFactor - 0.17) / 0.23) : 0;
-        birdGain.gain.setTargetAtTime(clamp01(birdWindow) * 0.12, t, smoothing);
-
-        const nightGate = dayFactor < -0.05 ? clamp01(-dayFactor * 4) : 0;
-        cricketGain.gain.setTargetAtTime(nightGate * 0.1, t, smoothing);
+        const dayFactor = effectiveSun ?? 0;
+        birdGain.gain.setTargetAtTime(birdBedGainForSunAltitude(dayFactor), t, smoothing);
+        cricketGain.gain.setTargetAtTime(cricketBedGainForSunAltitude(dayFactor), t, smoothing);
 
         // Rising edge of a lightning flash → schedule a distant rumble.
-        if (lightningFlash > 0.05 && this._lastFlash <= 0.05 && t > this._nextThunderAt) {
-            this._triggerThunder(lightningFlash);
+        if (effectiveFlash > 0.05 && this._lastFlash <= 0.05 && t > this._nextThunderAt) {
+            this._triggerThunder(effectiveFlash);
             this._nextThunderAt = t + 1.5;
         }
-        this._lastFlash = lightningFlash;
+        this._lastFlash = effectiveFlash;
     }
 }

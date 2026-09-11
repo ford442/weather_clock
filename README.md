@@ -49,6 +49,13 @@ The goal: make time *visible* and *tactile*—a living, breathing environment in
 - **Smooth Interpolation** — Weather state changes (e.g., Clear → Rain) are interpolated over 5 seconds to prevent visual snapping and jarring transitions.
 - **10-Day Forecast View** — Toggle (or press through modes) to a strip of 10 animated canvas vignette cards. Click, tap, or keyboard-focus any day to drive one shared high-quality 3D `DailyScene` with accurate future-date sun/moon position, wind-directed clouds, precipitation, and a time-of-day scrubber.
 
+### 🔊 Ambient Audio
+
+- **Generative, asset-free ambience** — `src/audio/AmbienceEngine.js` synthesizes rain, wind, distant thunder, and a diurnal bird/cricket bed entirely from filtered Web Audio noise nodes. There are no sample files to download, so the feature adds a few KB of JS (no bundled media) and has zero impact on the critical boot chunk.
+- **Gesture-gated autoplay** — no `AudioContext` is created until the ambience toggle button is clicked, satisfying browser autoplay policies and never blocking bootstrap.
+- **Intensity-linked mixing** — gain and filter cutoffs track `rainIntensity`, `windSpeed`, and sun altitude from `AstronomyService` via small pure functions in `src/audio/gain-curves.js` (unit tested in `src/tests/ambienceGainCurves.test.js`), crossfaded with `setTargetAtTime` so weather/time-warp changes never pop or click.
+- **Respects reduced motion & mute** — `prefers-reduced-motion` heavily attenuates the ambience bed, and the mute toggle's state persists to `localStorage`.
+
 ## 🛠️ Setup & Running
 
 ### For Users
@@ -150,6 +157,14 @@ window.aetherDebug.getSunPosition();       // Sun azimuth/elevation
 window.aetherDebug.getMoonPosition();      // Moon azimuth/elevation
 window.aetherDebug.getPerformanceMetrics();      // FPS, quality tier, active mode
 window.aetherDebug.getForecastPreviewMetrics();  // 10-day canvas preview budget
+```
+
+**Inspect and force the ambient audio bed:**
+```javascript
+window.aetherDebug.getAudioState();          // { started, muted, volume, reducedMotion, rainGain, windGain, ... }
+window.aetherDebug.forceAudioMute(false);    // starts the AudioContext (gesture-equivalent) and unmutes
+window.aetherDebug.forceAudioWeather({ rainIntensity: 1, windSpeed: 40 });  // pin a synthetic weather bed
+window.aetherDebug.clearForcedAudioWeather(); // release the override, resume following real weather
 ```
 
 Perfect for quickly testing edge cases (midnight snow, sunset storms, etc.) without waiting for real weather.

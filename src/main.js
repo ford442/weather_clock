@@ -647,6 +647,7 @@ async function bootstrap() {
             weatherEffects.setReducedMotion?.(isReduced);
             modeController?.setReducedMotion?.(isReduced);
             capture?.setReducedMotion(isReduced);
+            ambienceEngine.setReducedMotion(isReduced);
         };
 
         updateTimeDisplay(state.simulationTime, state.isTimeWarping);
@@ -676,7 +677,8 @@ async function bootstrap() {
                 weatherEffects,
                 sunLight,
                 moonLight,
-                ambientLight
+                ambientLight,
+                ambienceEngine
             }
         );
 
