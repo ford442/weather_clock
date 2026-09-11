@@ -267,6 +267,15 @@ export class DailyScene {
             astro
         );
 
+        // Forecast vignettes scrub a specific day/hour, so the sky has to follow
+        // that instant rather than the clock's simulation time.
+        this.weatherEffects?.setSkyObserver?.({
+            date: this.representativeTime,
+            latitude: this.lat,
+            longitude: this.lon,
+            cloudCover: snap.cloudCover
+        });
+
         this.weatherEffects?.updateVignette?.(
             snap,
             delta * this.preset.particleDeltaScale,

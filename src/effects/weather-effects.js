@@ -259,6 +259,27 @@ export class WeatherEffects {
     }
 
     /**
+     * Point the night sky at an observer — date, location, and how much cloud is
+     * washing the stars out. Forwarded straight to the star field, which decides
+     * how much of the work actually needs redoing this frame.
+     * @param {{date?: Date|number|string, latitude?: number|null, longitude?: number|null, cloudCover?: number|null}} observer
+     */
+    setSkyObserver(observer) {
+        this.starField?.setObserver?.(observer);
+    }
+
+    /**
+     * Toggle the optional night-sky overlays so the sky can stay uncluttered.
+     * @param {{constellations?: boolean, planets?: boolean, labels?: boolean, lightPollution?: number}} options
+     */
+    setSkyLayers({ constellations, planets, labels, lightPollution } = {}) {
+        if (constellations !== undefined) this.starField?.setConstellationsVisible?.(constellations);
+        if (planets !== undefined) this.starField?.setPlanetsVisible?.(planets);
+        if (labels !== undefined) this.starField?.setLabelsVisible?.(labels);
+        if (lightPollution !== undefined) this.starField?.setLightPollution?.(lightPollution);
+    }
+
+    /**
      * Swap all custom-shader materials to WebGPU-compatible equivalents.
      * Called once after renderer detection confirms WebGPU is active.
      */

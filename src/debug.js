@@ -139,6 +139,25 @@ export function setupDebugAPI(state, services, scene3d) {
         getForecastPreviewMetrics: () => window.modeController?.forecastUI?.previewMetrics || null,
         getMode: () => window.modeController?.getMode?.(),
         getSceneLayout: () => SCENE_LAYOUT,
+        /** Geocentric RA/Dec and apparent magnitude for each rendered planet. */
+        getPlanetPositions: () => weatherEffects.starField?.getPlanetPositions?.() ?? [],
+        /** Current night-sky overlay state (constellations, planets, labels, skyglow). */
+        getNightSkyState: () => {
+            const starField = weatherEffects.starField;
+            if (!starField) return null;
+            return {
+                latitude: starField.latitude,
+                longitude: starField.longitude,
+                date: starField.observerDate,
+                cloudCover: starField.cloudCover,
+                lightPollution: starField.lightPollution,
+                constellations: starField.showConstellations,
+                planets: starField.showPlanets,
+                labels: starField.showLabels,
+                opacity: starField._opacity
+            };
+        },
+        setLightPollution: (amount) => weatherEffects.setSkyLayers?.({ lightPollution: amount }),
         /** Past→present→future narrative driving the zone tints, drift, and temporal band. */
         getTemporalNarrative: () => weatherEffects.narrative ?? null,
         spawnBolt: () => {

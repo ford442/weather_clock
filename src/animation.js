@@ -209,6 +209,14 @@ export class AnimationController {
             moonGroup.position.copy(astroData.moonPosition);
             moonGroup.lookAt(0, 0, 0);
             moonLight.position.copy(astroData.moonPosition);
+
+            // Constellations and planets follow the same simulated instant and
+            // location as the sun and moon.
+            weatherEffects.setSkyObserver?.({
+                date: state.simulationTime,
+                latitude: lat,
+                longitude: lon
+            });
         } // end !inForecastVignette guard for sundial/astro
 
         if (astroData?.sunPosition) {
@@ -257,6 +265,7 @@ export class AnimationController {
             }
 
             // Weather effects
+            weatherEffects.setSkyObserver?.({ cloudCover: activeWeatherData.current?.cloudCover });
             const empty = { weatherCode: 0, windSpeed: 0, windDirection: 0 };
             if (shouldUpdateReducedMotionEffects) {
                 weatherEffects.update(

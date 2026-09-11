@@ -49,6 +49,14 @@ The goal: make time *visible* and *tactile*—a living, breathing environment in
 - **Smooth Interpolation** — Weather state changes (e.g., Clear → Rain) are interpolated over 5 seconds to prevent visual snapping and jarring transitions.
 - **10-Day Forecast View** — Toggle (or press through modes) to a strip of 10 animated canvas vignette cards. Click, tap, or keyboard-focus any day to drive one shared high-quality 3D `DailyScene` with accurate future-date sun/moon position, wind-directed clouds, precipitation, and a time-of-day scrubber.
 
+### 🌌 Real Night Sky
+
+- **True star positions** — A ~190-star bright catalog (J2000 RA/Dec, IAU 1976 precession to the simulated date) is rotated into the scene by a single matrix built from the observer's latitude and local sidereal time, so constellations rise, culminate, and set exactly where they should for the active location and time.
+- **Constellation figures** — 37 stylized stick figures with optional names. Press `C` to cycle off → lines → lines + labels; the choice persists to `localStorage`.
+- **Naked-eye planets** — Mercury through Saturn (Uranus and Neptune available) are solved from JPL's approximate Keplerian elements with apparent-magnitude and phase-angle terms, accurate to well under a degree — a few hundred bytes of constants instead of a VSOP87 series.
+- **Physically motivated fading** — Stars fade out between nautical and civil twilight, dim under cloud cover, and wash out under a light-pollution knob that erases the faint field long before the named stars.
+- **Everywhere it's night** — Clock, Timeline, and Forecast modes all drive the same layer; forecast vignettes get the sky for the day and hour being scrubbed.
+
 ### 🔊 Ambient Audio
 
 - **Generative, asset-free ambience** — `src/audio/AmbienceEngine.js` synthesizes rain, wind, distant thunder, and a diurnal bird/cricket bed entirely from filtered Web Audio noise nodes. There are no sample files to download, so the feature adds a few KB of JS (no bundled media) and has zero impact on the critical boot chunk.
@@ -161,6 +169,9 @@ window.aetherDebug.getForecastPreviewMetrics();  // 10-day canvas preview budget
 
 **Inspect and force the ambient audio bed:**
 ```javascript
+window.aetherDebug.getPlanetPositions();     // geocentric RA/Dec + apparent magnitude per planet
+window.aetherDebug.getNightSkyState();       // observer, cloud cover, overlay toggles
+window.aetherDebug.setLightPollution(0.8);   // wash the faint stars out
 window.aetherDebug.getAudioState();          // { started, muted, volume, reducedMotion, rainGain, windGain, ... }
 window.aetherDebug.forceAudioMute(false);    // starts the AudioContext (gesture-equivalent) and unmutes
 window.aetherDebug.forceAudioWeather({ rainIntensity: 1, windSpeed: 40 });  // pin a synthetic weather bed

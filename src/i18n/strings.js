@@ -34,6 +34,9 @@
  * @property {string} newVersionAvailable
  * @property {string} reload
  * @property {string} appReadyOffline
+ * @property {string} nightSkyOff
+ * @property {string} nightSkyLines
+ * @property {string} nightSkyLabels
  * @property {(args: {description?: string, temp?: number|string, unit?: string, precip?: string, sunset?: string}) => string} sceneSummary
  */
 
@@ -67,6 +70,9 @@ const STRINGS = {
         newVersionAvailable: 'A new version is available.',
         reload: 'Reload',
         appReadyOffline: 'App ready for offline use.',
+        nightSkyOff: 'Constellations hidden.',
+        nightSkyLines: 'Constellation lines on.',
+        nightSkyLabels: 'Constellation lines and labels on.',
         sceneSummary: ({ description, temp, unit, precip, sunset }) => {
             let s = `${description}, ${temp}°${unit}`;
             if (precip) s += `, ${precip}`;
@@ -103,6 +109,9 @@ const STRINGS = {
         newVersionAvailable: 'Hay una nueva versión disponible.',
         reload: 'Recargar',
         appReadyOffline: 'La aplicación está lista para uso sin conexión.',
+        nightSkyOff: 'Constelaciones ocultas.',
+        nightSkyLines: 'Líneas de constelaciones activadas.',
+        nightSkyLabels: 'Líneas y etiquetas de constelaciones activadas.',
         sceneSummary: ({ description, temp, unit, precip, sunset }) => {
             let s = `${description}, ${temp}°${unit}`;
             if (precip) s += `, ${precip}`;
