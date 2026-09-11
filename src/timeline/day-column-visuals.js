@@ -1,8 +1,6 @@
 // DayColumn.js - 3D Weather Timeline Visualization Component
 // Represents a single day as a vertical column with temperature gradient and weather particles
 
-// @ts-nocheck
-// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 import * as THREE from 'three';
 
 // --- Shader Code for Temperature Gradient ---
@@ -142,6 +140,10 @@ const WEATHER_CONDITIONS = {
     STORM: [95, 96, 99]
 };
 
+/**
+ * @param {number} code - WMO weather code
+ * @returns {'clear'|'cloudy'|'rain'|'snow'|'storm'}
+ */
 export function getConditionFromCode(code) {
     if (WEATHER_CONDITIONS.CLEAR.includes(code)) return 'clear';
     if (WEATHER_CONDITIONS.CLOUDY.includes(code)) return 'cloudy';
@@ -153,6 +155,11 @@ export function getConditionFromCode(code) {
 
 // --- Mini Particle System for Weather State ---
 export class MiniParticleSystem {
+    /**
+     * @param {'clear'|'cloudy'|'rain'|'snow'|'storm'} condition
+     * @param {THREE.Object3D} parentMesh
+     * @param {number} [radius]
+     */
     constructor(condition, parentMesh, radius = 1) {
         this.condition = condition;
         this.parentMesh = parentMesh;
@@ -472,6 +479,11 @@ export class MiniParticleSystem {
 
 // --- Accuracy Ring for Historical Days ---
 export class AccuracyRing {
+    /**
+     * @param {TimelineForecastAccuracy} accuracy
+     * @param {THREE.Object3D} parentMesh
+     * @param {number} radius
+     */
     constructor(accuracy, parentMesh, radius) {
         this.accuracy = accuracy; // { mae, rmse, skill, tempScore }
         this.parentMesh = parentMesh;

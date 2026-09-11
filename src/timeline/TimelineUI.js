@@ -8,11 +8,10 @@
  * - Weather condition indicators
  */
 
-// @ts-nocheck
-// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 import { formatDate } from '../i18n/strings.js';
 
 export class TimelineUI {
+    /** @param {HTMLElement} container */
     constructor(container) {
         this.container = container;
         this.currentPanel = null;
@@ -96,15 +95,25 @@ export class TimelineUI {
      * Cache DOM element references
      */
     cacheElements() {
+        /** @type {HTMLElement|null} */
         this.detailPanel = this.container.querySelector('#day-detail-panel');
+        /** @type {HTMLElement|null} */
         this.detailDate = this.container.querySelector('#detail-date');
+        /** @type {HTMLElement|null} */
         this.detailHigh = this.container.querySelector('#detail-high');
+        /** @type {HTMLElement|null} */
         this.detailLow = this.container.querySelector('#detail-low');
+        /** @type {HTMLElement|null} */
         this.detailCondition = this.container.querySelector('#detail-condition');
+        /** @type {HTMLElement|null} */
         this.detailAnomaly = this.container.querySelector('#detail-anomaly');
+        /** @type {HTMLElement|null} */
         this.detailAccuracy = this.container.querySelector('#detail-accuracy');
+        /** @type {HTMLElement|null} */
         this.accuracyValue = this.container.querySelector('#accuracy-value');
+        /** @type {HTMLElement|null} */
         this.detailClose = this.container.querySelector('#detail-close');
+        /** @type {HTMLElement|null} */
         this.dayProxyList = this.container.querySelector('#timeline-day-proxies');
     }
 
@@ -122,7 +131,7 @@ export class TimelineUI {
             const data = column.getData ? column.getData() : column.data;
             const date = data?.date ? new Date(data.date) : null;
             const label =
-                date && !isNaN(date)
+                date && !isNaN(date.getTime())
                     ? formatDate(date, { weekday: 'short', month: 'short', day: 'numeric' })
                     : `Day ${i + 1}`;
 
@@ -138,10 +147,12 @@ export class TimelineUI {
                     onSelect?.(column);
                 } else if (event.key === 'ArrowRight') {
                     event.preventDefault();
-                    this.dayProxyList.children[Math.min(this.dayProxyList.children.length - 1, i + 1)]?.focus();
+                    /** @type {HTMLElement|undefined} */ (
+                        this.dayProxyList?.children[Math.min((this.dayProxyList?.children.length ?? 1) - 1, i + 1)]
+                    )?.focus();
                 } else if (event.key === 'ArrowLeft') {
                     event.preventDefault();
-                    this.dayProxyList.children[Math.max(0, i - 1)]?.focus();
+                    /** @type {HTMLElement|undefined} */ (this.dayProxyList?.children[Math.max(0, i - 1)])?.focus();
                 }
             });
             btn.addEventListener('focus', () => column.setHovered?.(true));
@@ -471,6 +482,7 @@ export class TimelineUI {
 
     /**
      * Show day details panel
+     * @param {TimelineDayData|null|undefined} dayData
      */
     showDayDetails(dayData) {
         if (!dayData) return;
@@ -516,6 +528,8 @@ export class TimelineUI {
 
     /**
      * Format condition for display
+     * @param {string|null|undefined} condition
+     * @returns {string}
      */
     formatCondition(condition) {
         if (!condition) return 'Unknown';
@@ -524,6 +538,8 @@ export class TimelineUI {
 
     /**
      * Get color based on accuracy percentage
+     * @param {number} percent
+     * @returns {string}
      */
     getAccuracyColor(percent) {
         if (percent >= 90) return '#22c55e'; // Green
@@ -533,6 +549,7 @@ export class TimelineUI {
 
     /**
      * Update location display
+     * @param {string|null|undefined} locationName
      */
     updateLocation(locationName) {
         const subtitle = this.container.querySelector('.timeline-subtitle');
@@ -543,6 +560,7 @@ export class TimelineUI {
 
     /**
      * Show/hide loading indicator
+     * @param {boolean} isLoading
      */
     setLoading(isLoading) {
         const header = this.container.querySelector('.timeline-header');

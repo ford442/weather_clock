@@ -1,8 +1,6 @@
 // DayColumn.js - 3D Weather Timeline Visualization Component
 // Represents a single day as a vertical column with temperature gradient and weather particles
 
-// @ts-nocheck
-// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 import * as THREE from 'three';
 import {
     AccuracyRing,
@@ -13,7 +11,30 @@ import {
     getConditionFromCode
 } from './day-column-visuals.js';
 
+/**
+ * TimelineDayData plus a few ad-hoc fields set by TimelineController when it
+ * lays out columns (world-space x/z position, fractional dayOffset from
+ * "today", and the anomaly/accuracy key spellings some call sites still use).
+ * @typedef {TimelineDayData & {dayOffset?: number, anomaly?: number, x?: number, z?: number}} DayColumnData
+ */
+
+/**
+ * @typedef {Object} DayColumnOptions
+ * @property {number} [height]
+ * @property {number} [radius]
+ * @property {number} [segments]
+ * @property {{high: number, medium: number, low: number}} [lodDistance]
+ * @property {number} [x]
+ * @property {number} [z]
+ * @property {number} [width] - Set by TimelineController's layout pass; currently unused by DayColumn itself.
+ * @property {number} [index] - Set by TimelineController's layout pass; currently unused by DayColumn itself.
+ */
+
 export class DayColumn {
+    /**
+     * @param {DayColumnData} dayData
+     * @param {DayColumnOptions} [options]
+     */
     constructor(dayData, options = {}) {
         this.data = dayData;
         this.options = {
@@ -44,6 +65,11 @@ export class DayColumn {
         }
     }
 
+    /** Whether this column is "today" (forecast day with ~0 offset), for glow intensity. */
+    isToday() {
+        return this.data.type === 'forecast' && Math.abs(this.data.dayOffset || 0) < 0.5;
+    }
+
     computeAvgWind() {
         const hours = this.data.hourly;
         if (!Array.isArray(hours) || hours.length === 0) return 0;
@@ -65,8 +91,7 @@ export class DayColumn {
         const geometry = new THREE.CylinderGeometry(radius, radius, height, segments);
 
         // Determine if this is "today" for glow intensity
-        const isToday = this.data.type === 'forecast' && Math.abs(this.data.dayOffset || 0) < 0.5;
-        const glowIntensity = isToday ? 1.0 : 0.5;
+        const glowIntensity = this.isToday() ? 1.0 : 0.5;
 
         // Normalize wind: 40 km/h ≈ full strength
         const avgWind = this.computeAvgWind();
@@ -306,7 +331,7 @@ export class DayColumn {
                 if (this.particleSystem && this.particleSystem.mesh) {
                     this.particleSystem.mesh.visible = true;
                 }
-                material.uniforms.uGlowIntensity.value = this.data.type === 'today' ? 1.0 : 0.5;
+                material.uniforms.uGlowIntensity.value = this.isToday() ? 1.0 : 0.5;
                 break;
 
             case 'medium':
@@ -393,7 +418,7 @@ export class DayColumn {
             material.uniforms.uGlowIntensity.value = 1.5;
             this.mesh.scale.setScalar(1.1);
         } else {
-            material.uniforms.uGlowIntensity.value = this.data.type === 'today' ? 1.0 : 0.5;
+            material.uniforms.uGlowIntensity.value = this.isToday() ? 1.0 : 0.5;
             this.mesh.scale.setScalar(1.0);
         }
     }
@@ -509,15 +534,14 @@ export class DayColumn {
         } else {
             this.mesh.scale.setScalar(1.0);
             if (this.mesh.material.uniforms) {
-                const isToday = this.data.type === 'forecast' && Math.abs(this.data.dayOffset || 0) < 0.5;
-                this.mesh.material.uniforms.uGlowIntensity.value = isToday ? 1.0 : 0.5;
+                this.mesh.material.uniforms.uGlowIntensity.value = this.isToday() ? 1.0 : 0.5;
             }
         }
     }
 
     /**
      * Get day data
-     * @returns {Object}
+     * @returns {DayColumnData}
      */
     getData() {
         return {
