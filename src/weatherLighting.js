@@ -1,6 +1,6 @@
 // Aether Architect: Verified
 import * as THREE from 'three';
-import { getAqiHaze } from './air-quality.js';
+import { getAqiHaze, getUvSunHarshness } from './air-quality.js';
 
 let previousIntensity = { sun: 0.8, moon: 0.0, ambient: 0.4 };
 const transitionSpeed = 0.01; // Slower transition (approx 5s)
@@ -129,8 +129,8 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
     const localTransitionSpeed = atmosphere ? 0.045 : transitionSpeed;
 
     // --- SUN LIGHTING ---
-    // Extreme UV (index 8+, "very high"/"extreme") subtly intensifies sun glare.
-    const uvGlareFactor = clamp((uvIndex - 8) / 4, 0, 1);
+    // High UV (WHO "High" starts at 6) subtly intensifies sun glare and haze.
+    const uvHarshness = getUvSunHarshness(uvIndex);
     const baseSunIntensity = 2.0;
     const cloudSunFactor = 1 - (cloud / 100) * 0.4;
     const severityFactor = 1 - (sev / 100) * 0.4;
@@ -140,7 +140,7 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
         severityFactor *
         dayFactor *
         (atmosphere?.sunIntensityMultiplier ?? 1) *
-        (1 + uvGlareFactor * 0.25);
+        uvHarshness.sunIntensityMultiplier;
 
     // --- MOON LIGHTING ---
     let targetMoonIntensity = 0;
@@ -188,7 +188,7 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
         const targetRayleigh = atmosphere?.rayleigh ?? 3.0 - (sev / 100) * 2.2;
         uniforms['rayleigh'].value = targetRayleigh;
 
-        const targetMie = atmosphere?.mieCoefficient ?? 0.005 + (cloud / 100) * 0.05;
+        const targetMie = (atmosphere?.mieCoefficient ?? 0.005 + (cloud / 100) * 0.05) + uvHarshness.mieBoost;
         uniforms['mieCoefficient'].value = targetMie;
 
         uniforms['mieDirectionalG'].value = atmosphere?.mieDirectionalG ?? 0.7;
@@ -358,7 +358,8 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         visibility: (weatherData.current && weatherData.current.visibility) || 10000,
         severity: weightedSeverity,
         uvIndex: weatherData.current?.uvIndex ?? 0,
-        aqi: weatherData.current?.aqi ?? null
+        aqi: weatherData.current?.aqi ?? null,
+        pollenIntensity: weatherData.current?.pollenIntensity ?? 0
     };
 
     // Reuse the single implementation for actual application + sky/fog/transitions.

@@ -358,6 +358,27 @@ describe('WeatherService — air quality & alerts', () => {
         expect(result).toBeNull();
     });
 
+    it('serves the last-known air quality from cache when the network is gone', async () => {
+        const service = new WeatherService();
+        service.setManualLocation(40.71, -74.01, 'Test City');
+
+        fetch.mockResolvedValueOnce({
+            json: async () => ({ current: { pm2_5: 9, pm10: 14, ozone: 40, us_aqi: 55, european_aqi: 25 } })
+        });
+        const fresh = await service.fetchAirQuality();
+
+        // Age the entry past its TTL, then fail the refetch: the stale copy still backs the chip.
+        const key = service.getCacheKey(40.71, -74.01, 'air_quality');
+        const entry = service.cache.get(key);
+        entry.timestamp = Date.now() - 3 * 60 * 60 * 1000;
+        service.cache.set(key, entry);
+        fetch.mockRejectedValueOnce(new Error('offline'));
+
+        const stale = await service.fetchAirQuality();
+        expect(stale).toEqual(fresh);
+        expect(stale?.usAqi).toBe(55);
+    });
+
     it('fetches and normalizes active alerts', async () => {
         const service = new WeatherService();
         service.setManualLocation(40.71, -74.01, 'Test City');

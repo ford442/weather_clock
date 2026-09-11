@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RainSystem } from './rain-system.js';
 import { SnowSystem } from './snow-system.js';
 import { WindDustSystem } from './wind-dust-system.js';
+import { PollenSystem } from './pollen-system.js';
 import { CloudSystem } from './cloud-system.js';
 import { StarField } from './star-field.js';
 import { FogEffect } from './fog-effect.js';
@@ -135,6 +136,8 @@ export class WeatherEffects {
         const stratusCount = Math.max(1, Math.floor(8 / divisor));
         const cirrusCount = Math.max(1, Math.floor(6 / divisor));
         const dustCount = Math.floor(300 / divisor);
+        // Pollen motes are a "nice to have": skipped entirely on the cheapest tiers.
+        const pollenCount = this.quality === 'low' || this.quality === 'thumbnail' ? 0 : Math.floor(60 / divisor);
         const { past: pastZone, current: currZone, future: futureZone } = this._zones;
 
         // this.isWebGPU true implies this.gpuClasses was supplied by the caller (see constructor).
@@ -167,6 +170,8 @@ export class WeatherEffects {
         this.currDust = new WindDustSystem(this.scene, currZone, dustCount);
         /** @type {FogEffect} */
         this.currFog = new FogEffect(this.scene, currZone);
+        /** @type {PollenSystem|null} */
+        this.currPollen = pollenCount > 0 ? new PollenSystem(this.scene, currZone, pollenCount) : null;
 
         this.futureRain = new RainClass(this.scene, futureZone, rainCount, this.renderer);
         this.futureSnow = new SnowClass(this.scene, futureZone, snowCount, this.renderer);
@@ -199,8 +204,9 @@ export class WeatherEffects {
             this.currStratus,
             this.currCirrus,
             this.currDust,
-            this.currFog
-        ];
+            this.currFog,
+            this.currPollen
+        ].filter(Boolean);
         /** @type {any[]} */
         this._futureSystems = [
             this.futureRain,
@@ -401,6 +407,7 @@ export class WeatherEffects {
         this.currDust.update(delta, c.wind, c.dir, c.rain, lightColor);
         this.currFog.setIntensity(c.fog);
         this.currFog.update(delta, c.wind, c.dir);
+        this.currPollen?.update(delta, current?.pollenIntensity ?? 0, c.wind, c.dir, c.rain, lightColor);
 
         this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null, lightColor);
         this.futureSnow.update(delta, f.wind, f.dir, f.snow, lightColor);
@@ -506,6 +513,7 @@ export class WeatherEffects {
         this.currStratus.update(delta, wind, covers.stratus, ...args, code, dir);
         this.currCirrus.update(delta, wind, covers.cirrus, ...args, code, dir);
         this.currDust.update(delta, wind, dir, rainI, lightColor);
+        this.currPollen?.update(delta, weatherSnap.pollenIntensity ?? 0, wind, dir, rainI, lightColor);
         this.currFog.setIntensity(fogI);
         this.currFog.update(delta, wind, dir);
 

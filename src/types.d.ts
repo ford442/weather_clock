@@ -47,6 +47,10 @@ interface WeatherSnapshot {
     atmosphere?: AtmosphereUniforms;
     /** US AQI, attached only to the "current" snapshot (no hourly/forecast timeline for it). */
     aqi?: number | null;
+    /** European AQI, attached alongside `aqi` on the "current" snapshot. */
+    europeanAqi?: number | null;
+    /** Pollen load 0..1 (see air-quality.js#getPollenIntensity), drives the pollen motes. */
+    pollenIntensity?: number;
 }
 
 /** WeatherSnapshot after weather-simulation.js#ensureIntensities() has populated its precipitation intensities. */

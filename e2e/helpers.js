@@ -53,6 +53,19 @@ export const FIXTURES = {
             wind_speed_10m: []
         }
     },
+    /** Air-quality payload with both AQI scales, particulates and pollen populated. */
+    openMeteoAirQuality: {
+        current: {
+            pm10: 24.5,
+            pm2_5: 12.3,
+            ozone: 68,
+            us_aqi: 82,
+            european_aqi: 38,
+            birch_pollen: 12,
+            grass_pollen: 55,
+            ragweed_pollen: 3
+        }
+    },
     emptyJson: {}
 };
 
@@ -79,6 +92,71 @@ export async function mockExternalAPIs(page) {
     await page.route('https://previous-runs-api.open-meteo.com/**', (route) =>
         route.fulfill({ contentType: 'application/json', body: JSON.stringify(FIXTURES.emptyJson) })
     );
+    // NWS alerts: no active alerts by default (the banner stays hidden).
+    await page.route('https://api.weather.gov/**', (route) =>
+        route.fulfill({ contentType: 'application/geo+json', body: JSON.stringify({ features: [] }) })
+    );
+}
+
+/**
+ * Point the Nominatim search fixture at a specific city/country, so specs can
+ * exercise locale-dependent behavior (e.g. which AQI scale leads).
+ * @param {import('@playwright/test').Page} page
+ * @param {{displayName: string, lat: string, lon: string, countryCode: string}} place
+ */
+export async function mockSearchResult(page, place) {
+    await page.unroute('https://nominatim.openstreetmap.org/search*');
+    await page.route('https://nominatim.openstreetmap.org/search*', (route) =>
+        route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify([
+                {
+                    display_name: place.displayName,
+                    lat: place.lat,
+                    lon: place.lon,
+                    address: { country_code: place.countryCode }
+                }
+            ])
+        })
+    );
+}
+
+/**
+ * Run the in-app location search, which re-fetches weather, air quality and
+ * alerts for the selected place.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} query
+ */
+export async function searchForLocation(page, query) {
+    await page.locator('#search-btn').click();
+    const input = page.locator('#location-search');
+    await input.fill(query);
+    await input.press('Enter');
+}
+
+/**
+ * Override the fixture routes with custom payloads. Call after mockExternalAPIs
+ * and before launchApp.
+ * @param {import('@playwright/test').Page} page
+ * @param {{airQuality?: object, current?: object}} payloads
+ */
+export async function mockHealthData(page, { airQuality = FIXTURES.openMeteoAirQuality, current = null } = {}) {
+    await page.unroute('https://air-quality-api.open-meteo.com/**');
+    await page.route('https://air-quality-api.open-meteo.com/**', (route) =>
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(airQuality) })
+    );
+    if (current) {
+        await page.unroute('https://api.open-meteo.com/v1/forecast*');
+        await page.route('https://api.open-meteo.com/v1/forecast*', (route) =>
+            route.fulfill({
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    ...FIXTURES.openMeteoCurrent,
+                    current: { ...FIXTURES.openMeteoCurrent.current, ...current }
+                })
+            })
+        );
+    }
 }
 
 /**

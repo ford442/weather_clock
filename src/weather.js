@@ -27,6 +27,8 @@ import { meanAbsoluteError, meanAbsoluteErrorGated, accuracyCacheSuffix, ACCURAC
 // forever as the user visits new locations.
 const CACHE_STORAGE_PREFIX = 'weatherclock_cache_v1_';
 const MAX_CACHE_ENTRIES = 24;
+// Air quality is a slow-moving signal; an hour-old reading is still worth showing.
+const AIR_QUALITY_TTL_MS = 60 * 60 * 1000;
 
 // `navigator` isn't defined in every environment this module can load in
 // (Node's test runner, SSR, older Node versions), so geocoding requests
@@ -46,6 +48,8 @@ export class WeatherService {
         this.unit = 'imperial'; // Default to Fahrenheit
         /** @type {'metric'|'imperial'} */
         this.windUnit = 'metric'; // 'metric' = km/h, 'imperial' = mph
+        /** @type {string|null} ISO 3166-1 alpha-2 of the active location; picks the AQI scale. */
+        this.countryCode = null;
         this._cacheStore = new TTLCache({ storagePrefix: CACHE_STORAGE_PREFIX, maxStorageEntries: MAX_CACHE_ENTRIES });
         this.cache = this._cacheStore.memory;
         this.timeoutMs = timeoutMs;
@@ -174,6 +178,7 @@ export class WeatherService {
         this.longitude = -74.006;
         this.location = 'New York, USA (default)';
         this.windUnit = 'imperial'; // NYC default is US
+        this.countryCode = 'us';
     }
 
     async reverseGeocode(lat, lon) {
@@ -184,6 +189,7 @@ export class WeatherService {
                 const city = data.address.city || data.address.town || data.address.village;
                 const country = data.address.country;
                 // Auto-detect wind unit: mph for US, km/h everywhere else
+                this.countryCode = data.address.country_code ?? null;
                 this.windUnit = data.address.country_code === 'us' ? 'imperial' : 'metric';
                 return city ? `${city}, ${country}` : country;
             }
@@ -483,10 +489,12 @@ export class WeatherService {
 
         const cacheKey = this.getCacheKey(this.latitude, this.longitude, 'air_quality');
 
-        try {
-            const cached = this.getFromCache(cacheKey);
-            if (cached) return cached.data;
+        // Read with allowExpired so an out-of-date entry is not dropped on the way
+        // past: it is exactly what the chips fall back to when the network is gone.
+        const cached = this.getFromCache(cacheKey, true);
+        if (cached && Date.now() - cached.timestamp <= AIR_QUALITY_TTL_MS) return cached.data;
 
+        try {
             const url = airQualityUrl(this.latitude, this.longitude, {
                 current: 'pm10,pm2_5,ozone,us_aqi,european_aqi,birch_pollen,grass_pollen,ragweed_pollen',
                 timezone: 'auto'
@@ -510,9 +518,8 @@ export class WeatherService {
             this.setCache(cacheKey, result);
             return result;
         } catch (error) {
-            console.warn('Air quality fetch failed, attempting cache fallback:', error);
-            const stale = this.getFromCache(cacheKey, true);
-            return stale ? stale.data : null;
+            console.warn('Air quality fetch failed, falling back to last known values:', error);
+            return cached ? cached.data : null;
         }
     }
 
