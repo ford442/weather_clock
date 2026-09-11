@@ -139,6 +139,8 @@ export function setupDebugAPI(state, services, scene3d) {
         getForecastPreviewMetrics: () => window.modeController?.forecastUI?.previewMetrics || null,
         getMode: () => window.modeController?.getMode?.(),
         getSceneLayout: () => SCENE_LAYOUT,
+        /** Past→present→future narrative driving the zone tints, drift, and temporal band. */
+        getTemporalNarrative: () => weatherEffects.narrative ?? null,
         spawnBolt: () => {
             weatherEffects.createLightning();
         },

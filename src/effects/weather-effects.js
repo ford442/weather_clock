@@ -9,6 +9,8 @@ import { FogEffect } from './fog-effect.js';
 import { SplashSystem } from './splash-system.js';
 import { LightningBoltSystem } from './lightning-bolt-system.js';
 import { SCENE_LAYOUT } from '../scene-layout.js';
+import { TemporalBand } from './temporal-band.js';
+import { computeTemporalNarrative } from '../temporal-narrative.js';
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -112,6 +114,11 @@ export class WeatherEffects {
         this.lightningLight.visible = false;
         this.scene.add(this.lightningLight);
         this.lightningBolts = new LightningBoltSystem(scene);
+        // Backdrop that carries the past→present→future temperature story.
+        /** @type {TemporalBand|null} */
+        this.temporalBand = quality === 'thumbnail' ? null : new TemporalBand(scene);
+        /** @type {import('../temporal-narrative.js').TemporalNarrative|null} */
+        this.narrative = null;
 
         // isWebGPU true implies gpuClasses was supplied by the caller.
         this.splashSystem = isWebGPU
@@ -340,6 +347,24 @@ export class WeatherEffects {
         return { cumulus, stratus, cirrus };
     }
 
+    /**
+     * Push each zone's slice of the narrative into that zone's cloud systems, so the
+     * departing/arriving drift and the blue-vs-red temperature tint are consistent
+     * across every cloud layer.
+     * @param {import('../temporal-narrative.js').TemporalNarrative} narrative
+     */
+    _applyNarrative(narrative) {
+        this.pastCumulus?.setNarrative(narrative.past);
+        this.pastStratus?.setNarrative(narrative.past);
+        this.pastCirrus?.setNarrative(narrative.past);
+        this.currCumulus?.setNarrative(narrative.current);
+        this.currStratus?.setNarrative(narrative.current);
+        this.currCirrus?.setNarrative(narrative.current);
+        this.futureCumulus?.setNarrative(narrative.future);
+        this.futureStratus?.setNarrative(narrative.future);
+        this.futureCirrus?.setNarrative(narrative.future);
+    }
+
     update(past, current, forecast, delta = 0.016, lightColor, sunPos, moonPos, sunColor, moonColor) {
         if (this._vignetteMode) this.setVignetteMode(false);
         if (this.flashIntensity > 0) {
@@ -374,6 +399,14 @@ export class WeatherEffects {
         const p = extractData(past);
         const c = extractData(current);
         const f = extractData(forecast);
+
+        // Temporal narrative: time flows leftward, temperature reads as colour.
+        const narrative = computeTemporalNarrative(past, current, forecast, {
+            dayFactor: sunPos ? Math.max(-1, Math.min(1, sunPos.y / 20)) : 0
+        });
+        this.narrative = narrative;
+        this._applyNarrative(narrative);
+        this.temporalBand?.update(narrative, delta);
 
         const pCovers = this._cloudTypeCovers(p.code, p.cloud, p.rain, p.snow, p.fog);
         const cCovers = this._cloudTypeCovers(c.code, c.cloud, c.rain, c.snow, c.fog);
@@ -527,6 +560,13 @@ export class WeatherEffects {
 
     setVignetteMode(enabled) {
         this._vignetteMode = enabled;
+        this.temporalBand?.setVisible(!enabled);
+        if (enabled) {
+            // A single-day vignette has no past/future zones to narrate.
+            for (const cloud of [this.currCumulus, this.currStratus, this.currCirrus]) {
+                cloud?.setNarrative({ drift: 0, tint: [1, 1, 1] });
+            }
+        }
         for (const sys of this._pastSystems) sys?.setVisible?.(!enabled);
         for (const sys of this._futureSystems) sys?.setVisible?.(!enabled);
     }
@@ -584,6 +624,8 @@ export class WeatherEffects {
         this.starField?.dispose?.();
         this.splashSystem?.dispose?.();
         this.lightningBolts?.dispose?.();
+        this.temporalBand?.dispose?.();
+        this.temporalBand = null;
         if (this.lightningLight) {
             this.scene.remove(this.lightningLight);
             this.lightningLight.dispose?.();

@@ -564,3 +564,155 @@ export class AccuracyRing {
         }
     }
 }
+
+// --- Temperature Trend Indicator ---
+
+/** Lazily-built chevron strip shared by every column's trend indicator. */
+/** @type {THREE.CanvasTexture|null} */
+let trendChevronTexture = null;
+
+/**
+ * A vertically tiling chevron pointing toward +Y, faded at both ends.
+ * @returns {THREE.CanvasTexture}
+ */
+function getTrendChevronTexture() {
+    if (trendChevronTexture) return trendChevronTexture;
+
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
+
+    const stroke = ctx.createLinearGradient(0, 0, 0, size);
+    stroke.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    stroke.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
+    stroke.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = size * 0.09;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(size * 0.16, size * 0.7);
+    ctx.lineTo(size * 0.5, size * 0.24);
+    ctx.lineTo(size * 0.84, size * 0.7);
+    ctx.stroke();
+
+    // Taper the sides so the chevron melts into the column's silhouette.
+    ctx.globalCompositeOperation = 'destination-in';
+    const fade = ctx.createLinearGradient(0, 0, size, 0);
+    fade.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    fade.addColorStop(0.5, 'rgba(0, 0, 0, 1)');
+    fade.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    trendChevronTexture = texture;
+    return texture;
+}
+
+/** °C/day of day-over-day change that saturates the trend indicator. */
+export const TREND_SATURATION_C = 6;
+/** Below this |°C/day| the day reads as steady and shows no chevrons. */
+export const TREND_STEADY_C = 0.5;
+
+/**
+ * How strongly a day-over-day temperature change should show, 0 (steady — draw nothing)
+ * to 1 (a full swing). Shared with the trend indicator so the threshold is testable.
+ * @param {number} trendDelta - Day-over-day mean temperature change, in °C.
+ * @returns {number}
+ */
+export function computeTrendStrength(trendDelta) {
+    const magnitude = Math.abs(trendDelta || 0);
+    return Math.min(1, Math.max(0, (magnitude - TREND_STEADY_C) / TREND_SATURATION_C));
+}
+
+/**
+ * Chevrons climbing (warming) or falling (cooling) around a day column — the timeline's
+ * half of the same rising/falling/steady language the clock scene's temporal band uses.
+ * A steady day shows nothing at all, which is the point: only change draws the eye.
+ */
+export class TrendIndicator {
+    /**
+     * @param {number} trendDelta - Day-over-day mean temperature change, in °C.
+     * @param {THREE.Object3D} parentMesh
+     * @param {number} radius - Column radius.
+     * @param {number} height - Column height.
+     */
+    constructor(trendDelta, parentMesh, radius, height) {
+        this.trendDelta = trendDelta || 0;
+        this.direction = Math.sign(this.trendDelta);
+        this.strength = computeTrendStrength(this.trendDelta);
+        /** @type {THREE.Group|null} */
+        this.group = null;
+        this.time = 0;
+
+        if (this.strength <= 0) return;
+
+        const texture = getTrendChevronTexture().clone();
+        texture.needsUpdate = true;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 3);
+        // Cooling: flip the chevron so it points downward.
+        if (this.direction < 0) {
+            texture.repeat.y = -3;
+            texture.offset.y = 1;
+        }
+        this.texture = texture;
+
+        this.material = new THREE.MeshBasicMaterial({
+            map: texture,
+            color: this.direction > 0 ? new THREE.Color(0xff7a45) : new THREE.Color(0x74c7ff),
+            transparent: true,
+            opacity: 0.25 + this.strength * 0.45,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide
+        });
+
+        const geometry = new THREE.PlaneGeometry(radius * 1.35, height * 0.92);
+        this.group = new THREE.Group();
+        for (const rotation of [0, Math.PI / 2]) {
+            const plane = new THREE.Mesh(geometry.clone(), this.material);
+            plane.rotation.y = rotation;
+            plane.position.set(Math.sin(rotation) * radius * 1.04, 0, Math.cos(rotation) * radius * 1.04);
+            this.group.add(plane);
+        }
+        parentMesh.add(this.group);
+    }
+
+    /**
+     * @param {number} delta - Seconds since the previous frame.
+     */
+    update(delta) {
+        if (!this.group || !this.texture) return;
+        this.time += delta;
+        // Chevrons travel the way the temperature is going: up as it warms, down as it cools.
+        this.texture.offset.y += delta * (0.12 + this.strength * 0.3) * (this.direction > 0 ? 1 : -1);
+        this.material.opacity =
+            (0.25 + this.strength * 0.45) * (0.82 + Math.sin(this.time * 1.6) * 0.18 * this.strength);
+    }
+
+    /** @param {boolean} visible */
+    setVisible(visible) {
+        if (this.group) this.group.visible = visible;
+    }
+
+    dispose() {
+        if (!this.group) return;
+        for (const child of this.group.children) {
+            /** @type {THREE.Mesh} */ (child).geometry?.dispose();
+        }
+        this.group.parent?.remove(this.group);
+        this.material?.dispose();
+        this.texture?.dispose();
+        this.group = null;
+    }
+}

@@ -8,6 +8,9 @@ import {
 } from '../webgpu/materials/CloudMaterial.js';
 import { ParticleSystemBase } from './particle-base.js';
 
+/** World units a cloud may drift beyond its zone before wrapping, for cross-zone continuity. */
+export const CLOUD_ZONE_OVERLAP = 2.2;
+
 export class CloudSystem extends ParticleSystemBase {
     /**
      * @param {string} cloudType  'cumulus' | 'stratus' | 'cirrus'
@@ -19,6 +22,17 @@ export class CloudSystem extends ParticleSystemBase {
         this.maxClouds = maxClouds;
         this.cloudType = cloudType;
         this.zone = zone || { minX: -12, maxX: 12 };
+        // Clouds are allowed to hang past their zone's hard edges so the three zones
+        // read as one continuous sky instead of three cut-off blocks. Particles still
+        // wrap on the zone bounds; only the cloud field overlaps.
+        this.zoneOverlap = CLOUD_ZONE_OVERLAP;
+        this.spawnMinX = this.zone.minX - this.zoneOverlap;
+        this.spawnMaxX = this.zone.maxX + this.zoneOverlap;
+        /**
+         * Narrative drift/tint for this zone, set by WeatherEffects each frame.
+         * @type {{drift: number, tint: [number, number, number]}}
+         */
+        this.narrative = { drift: 0, tint: [1, 1, 1] };
 
         // Puff counts and scale ranges per cloud type
         const typeConfig = {
@@ -115,7 +129,7 @@ export class CloudSystem extends ParticleSystemBase {
         const { scaleMin, scaleMax, yMin, yRange } = this.cfg;
 
         const cloud = {
-            x: this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX),
+            x: this.spawnMinX + Math.random() * (this.spawnMaxX - this.spawnMinX),
             y: yMin + Math.random() * yRange,
             z: Math.random() * 10 - 5,
             scale: scaleMin + Math.random() * (scaleMax - scaleMin),
@@ -188,6 +202,28 @@ export class CloudSystem extends ParticleSystemBase {
         }
 
         return puffs;
+    }
+
+    /**
+     * Feed this zone's slice of the temporal narrative (see ../temporal-narrative.js).
+     * @param {{drift?: number, tint?: [number, number, number]}} narrative
+     */
+    setNarrative(narrative) {
+        if (!narrative) return;
+        if (typeof narrative.drift === 'number') this.narrative.drift = narrative.drift;
+        if (narrative.tint) this.narrative.tint = narrative.tint;
+    }
+
+    /**
+     * 0 at the very edge of the zone's overlap band, 1 once fully inside it.
+     * @param {number} x
+     * @returns {number}
+     */
+    _edgeFade(x) {
+        const span = Math.max(0.001, this.zoneOverlap + 0.6);
+        const fromMin = (x - this.spawnMinX) / span;
+        const fromMax = (this.spawnMaxX - x) / span;
+        return Math.max(0, Math.min(1, Math.min(fromMin, fromMax)));
     }
 
     update(
@@ -270,10 +306,10 @@ export class CloudSystem extends ParticleSystemBase {
         for (let i = 0; i < this.clouds.length; i++) {
             const cloud = this.clouds[i];
 
-            cloud.x += this.currentWindX;
+            cloud.x += this.currentWindX + this.narrative.drift * delta;
             cloud.z += this.currentWindZ;
-            if (cloud.x > this.zone.maxX) cloud.x = this.zone.minX;
-            if (cloud.x < this.zone.minX) cloud.x = this.zone.maxX;
+            if (cloud.x > this.spawnMaxX) cloud.x = this.spawnMinX;
+            if (cloud.x < this.spawnMinX) cloud.x = this.spawnMaxX;
             if (cloud.z > zMax) cloud.z = zMin;
             if (cloud.z < zMin) cloud.z = zMax;
 
@@ -297,18 +333,26 @@ export class CloudSystem extends ParticleSystemBase {
                     this.dummy.quaternion.copy(camQuat);
                     this._spinQuat.setFromAxisAngle(this._spinAxis, puff.rotation);
                     this.dummy.quaternion.multiply(this._spinQuat);
-                    const baseScale = puff.scale * cloud.scale;
+                    // Soft entry/exit at the zone's overlap edges: a cloud arriving from
+                    // the neighbouring zone swells and brightens into place instead of
+                    // popping, which is what makes the three zones read as one sky.
+                    const edge = this._edgeFade(cloud.x);
+                    const baseScale = puff.scale * cloud.scale * (0.88 + edge * 0.12);
                     const stretch = 1 + Math.min(0.35, windSpeed * 0.008) * (this.cloudType === 'cirrus' ? 1.4 : 0.7);
                     this.dummy.scale.set(baseScale * stretch, baseScale, baseScale);
                     this.dummy.updateMatrix();
                     this.mesh.setMatrixAt(idx, this.dummy.matrix);
 
-                    // Per-puff depth color: lerp between bottom shadow and top highlight
+                    // Per-puff depth colour, tinted by the zone's temperature (blue when
+                    // this slice of time is cold, warm-red when it is hot) and dimmed
+                    // toward the zone edges.
                     const t = puff.colorT;
+                    const tint = this.narrative.tint;
+                    const dim = 0.72 + edge * 0.28;
                     this._puffColor.setRGB(
-                        botR + (topR - botR) * t,
-                        botG + (topG - botG) * t,
-                        botB + (topB - botB) * t
+                        (botR + (topR - botR) * t) * tint[0] * dim,
+                        (botG + (topG - botG) * t) * tint[1] * dim,
+                        (botB + (topB - botB) * t) * tint[2] * dim
                     );
                     this.mesh.setColorAt(idx, this._puffColor);
                     instanceColorDirty = true;

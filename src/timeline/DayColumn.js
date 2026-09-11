@@ -6,6 +6,7 @@ import {
     AccuracyRing,
     MiniParticleSystem,
     TEMP_COLORS,
+    TrendIndicator,
     dayColumnFragmentShader,
     dayColumnVertexShader,
     getConditionFromCode
@@ -15,7 +16,7 @@ import {
  * TimelineDayData plus a few ad-hoc fields set by TimelineController when it
  * lays out columns (world-space x/z position, fractional dayOffset from
  * "today", and the anomaly/accuracy key spellings some call sites still use).
- * @typedef {TimelineDayData & {dayOffset?: number, anomaly?: number, x?: number, z?: number}} DayColumnData
+ * @typedef {TimelineDayData & {dayOffset?: number, anomaly?: number, x?: number, z?: number, trendDelta?: number}} DayColumnData
  */
 
 /**
@@ -48,6 +49,8 @@ export class DayColumn {
         this.mesh = null;
         this.particleSystem = null;
         this.accuracyRing = null;
+        /** @type {TrendIndicator|null} */
+        this.trendIndicator = null;
         this.lodLevel = 'high';
         this.time = 0;
 
@@ -59,6 +62,7 @@ export class DayColumn {
         this.createWeatherParticles();
         this.createThermalAura();
         this.createWindStreaks();
+        this.createTrendIndicator();
         this.createLabel();
         if (this.data.type === 'historical' && this.data.accuracy) {
             this.createAccuracyRing();
@@ -237,6 +241,16 @@ export class DayColumn {
         this.mesh.add(this.windMesh);
     }
 
+    /** Rising/falling chevrons for the day-over-day temperature change. */
+    createTrendIndicator() {
+        this.trendIndicator = new TrendIndicator(
+            this.data.trendDelta || 0,
+            this.mesh,
+            this.options.radius,
+            this.options.height
+        );
+    }
+
     createLabel() {
         const canvas = document.createElement('canvas');
         canvas.width = 256;
@@ -352,6 +366,7 @@ export class DayColumn {
         }
 
         if (this.auraMesh) this.auraMesh.visible = newLOD !== 'low';
+        this.trendIndicator?.setVisible(newLOD !== 'low');
         if (this.windMesh) this.windMesh.visible = newLOD !== 'low';
         if (this.labelSprite) this.labelSprite.visible = newLOD !== 'low';
     }
@@ -376,6 +391,11 @@ export class DayColumn {
         // Thermal aura shimmer
         if (this.auraMesh && this.auraMesh.material.uniforms) {
             this.auraMesh.material.uniforms.uTime.value = this.time;
+        }
+
+        // Temperature-trend chevrons
+        if (this.lodLevel !== 'low') {
+            this.trendIndicator?.update(delta);
         }
 
         // Wind streak drift — rotate streaks around column
@@ -573,6 +593,12 @@ export class DayColumn {
         if (this.accuracyRing) {
             this.accuracyRing.dispose();
             this.accuracyRing = null;
+        }
+
+        // Dispose trend chevrons
+        if (this.trendIndicator) {
+            this.trendIndicator.dispose();
+            this.trendIndicator = null;
         }
 
         // Dispose aura
