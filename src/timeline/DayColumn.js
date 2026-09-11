@@ -5,12 +5,14 @@ import * as THREE from 'three';
 import {
     AccuracyRing,
     MiniParticleSystem,
+    PressureRing,
     TEMP_COLORS,
     TrendIndicator,
     dayColumnFragmentShader,
     dayColumnVertexShader,
     getConditionFromCode
 } from './day-column-visuals.js';
+import { getHumidityHaze } from '../moisture-pressure.js';
 
 /**
  * TimelineDayData plus a few ad-hoc fields set by TimelineController when it
@@ -49,6 +51,8 @@ export class DayColumn {
         this.mesh = null;
         this.particleSystem = null;
         this.accuracyRing = null;
+        /** @type {PressureRing|null} */
+        this.pressureRing = null;
         /** @type {TrendIndicator|null} */
         this.trendIndicator = null;
         this.lodLevel = 'high';
@@ -63,6 +67,7 @@ export class DayColumn {
         this.createThermalAura();
         this.createWindStreaks();
         this.createTrendIndicator();
+        this.createPressureRing();
         this.createLabel();
         if (this.data.type === 'historical' && this.data.accuracy) {
             this.createAccuracyRing();
@@ -101,6 +106,7 @@ export class DayColumn {
         const avgWind = this.computeAvgWind();
         this.avgWindSpeed = avgWind;
         const windStrength = Math.min(1, avgWind / 40);
+        const humidity01 = getHumidityHaze(this.data.humidityAvg ?? 50);
 
         const material = new THREE.ShaderMaterial({
             uniforms: {
@@ -110,6 +116,7 @@ export class DayColumn {
                 uTime: { value: 0 },
                 uGlowIntensity: { value: glowIntensity },
                 uWindStrength: { value: windStrength },
+                uHumidity: { value: humidity01 },
                 uColorCold: { value: TEMP_COLORS.cold },
                 uColorCool: { value: TEMP_COLORS.cool },
                 uColorNeutral: { value: TEMP_COLORS.neutral },
@@ -317,6 +324,16 @@ export class DayColumn {
         this.accuracyRing = new AccuracyRing(this.data.accuracy, this.mesh, this.options.radius);
     }
 
+    /** Barometric cue crowning the column — every day has one, unlike the accuracy ring. */
+    createPressureRing() {
+        this.pressureRing = new PressureRing(
+            this.data.pressureAvg,
+            this.mesh,
+            this.options.radius,
+            this.options.height
+        );
+    }
+
     /**
      * Update detail level based on camera distance
      * @param {number} distance - Distance from camera to column
@@ -367,6 +384,7 @@ export class DayColumn {
 
         if (this.auraMesh) this.auraMesh.visible = newLOD !== 'low';
         this.trendIndicator?.setVisible(newLOD !== 'low');
+        this.pressureRing?.setVisible(newLOD !== 'low');
         if (this.windMesh) this.windMesh.visible = newLOD !== 'low';
         if (this.labelSprite) this.labelSprite.visible = newLOD !== 'low';
     }
@@ -396,6 +414,11 @@ export class DayColumn {
         // Temperature-trend chevrons
         if (this.lodLevel !== 'low') {
             this.trendIndicator?.update(delta);
+        }
+
+        // Pressure ring pulse (only animates under low pressure)
+        if (this.lodLevel !== 'low') {
+            this.pressureRing?.update(delta);
         }
 
         // Wind streak drift — rotate streaks around column
@@ -575,7 +598,9 @@ export class DayColumn {
             weatherCode: this.data.weatherCode,
             condition: this.data.condition || getConditionFromCode(this.data.weatherCode),
             accuracy: this.data.accuracy,
-            hourly: this.data.hourly
+            hourly: this.data.hourly,
+            humidityAvg: this.data.humidityAvg ?? null,
+            pressureAvg: this.data.pressureAvg ?? null
         };
     }
 
@@ -599,6 +624,12 @@ export class DayColumn {
         if (this.trendIndicator) {
             this.trendIndicator.dispose();
             this.trendIndicator = null;
+        }
+
+        // Dispose pressure ring
+        if (this.pressureRing) {
+            this.pressureRing.dispose();
+            this.pressureRing = null;
         }
 
         // Dispose aura

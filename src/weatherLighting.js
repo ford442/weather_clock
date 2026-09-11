@@ -1,6 +1,7 @@
 // Aether Architect: Verified
 import * as THREE from 'three';
 import { getAqiHaze, getUvSunHarshness } from './air-quality.js';
+import { getHumidityHaze, getPressureAnomaly } from './moisture-pressure.js';
 import { getAltitudeRadFromPosition, getMoonlightModel, getSunlightModel } from './celestialLighting.js';
 
 let previousIntensity = { sun: 0.8, moon: 0.0, ambient: 0.4 };
@@ -84,7 +85,12 @@ export function deriveDailyAtmosphere(weatherSnap, astroData = null, options = {
     const code = weatherSnap?.weatherCode ?? 0;
     const severity = clamp(weatherSnap?.severity ?? getSeverity(code), 0, 100) / 100;
     const visibility = weatherSnap?.visibility ?? 10000;
-    const haze = clamp(getVisibilityHaze(visibility) * 0.75 + cloudFactor * 0.35 + severity * 0.4, 0, 1);
+    const humidityHaze = getHumidityHaze(weatherSnap?.humidity);
+    const haze = clamp(
+        getVisibilityHaze(visibility) * 0.75 + cloudFactor * 0.35 + severity * 0.4 + humidityHaze * 0.3,
+        0,
+        1
+    );
     const seasonalWarmth = getSeasonalWarmth(options.date, options.lat ?? 40.7128);
 
     const sunY = astroData?.sunPosition?.y ?? 0;
@@ -148,6 +154,11 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
     const sev = weatherSnap.severity !== undefined ? weatherSnap.severity : getSeverity(code);
     const uvIndex = weatherSnap.uvIndex ?? 0;
     const aqiHaze = getAqiHaze(weatherSnap.aqi);
+    // Moisture and barometric cues: muggy air thickens haze, low pressure adds
+    // a touch of the "heavy air" a storm system brings ahead of it.
+    const humidityHaze = getHumidityHaze(weatherSnap.humidity);
+    const pressureAnomaly = getPressureAnomaly(weatherSnap.pressure);
+    const lowPressureHeaviness = Math.max(0, -pressureAnomaly);
     const atmosphere = weatherSnap.atmosphere || null;
     const localTransitionSpeed = atmosphere ? 0.045 : transitionSpeed;
 
@@ -253,7 +264,9 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
         let targetFogDensity =
             (0.0001 + (cloud / 100) * 0.005 + (sev / 100) * 0.03 + visibilityFactor * 0.05) *
                 (atmosphere?.fogDensityMultiplier ?? 1) +
-            aqiHaze * 0.02;
+            aqiHaze * 0.02 +
+            humidityHaze * 0.012 +
+            lowPressureHeaviness * 0.008;
         if (targetFogDensity > 0.03) targetFogDensity = 0.03;
 
         scene.fog.density += (targetFogDensity - scene.fog.density) * 0.05;
@@ -261,8 +274,10 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
         const fogColor = atmosphere?.skyFogColor
             ? new THREE.Color().copy(atmosphere.skyFogColor)
             : new THREE.Color().copy(ambientLight.color).multiplyScalar(0.8);
-        // High AQI tints the fog toward a brown-grey smog haze.
+        // High AQI tints the fog toward a brown-grey smog haze; high humidity
+        // toward a cooler, moist grey-blue mist instead.
         if (aqiHaze > 0) fogColor.lerp(new THREE.Color(0x8a7a5c), aqiHaze * 0.6);
+        if (humidityHaze > 0) fogColor.lerp(new THREE.Color(0xb9c9d6), humidityHaze * 0.4);
         scene.fog.color.lerp(fogColor, localTransitionSpeed);
     }
 
@@ -394,6 +409,18 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         getWind(weatherData.current) * currentWeight +
         getWind(weatherData.forecast) * forecastWeight;
 
+    const getHumidity = (data) => data?.humidity ?? 50;
+    const weightedHumidity =
+        getHumidity(weatherData.past) * pastWeight +
+        getHumidity(weatherData.current) * currentWeight +
+        getHumidity(weatherData.forecast) * forecastWeight;
+
+    const getPressure = (data) => data?.pressure ?? 1013.25;
+    const weightedPressure =
+        getPressure(weatherData.past) * pastWeight +
+        getPressure(weatherData.current) * currentWeight +
+        getPressure(weatherData.forecast) * forecastWeight;
+
     // Build a "representative" snap for the applicator (color decisions lean on current)
     const repSnap = {
         cloudCover: weightedCloud,
@@ -403,7 +430,9 @@ export function updateWeatherLighting(scene, sunLight, moonLight, ambientLight, 
         severity: weightedSeverity,
         uvIndex: weatherData.current?.uvIndex ?? 0,
         aqi: weatherData.current?.aqi ?? null,
-        pollenIntensity: weatherData.current?.pollenIntensity ?? 0
+        pollenIntensity: weatherData.current?.pollenIntensity ?? 0,
+        humidity: weightedHumidity,
+        pressure: weightedPressure
     };
 
     // Reuse the single implementation for actual application + sky/fog/transitions.

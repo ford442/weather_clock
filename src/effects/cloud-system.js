@@ -236,7 +236,8 @@ export class CloudSystem extends ParticleSystemBase {
         sunColor,
         moonColor,
         weatherCode = 0,
-        windDir = 90
+        windDir = 90,
+        humidityHaze = 0
     ) {
         // Update global lighting uniforms (shared across all cloud systems)
         if (lightColor) cloudShaderInjection.uniforms.uAmbientColor.value.copy(lightColor);
@@ -251,6 +252,9 @@ export class CloudSystem extends ParticleSystemBase {
         const isStorm = weatherCode >= 95;
         const isRain = weatherCode >= 51 && weatherCode < 95;
         const stormFactor = isStorm ? 1.0 : isRain ? 0.5 : 0.0;
+        // Moist air softens cloud definition: puffier contrast flattens toward a
+        // hazier, more overcast-looking mass instead of crisp individual puffs.
+        const humidityFactor = Math.max(0, Math.min(1, humidityHaze));
 
         // Smooth cloud cover transition
         const smoothFactor = Math.min(1.0, delta * 1.0);
@@ -268,6 +272,10 @@ export class CloudSystem extends ParticleSystemBase {
         // Stratus/storm clouds are more opaque
         if (this.cloudType === 'stratus' && stormFactor > 0) {
             targetOp = Math.min(0.92, targetOp * (1.0 + stormFactor * 0.35));
+        }
+        // Muggy air thickens the mass a touch, independent of storm intensity.
+        if (humidityFactor > 0) {
+            targetOp = Math.min(0.95, targetOp * (1.0 + humidityFactor * 0.12));
         }
 
         const opacity = this.updateOpacity(delta, targetOp);
@@ -297,9 +305,16 @@ export class CloudSystem extends ParticleSystemBase {
         const topR = 1.0 - stormFactor * 0.35;
         const topG = 1.0 - stormFactor * 0.3;
         const topB = 1.0 - stormFactor * 0.2;
-        const botR = (this.cloudType === 'stratus' ? 0.62 : 0.7) - stormFactor * 0.22;
-        const botG = (this.cloudType === 'stratus' ? 0.65 : 0.73) - stormFactor * 0.2;
-        const botB = (this.cloudType === 'stratus' ? 0.78 : 0.85) - stormFactor * 0.18;
+        let botR = (this.cloudType === 'stratus' ? 0.62 : 0.7) - stormFactor * 0.22;
+        let botG = (this.cloudType === 'stratus' ? 0.65 : 0.73) - stormFactor * 0.2;
+        let botB = (this.cloudType === 'stratus' ? 0.78 : 0.85) - stormFactor * 0.18;
+        // Flatten top/bottom contrast in humid air — softer, less-defined puffs.
+        if (humidityFactor > 0) {
+            const softMix = humidityFactor * 0.4;
+            botR += (topR - botR) * softMix;
+            botG += (topG - botG) * softMix;
+            botB += (topB - botB) * softMix;
+        }
 
         let instanceColorDirty = false;
 

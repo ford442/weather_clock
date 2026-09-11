@@ -8,6 +8,8 @@ export class FogEffect {
         this.zone = zone;
         this.currentOpacity = 0;
         this.targetOpacity = 0;
+        /** Humidity-driven haze floor (0..1), independent of visibility-based fog. */
+        this.hazeFloor = 0;
 
         const count = 18;
         const texture = createFogTexture();
@@ -48,8 +50,19 @@ export class FogEffect {
         this.targetOpacity = Math.max(0, Math.min(1, intensity));
     }
 
+    /**
+     * Muggy-air haze that shows up as a faint sheen even when visibility-based
+     * fog is at zero, capped well below a "real" fog bank so it stays a subtle
+     * moisture cue rather than competing with actual fog/storm weather.
+     * @param {number} haze01 0..1, see moisture-pressure.js#getHumidityHaze
+     */
+    setHaze(haze01) {
+        this.hazeFloor = Math.max(0, Math.min(1, haze01));
+    }
+
     update(delta, windSpeed, windDir) {
-        const diff = this.targetOpacity - this.currentOpacity;
+        const effectiveTarget = Math.max(this.targetOpacity, this.hazeFloor * 0.3);
+        const diff = effectiveTarget - this.currentOpacity;
         this.currentOpacity += diff * Math.min(delta * 0.5, 1);
 
         if (this.currentOpacity < 0.005) {

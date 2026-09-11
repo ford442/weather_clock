@@ -2,6 +2,7 @@
 // Represents a single day as a vertical column with temperature gradient and weather particles
 
 import * as THREE from 'three';
+import { getPressureAnomaly } from '../moisture-pressure.js';
 
 // --- Shader Code for Temperature Gradient ---
 // Uses z-score to interpolate between cold and hot colors
@@ -43,6 +44,7 @@ export const dayColumnFragmentShader = `
   uniform float uTime;
   uniform float uGlowIntensity;
   uniform float uWindStrength;  // 0..1 normalized wind speed
+  uniform float uHumidity;      // 0..1 muggy-haze contribution (see moisture-pressure.js)
 
   varying vec2 vUv;
   varying float vHeight;
@@ -103,6 +105,12 @@ export const dayColumnFragmentShader = `
     windStreak = smoothstep(0.75, 1.0, windStreak) * 0.4 * uWindStrength;
     gradientColor += mix(vec3(0.8, 0.9, 1.0), tempColor, 0.5) * windStreak;
 
+    // Humidity: a slow-drifting muggy haze that washes color definition toward
+    // neutral grey — fog/mist reads as desaturation, not a new color.
+    float mist = 0.8 + sin(uTime * 0.6 + vTempRatio * 3.0) * 0.2;
+    float gray = dot(gradientColor, vec3(0.299, 0.587, 0.114));
+    gradientColor = mix(gradientColor, vec3(gray) * 1.05, uHumidity * 0.22 * mist);
+
     // Slow breathing pulse — stronger for today
     float pulse = 1.0 + sin(uTime * 2.0) * 0.08 * uGlowIntensity;
     gradientColor *= pulse;
@@ -112,6 +120,8 @@ export const dayColumnFragmentShader = `
     vec3 normal = normalize(cross(dFdx(vWorldPosition), dFdy(vWorldPosition)));
     float fresnel = pow(1.0 - abs(dot(viewDir, normal)), 2.5);
     gradientColor += tempColor * fresnel * (0.6 + uGlowIntensity * 0.4);
+    // Moisture sheen: a soft white rim highlight that grows with humidity.
+    gradientColor += vec3(0.85, 0.9, 0.95) * fresnel * uHumidity * 0.3;
 
     // Top-cap brightening
     float cap = smoothstep(0.85, 1.0, vTempRatio);
@@ -561,6 +571,99 @@ export class AccuracyRing {
             this.glowMesh.geometry.dispose();
             this.glowMesh.material.dispose();
             this.parentMesh.remove(this.glowMesh);
+        }
+    }
+}
+
+// --- Pressure Ring: a continuous barometric cue crowning every column ---
+export class PressureRing {
+    /**
+     * @param {number|null|undefined} pressure - Day-mean sea-level pressure, hPa.
+     * @param {THREE.Object3D} parentMesh
+     * @param {number} radius - Column radius.
+     * @param {number} height - Column height.
+     */
+    constructor(pressure, parentMesh, radius, height) {
+        this.anomaly = getPressureAnomaly(pressure); // -1 (low/unsettled) .. +1 (high/fair)
+        this.parentMesh = parentMesh;
+        this.time = 0;
+        this.baseOpacity = 0;
+        this.pulseSpeed = 0;
+        this.pulseAmount = 0;
+        /** @type {THREE.Mesh|null} */
+        this.mesh = null;
+        /** @type {THREE.Mesh|null} */
+        this.glowMesh = null;
+        this.init(radius, height);
+    }
+
+    init(radius, height) {
+        const anomaly = this.anomaly;
+        const lowness = Math.max(0, -anomaly);
+        const highness = Math.max(0, anomaly);
+
+        // High pressure = tight, bright, crisp ring (fair/settled). Low pressure =
+        // a wider, dimmer ring that pulses gently (unsettled/stormy air).
+        const ringRadius = radius * (1.12 + lowness * 0.22);
+        const tubeRadius = 0.05 + highness * 0.025;
+        const color = new THREE.Color(0x8fa6c9) // neutral, slightly cool
+            .lerp(new THREE.Color(0x6a5fa8), lowness) // low pressure — violet-grey, unsettled
+            .lerp(new THREE.Color(0xf0c86a), highness); // high pressure — warm gold, fair
+
+        this.baseOpacity = 0.35 + Math.max(lowness, highness) * 0.35;
+        this.pulseSpeed = 0.8 + lowness * 2.2;
+        this.pulseAmount = lowness * 0.35;
+
+        const geometry = new THREE.TorusGeometry(ringRadius, tubeRadius, 8, 40);
+        const material = new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: this.baseOpacity
+        });
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.mesh.rotation.x = Math.PI / 2;
+        this.mesh.position.y = height / 2 + 0.35; // Crowns the top of the column
+        this.parentMesh.add(this.mesh);
+
+        const glowGeo = new THREE.TorusGeometry(ringRadius, tubeRadius * 2.2, 8, 40);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: this.baseOpacity * 0.4
+        });
+        this.glowMesh = new THREE.Mesh(glowGeo, glowMat);
+        this.glowMesh.rotation.x = Math.PI / 2;
+        this.glowMesh.position.y = height / 2 + 0.35;
+        this.parentMesh.add(this.glowMesh);
+    }
+
+    /** @param {number} delta - Seconds since the previous frame. */
+    update(delta) {
+        if (!this.mesh || !this.glowMesh || this.pulseAmount <= 0) return;
+        this.time += delta;
+        const pulse = 1 + Math.sin(this.time * this.pulseSpeed) * this.pulseAmount;
+        /** @type {THREE.MeshBasicMaterial} */ (this.mesh.material).opacity = this.baseOpacity * pulse;
+        /** @type {THREE.MeshBasicMaterial} */ (this.glowMesh.material).opacity = this.baseOpacity * 0.4 * pulse;
+    }
+
+    /** @param {boolean} visible */
+    setVisible(visible) {
+        if (this.mesh) this.mesh.visible = visible;
+        if (this.glowMesh) this.glowMesh.visible = visible;
+    }
+
+    dispose() {
+        if (this.mesh) {
+            this.mesh.geometry.dispose();
+            this.mesh.material.dispose();
+            this.parentMesh.remove(this.mesh);
+            this.mesh = null;
+        }
+        if (this.glowMesh) {
+            this.glowMesh.geometry.dispose();
+            this.glowMesh.material.dispose();
+            this.parentMesh.remove(this.glowMesh);
+            this.glowMesh = null;
         }
     }
 }

@@ -11,6 +11,7 @@ import { LightningBoltSystem } from './lightning-bolt-system.js';
 import { SCENE_LAYOUT } from '../scene-layout.js';
 import { TemporalBand } from './temporal-band.js';
 import { computeTemporalNarrative } from '../temporal-narrative.js';
+import { getHumidityHaze } from '../moisture-pressure.js';
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -323,8 +324,11 @@ export class WeatherEffects {
      *    reflects the stratus anvil base beneath active convection.
      *  - Cumulus: convective clouds. 0.85 for storms = tall cumulonimbus; 0.40 general fallback
      *    for mixed conditions (e.g. drizzle has mostly stratus, only some cumulus).
+     *
+     * `humidityHaze` (0..1, see moisture-pressure.js) nudges the split toward flatter
+     * stratus and away from puffy cumulus — muggy air reads hazier, not fluffier.
      */
-    _cloudTypeCovers(code, cover, rainIntensity = 0, snowIntensity = 0, fogIntensity = 0) {
+    _cloudTypeCovers(code, cover, rainIntensity = 0, snowIntensity = 0, fogIntensity = 0, humidityHaze = 0) {
         // Cirrus: high-altitude ice-crystal wisps appear only in fair/mostly-clear skies
         let cirrus = 0;
         if (code === 1)
@@ -364,6 +368,14 @@ export class WeatherEffects {
         else if (code >= 95)
             cumulus = cover * 0.85; // storm — towering cumulonimbus (85%)
         else cumulus = cover * 0.4; // other rain — mixed, mostly stratus
+
+        // Muggy air biases the split toward stratus — a small, continuous shift,
+        // not a hard override of the weather-code-driven split above.
+        if (humidityHaze > 0) {
+            const shift = cover * humidityHaze * 0.15;
+            stratus = Math.min(100, stratus + shift);
+            cumulus = Math.max(0, cumulus - shift);
+        }
 
         return { cumulus, stratus, cirrus };
     }
@@ -413,7 +425,8 @@ export class WeatherEffects {
                 cloud: data.cloudCover || 0,
                 wind: data.windSpeed || 0,
                 dir: data.windDirection || 0,
-                code: data.weatherCode || 0
+                code: data.weatherCode || 0,
+                humidityHaze: getHumidityHaze(data.humidity)
             };
         };
 
@@ -429,18 +442,19 @@ export class WeatherEffects {
         this._applyNarrative(narrative);
         this.temporalBand?.update(narrative, delta);
 
-        const pCovers = this._cloudTypeCovers(p.code, p.cloud, p.rain, p.snow, p.fog);
-        const cCovers = this._cloudTypeCovers(c.code, c.cloud, c.rain, c.snow, c.fog);
-        const fCovers = this._cloudTypeCovers(f.code, f.cloud, f.rain, f.snow, f.fog);
+        const pCovers = this._cloudTypeCovers(p.code, p.cloud, p.rain, p.snow, p.fog, p.humidityHaze);
+        const cCovers = this._cloudTypeCovers(c.code, c.cloud, c.rain, c.snow, c.fog, c.humidityHaze);
+        const fCovers = this._cloudTypeCovers(f.code, f.cloud, f.rain, f.snow, f.fog, f.humidityHaze);
 
         const args = [lightColor, sunPos, moonPos, sunColor, moonColor];
 
         this.pastRain.update(delta, p.wind, p.dir, p.rain, this.raycaster, null, null, lightColor);
         this.pastSnow.update(delta, p.wind, p.dir, p.snow, lightColor);
-        this.pastCumulus.update(delta, p.wind, pCovers.cumulus, ...args, p.code, p.dir);
-        this.pastStratus.update(delta, p.wind, pCovers.stratus, ...args, p.code, p.dir);
-        this.pastCirrus.update(delta, p.wind, pCovers.cirrus, ...args, p.code, p.dir);
+        this.pastCumulus.update(delta, p.wind, pCovers.cumulus, ...args, p.code, p.dir, p.humidityHaze);
+        this.pastStratus.update(delta, p.wind, pCovers.stratus, ...args, p.code, p.dir, p.humidityHaze);
+        this.pastCirrus.update(delta, p.wind, pCovers.cirrus, ...args, p.code, p.dir, p.humidityHaze);
         this.pastDust.update(delta, p.wind, p.dir, p.rain, lightColor);
+        this.pastFog.setHaze(p.humidityHaze);
         this.pastFog.setIntensity(p.fog);
         this.pastFog.update(delta, p.wind, p.dir);
 
@@ -455,20 +469,22 @@ export class WeatherEffects {
             lightColor
         );
         this.currSnow.update(delta, c.wind, c.dir, c.snow, lightColor);
-        this.currCumulus.update(delta, c.wind, cCovers.cumulus, ...args, c.code, c.dir);
-        this.currStratus.update(delta, c.wind, cCovers.stratus, ...args, c.code, c.dir);
-        this.currCirrus.update(delta, c.wind, cCovers.cirrus, ...args, c.code, c.dir);
+        this.currCumulus.update(delta, c.wind, cCovers.cumulus, ...args, c.code, c.dir, c.humidityHaze);
+        this.currStratus.update(delta, c.wind, cCovers.stratus, ...args, c.code, c.dir, c.humidityHaze);
+        this.currCirrus.update(delta, c.wind, cCovers.cirrus, ...args, c.code, c.dir, c.humidityHaze);
         this.currDust.update(delta, c.wind, c.dir, c.rain, lightColor);
+        this.currFog.setHaze(c.humidityHaze);
         this.currFog.setIntensity(c.fog);
         this.currFog.update(delta, c.wind, c.dir);
         this.currPollen?.update(delta, current?.pollenIntensity ?? 0, c.wind, c.dir, c.rain, lightColor);
 
         this.futureRain.update(delta, f.wind, f.dir, f.rain, this.raycaster, null, null, lightColor);
         this.futureSnow.update(delta, f.wind, f.dir, f.snow, lightColor);
-        this.futureCumulus.update(delta, f.wind, fCovers.cumulus, ...args, f.code, f.dir);
-        this.futureStratus.update(delta, f.wind, fCovers.stratus, ...args, f.code, f.dir);
-        this.futureCirrus.update(delta, f.wind, fCovers.cirrus, ...args, f.code, f.dir);
+        this.futureCumulus.update(delta, f.wind, fCovers.cumulus, ...args, f.code, f.dir, f.humidityHaze);
+        this.futureStratus.update(delta, f.wind, fCovers.stratus, ...args, f.code, f.dir, f.humidityHaze);
+        this.futureCirrus.update(delta, f.wind, fCovers.cirrus, ...args, f.code, f.dir, f.humidityHaze);
         this.futureDust.update(delta, f.wind, f.dir, f.rain, lightColor);
+        this.futureFog.setHaze(f.humidityHaze);
         this.futureFog.setIntensity(f.fog);
         this.futureFog.update(delta, f.wind, f.dir);
 
@@ -547,6 +563,7 @@ export class WeatherEffects {
         const fogI = cfg.fogIntensity;
         const code = cfg.weatherCode;
         const cCover = cfg.cloudCover;
+        const humidityHaze = getHumidityHaze(weatherSnap.humidity);
 
         // Center the curr systems around origin for vignette (they were created with zone)
         // We do not move them every frame; just feed intensity + wind. Visuals stay "local".
@@ -561,13 +578,14 @@ export class WeatherEffects {
             lightColor
         );
         this.currSnow.update(delta, wind, dir, snowI, lightColor);
-        const covers = this._cloudTypeCovers(code, cCover, rainI, snowI, fogI);
+        const covers = this._cloudTypeCovers(code, cCover, rainI, snowI, fogI, humidityHaze);
         const args = [lightColor, sunPos, moonPos, sunColor, moonColor];
-        this.currCumulus.update(delta, wind, covers.cumulus, ...args, code, dir);
-        this.currStratus.update(delta, wind, covers.stratus, ...args, code, dir);
-        this.currCirrus.update(delta, wind, covers.cirrus, ...args, code, dir);
+        this.currCumulus.update(delta, wind, covers.cumulus, ...args, code, dir, humidityHaze);
+        this.currStratus.update(delta, wind, covers.stratus, ...args, code, dir, humidityHaze);
+        this.currCirrus.update(delta, wind, covers.cirrus, ...args, code, dir, humidityHaze);
         this.currDust.update(delta, wind, dir, rainI, lightColor);
         this.currPollen?.update(delta, weatherSnap.pollenIntensity ?? 0, wind, dir, rainI, lightColor);
+        this.currFog.setHaze(humidityHaze);
         this.currFog.setIntensity(fogI);
         this.currFog.update(delta, wind, dir);
 
