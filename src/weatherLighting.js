@@ -1,6 +1,7 @@
 // Aether Architect: Verified
 import * as THREE from 'three';
 import { getAqiHaze, getUvSunHarshness } from './air-quality.js';
+import { getAltitudeRadFromPosition, getMoonlightModel, getSunlightModel } from './celestialLighting.js';
 
 let previousIntensity = { sun: 0.8, moon: 0.0, ambient: 0.4 };
 const transitionSpeed = 0.01; // Slower transition (approx 5s)
@@ -19,14 +20,36 @@ export const getSeverity = (code) => {
 };
 
 /**
+ * Tuning for the physically-driven celestial lights. Kept here (rather than in
+ * celestialLighting.js) because these are scene-intensity choices, not physics.
+ */
+export const CELESTIAL_LIGHT_CONFIG = {
+    /** Directional intensity of a mean-distance full moon at the zenith. */
+    fullMoonIntensity: 0.62,
+    /** Neutral moonlight, the colour a bright full moon lands on. */
+    moonNeutralColor: 0xe8e6ff,
+    /** Where the Purkinje shift takes a dim crescent's light. */
+    moonCoolColor: 0x415a93,
+    /** Where atmospheric extinction takes a moon near the horizon. */
+    moonHorizonColor: 0xd8a070,
+    moonCoolStrength: 0.85,
+    moonHorizonStrength: 0.5
+};
+
+/**
  * Compute day/night factor from sun altitude (Y in scene units).
- * Extended civil twilight range.
+ * Extended civil twilight range, eased with a smoothstep so the day→night
+ * handover is continuous in its first derivative: a linear ramp kinks visibly
+ * at both twilight edges as the sun/ambient crossfade starts and stops.
+ * @param {number} sunY
+ * @returns {number} 0 at full night, 1 at full day.
  */
 export function getDayFactor(sunY) {
     const twilightRange = 6.0;
-    if (sunY < -twilightRange) return 0;
-    if (sunY > twilightRange) return 1;
-    return (sunY + twilightRange) / (twilightRange * 2);
+    if (sunY <= -twilightRange) return 0;
+    if (sunY >= twilightRange) return 1;
+    const t = (sunY + twilightRange) / (twilightRange * 2);
+    return t * t * (3 - 2 * t);
 }
 
 /**
@@ -134,11 +157,20 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
     const baseSunIntensity = 2.0;
     const cloudSunFactor = 1 - (cloud / 100) * 0.4;
     const severityFactor = 1 - (sev / 100) * 0.4;
+    // Earth's orbital eccentricity: ~±3.4% of irradiance between perihelion
+    // (early January) and aphelion (early July). Deliberately subtle, but it
+    // applies in clock, forecast and timeline modes alike since every one of
+    // them reaches the lights through this function.
+    const sunlightModel =
+        astroData?.sunlight ??
+        (weatherSnap.time ? getSunlightModel(weatherSnap.time, getAltitudeRadFromPosition(sunLight?.position)) : null);
+    const solarIrradianceFactor = sunlightModel?.irradianceFactor ?? 1;
     const targetSunIntensity =
         baseSunIntensity *
         cloudSunFactor *
         severityFactor *
         dayFactor *
+        solarIrradianceFactor *
         (atmosphere?.sunIntensityMultiplier ?? 1) *
         uvHarshness.sunIntensityMultiplier;
 
@@ -147,25 +179,37 @@ export function updateSingleWeatherLighting(scene, sunLight, moonLight, ambientL
     let targetMoonColor = new THREE.Color(0x8899cc);
 
     if (astroData && moonLight) {
-        const moonIllum = astroData.moonIllumination ? astroData.moonIllumination.fraction : 0.5;
-        const moonIntensityBase = 0.5 * moonIllum;
+        // The moonlight model supplies the phase curve (a half moon is ~1/11th
+        // of a full moon, not 1/2), the super/micromoon distance swing and the
+        // atmospheric extinction that fades the moon continuously as it sets.
+        const moonModel =
+            astroData.moonlight ??
+            getMoonlightModel(astroData.moonIllumination, {
+                altitudeRad: getAltitudeRadFromPosition(moonLight.position),
+                distanceKm: astroData.moonDistanceKm
+            });
 
         const cloudMoonFactor = 1 - (cloud / 100) * 0.9;
 
-        const moonY = moonLight.position.y;
-        let moonHorizonFactor;
-        if (moonY < -2) moonHorizonFactor = 0;
-        else if (moonY > 2) moonHorizonFactor = 1;
-        else moonHorizonFactor = (moonY + 2) / 4;
-
         targetMoonIntensity =
-            moonIntensityBase * cloudMoonFactor * moonHorizonFactor * (atmosphere?.moonIntensityMultiplier ?? 1);
+            CELESTIAL_LIGHT_CONFIG.fullMoonIntensity *
+            moonModel.intensityFactor *
+            cloudMoonFactor *
+            (atmosphere?.moonIntensityMultiplier ?? 1);
 
-        const minColor = new THREE.Color(0x0f1c30);
-        const maxColor = new THREE.Color(0xe0e0ff);
-        targetMoonColor.copy(minColor).lerp(maxColor, moonIllum);
+        // Colour follows the same two physical drivers: the Purkinje shift sends
+        // dim phases blue, extinction sends a low moon amber.
+        targetMoonColor
+            .set(CELESTIAL_LIGHT_CONFIG.moonNeutralColor)
+            .lerp(
+                new THREE.Color(CELESTIAL_LIGHT_CONFIG.moonCoolColor),
+                moonModel.coolShift * CELESTIAL_LIGHT_CONFIG.moonCoolStrength
+            )
+            .lerp(
+                new THREE.Color(CELESTIAL_LIGHT_CONFIG.moonHorizonColor),
+                moonModel.horizonReddening * CELESTIAL_LIGHT_CONFIG.moonHorizonStrength
+            );
 
-        if (moonIllum > 0.8) targetMoonIntensity *= 1.2;
         if (sev > 50) {
             targetMoonColor.lerp(new THREE.Color(0x2a2a35), 0.6);
         }

@@ -20,6 +20,71 @@ interface AtmosphereUniforms {
     ambientColor: import('three').Color;
 }
 
+/**
+ * Physical sunlight modulation for one instant (see `src/celestialLighting.js`).
+ * `intensityFactor` carries only the orbital-distance term — the altitude ramp
+ * lives in weatherLighting.js#getDayFactor — while `transmission` and
+ * `horizonReddening` are colour inputs.
+ */
+interface SunlightModel {
+    /** Earth–Sun distance in AU, ~0.9833 (perihelion) to ~1.0167 (aphelion). */
+    distanceAu: number;
+    /** Irradiance relative to the annual mean, ~0.967..1.034. */
+    irradianceFactor: number;
+    altitudeRad: number;
+    /** Atmospheric transmission, 1 at the zenith falling to 0 at the horizon. */
+    transmission: number;
+    horizonReddening: number;
+    intensityFactor: number;
+}
+
+/**
+ * Physical moonlight modulation for one instant (see `src/celestialLighting.js`):
+ * the non-Lambertian lunar phase curve, the super/micromoon distance swing and
+ * atmospheric extinction, plus the tint and earthshine terms they imply.
+ */
+interface MoonlightModel {
+    illuminatedFraction: number;
+    /** Sun–Moon–observer angle in degrees: 0 = full, 90 = quarter, 180 = new. */
+    phaseAngleDeg: number;
+    /** SunCalc's 0..1 synodic phase (0 = new, 0.5 = full). */
+    synodicPhase: number;
+    waxing: boolean;
+    altitudeRad: number;
+    /** Disk brightness relative to a full moon — ~0.09 at a quarter. */
+    oppositionSurge: number;
+    /** Inverse-square scale from the current Earth–Moon distance, ~0.90..1.11. */
+    distanceFactor: number;
+    /** Apparent angular size relative to the mean, ~0.95..1.05. */
+    apparentSizeFactor: number;
+    airmass: number;
+    transmission: number;
+    horizonReddening: number;
+    /** Ashen light on the dark limb, peaking near new moon. */
+    earthshine: number;
+    /** Purkinje-shift weight: how far a dim phase should read blue. */
+    coolShift: number;
+    /** True ratio to a mean-distance full moon at the zenith. */
+    physicalIntensityFactor: number;
+    /** Tone-mapped version of the above; what renderers should multiply by. */
+    intensityFactor: number;
+}
+
+/** Result of {@link AstronomyService.update} — scene-space positions plus lighting models. */
+interface AstroSnapshot {
+    sunPosition: import('three').Vector3;
+    moonPosition: import('three').Vector3;
+    moonIllumination: { fraction: number; phase: number; angle: number };
+    sunrise: Date;
+    sunset: Date;
+    /** Sun altitude above the horizon in radians (SunCalc's own value). */
+    sunAltitude: number;
+    moonAltitude: number;
+    moonDistanceKm: number;
+    sunlight: SunlightModel;
+    moonlight: MoonlightModel;
+}
+
 interface WeatherSnapshot {
     time?: Date;
     temp?: number;

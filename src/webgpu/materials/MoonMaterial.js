@@ -4,7 +4,12 @@ import { moonVertexShader, moonFragmentShader } from '../../moonPhase.js';
 export function createMoonMaterial() {
     return new THREE.ShaderMaterial({
         uniforms: {
-            uSunPosition: { value: new THREE.Vector3(0, 0, 100) }
+            uSunPosition: { value: new THREE.Vector3(0, 0, 100) },
+            // Driven each frame by moonPhase.js#updateMoonVisuals from the
+            // moonlight model (phase angle, distance, atmospheric extinction).
+            uBrightness: { value: 1 },
+            uEarthshine: { value: 0 },
+            uWarmth: { value: 0 }
         },
         vertexShader: moonVertexShader,
         fragmentShader: moonFragmentShader

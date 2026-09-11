@@ -1,6 +1,17 @@
 import * as THREE from 'three';
 import { createMoonMaterial, createMoonMaterialWebGPU } from './webgpu/materials/MoonMaterial.js';
 
+/** Tuning for the moon disk's own appearance (the light it casts lives in weatherLighting.js). */
+export const MOON_DISK_CONFIG = {
+    /** Surface brightness at a quarter moon vs. at full — the opposition surge on the disk itself. */
+    minSurfaceBrightness: 0.85,
+    maxSurfaceBrightness: 1.15,
+    /** How dark extinction is allowed to take the disk at the horizon. */
+    minHorizonBrightness: 0.35,
+    /** Clamp on the super/micromoon apparent-size swing, ±5% of mean. */
+    maxApparentSizeDelta: 0.06
+};
+
 export function calculateMoonPhase(date = new Date()) {
     // Moon phase calculation using astronomical algorithm
     let year = date.getFullYear();
@@ -61,6 +72,15 @@ void main() {
 
 export const moonFragmentShader = `
 uniform vec3 uSunPosition;
+// Surface brightness of the lit disk relative to a full moon at the zenith:
+// folds the opposition surge together with atmospheric extinction.
+uniform float uBrightness;
+// Ashen light filling the dark limb — sunlight bounced off the Earth. Peaks
+// near new moon, when the Earth is full as seen from the Moon.
+uniform float uEarthshine;
+// How far extinction has reddened the moon (0 at the zenith, 1 near the horizon).
+uniform float uWarmth;
+
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
 
@@ -70,22 +90,37 @@ float rand(vec2 co){
 }
 
 void main() {
+    vec3 normal = normalize(vNormal);
     vec3 sunDir = normalize(uSunPosition - vWorldPosition);
-    float nDotL = dot(vNormal, sunDir);
+    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+
+    float nDotL = dot(normal, sunDir);
+    float muSun = max(nDotL, 0.0);
+    float muView = max(dot(normal, viewDir), 0.0);
 
     // Sharpness of the terminator (shadow edge)
     // Moon has no atmosphere, so it's relatively sharp but surface roughness softens it slightly
-    float lightIntensity = smoothstep(-0.05, 0.05, nDotL);
+    float terminator = smoothstep(-0.04, 0.05, nDotL);
+
+    // Lommel-Seeliger reflectance: the regolith back-scatters, so the lit face
+    // reads nearly flat out to the limb rather than falling off like a Lambert
+    // sphere. This is what makes the real Moon look like a disk, and it keeps a
+    // crescent's bright edge crisp instead of fading into the terminator.
+    float scatter = muSun / max(muSun + muView, 0.001);
+    float lightIntensity = clamp(terminator * mix(muSun, scatter * 1.35, 0.85), 0.0, 1.0);
 
     // Base colors
-    vec3 litColor = vec3(0.8, 0.8, 0.75); // Pale yellow-white
-    vec3 darkColor = vec3(0.02, 0.02, 0.03); // Very dark blue-grey (Earthshine)
+    vec3 litColor = mix(vec3(0.8, 0.8, 0.75), vec3(0.86, 0.7, 0.52), uWarmth); // pale grey → horizon amber
+    vec3 darkColor = vec3(0.015, 0.015, 0.022); // Very dark blue-grey
+    vec3 earthshineColor = vec3(0.045, 0.06, 0.105); // Cool blue-grey earthshine — faint by design
 
     // Simple crater noise
     float noise = rand(vWorldPosition.xy * 2.0) * 0.1;
     litColor -= noise;
+    litColor *= uBrightness;
 
-    vec3 finalColor = mix(darkColor, litColor, lightIntensity);
+    vec3 shadowedColor = mix(darkColor, earthshineColor, clamp(uEarthshine, 0.0, 1.0));
+    vec3 finalColor = mix(shadowedColor, litColor, lightIntensity);
 
     gl_FragColor = vec4(finalColor, 1.0);
 }
@@ -108,11 +143,52 @@ export function createMoon(_phase = 0) {
     return moonGroup;
 }
 
-export function updateMoonVisuals(moonGroup, sunPosition) {
+/**
+ * Drive the moon disk from the current sun position and moonlight model so the
+ * terminator, earthshine, horizon warmth and apparent size all track the real
+ * phase, distance and altitude. Used by clock mode and the forecast/timeline
+ * vignettes alike.
+ * @param {THREE.Object3D} moonGroup
+ * @param {THREE.Vector3} sunPosition
+ * @param {MoonlightModel|null} [moonlight] Omit to leave the photometric uniforms untouched.
+ */
+export function updateMoonVisuals(moonGroup, sunPosition, moonlight = null) {
     const moon = moonGroup.getObjectByName('MoonMesh');
-    if (moon && moon.material.uniforms) {
-        moon.material.uniforms.uSunPosition.value.copy(sunPosition);
+    if (!moon) return;
+
+    const uniforms = /** @type {THREE.ShaderMaterial} */ (moon.material).uniforms;
+    if (uniforms?.uSunPosition) {
+        uniforms.uSunPosition.value.copy(sunPosition);
     }
+    if (!moonlight) return;
+
+    if (uniforms?.uBrightness) {
+        // Surface brightness is nearly phase-independent (a crescent's lit sliver
+        // is as bright per unit area as a full moon's) — the opposition surge is
+        // the one real exception, so it only nudges the disk. Extinction is what
+        // actually dims a moon sitting low on the horizon.
+        const surge = Math.sqrt(Math.max(moonlight.oppositionSurge, 0));
+        const surfaceBrightness =
+            MOON_DISK_CONFIG.minSurfaceBrightness +
+            (MOON_DISK_CONFIG.maxSurfaceBrightness - MOON_DISK_CONFIG.minSurfaceBrightness) * surge;
+        const extinctionDimming =
+            MOON_DISK_CONFIG.minHorizonBrightness +
+            (1 - MOON_DISK_CONFIG.minHorizonBrightness) * moonlight.transmission;
+        uniforms.uBrightness.value = surfaceBrightness * extinctionDimming;
+    }
+    if (uniforms?.uEarthshine) {
+        uniforms.uEarthshine.value = moonlight.earthshine;
+    }
+    if (uniforms?.uWarmth) {
+        uniforms.uWarmth.value = moonlight.horizonReddening;
+    }
+
+    // Perigee/apogee change the moon's apparent diameter by ~±5%.
+    const sizeDelta = Math.max(
+        -MOON_DISK_CONFIG.maxApparentSizeDelta,
+        Math.min(MOON_DISK_CONFIG.maxApparentSizeDelta, (moonlight.apparentSizeFactor ?? 1) - 1)
+    );
+    moon.scale.setScalar(1 + sizeDelta);
 }
 
 export async function initMoonWebGPU(moonGroup) {

@@ -46,6 +46,34 @@ describe('AstronomyService', () => {
         expect(result.sunPosition.y).toBeLessThan(0);
     });
 
+    it('should expose the sunlight and moonlight models alongside the positions', () => {
+        const service = new AstronomyService();
+        const result = service.update(new Date('2026-01-03T02:00:00Z'), 40.7128, -74.006, 20);
+
+        // Earth–Sun distance is computed from orbital elements (SunCalc has no such field).
+        expect(result.sunlight.distanceAu).toBeGreaterThan(0.98);
+        expect(result.sunlight.distanceAu).toBeLessThan(1.02);
+        expect(result.sunlight.irradianceFactor).toBeGreaterThan(1); // early January = perihelion
+        expect(result.sunAltitude).toBeCloseTo(Math.asin(result.sunPosition.y / 20), 6);
+
+        // SunCalc does report the Earth–Moon distance, which drives the super/micromoon swing.
+        expect(result.moonDistanceKm).toBeGreaterThan(350000);
+        expect(result.moonDistanceKm).toBeLessThan(410000);
+        expect(result.moonlight.illuminatedFraction).toBeCloseTo(result.moonIllumination.fraction, 6);
+        expect(result.moonlight.intensityFactor).toBeGreaterThanOrEqual(0);
+        expect(result.moonlight.intensityFactor).toBeLessThanOrEqual(1.3);
+    });
+
+    it('should clone the lighting models so forecast snapshots stay independent', () => {
+        const service = new AstronomyService();
+        const first = service.getPositionsForDate('2026-06-21T23:00:00Z', 40.7128, -74.006, 20);
+        const second = service.getPositionsForDate('2026-07-06T23:00:00Z', 40.7128, -74.006, 20);
+
+        expect(first.moonlight).not.toBe(second.moonlight);
+        expect(first.sunlight.irradianceFactor).not.toBeCloseTo(second.sunlight.irradianceFactor, 6);
+        expect(first.sunPosition).not.toBe(second.sunPosition);
+    });
+
     it('should calculate future-day positions at a requested local hour', () => {
         const service = new AstronomyService();
         const result = service.getPositionsForDateAtHour('2026-06-21', 12, 40.7128, -74.006, 20);
