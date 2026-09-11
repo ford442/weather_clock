@@ -45,6 +45,7 @@ The app has three viewing modes:
 - `package.json` — NPM manifest with Vite/Vitest scripts.
 - `deploy.py` — Authenticated bundle deployment script. Configuration comes from environment variables or a gitignored `deploy.config.json`.
 - `docs/ROADMAP.md` — Living project roadmap; links to the open GitHub issues that own planned work.
+- `docs/WEBGPU_ARCHITECTURE.md` — How the dual WebGL/WebGPU path is split, which class owns which backend, and where the two differ visually.
 
 ### Source (`src/`)
 | File | Responsibility |
@@ -70,7 +71,7 @@ The app has three viewing modes:
 | `ModeController.js`, `modes/` | Mode orchestration, adapters, camera transitions, UI visibility, and browser history for Clock, Timeline, and Forecast modes. |
 | `forecast/` | ForecastController + ForecastUI + DailyPreview (2D). New mode for immersive future-day vignettes. |
 | `capture/` | Photo mode + time-lapse export. `photo.js` renders one frame at 2× pixel ratio and captures it via same-task `canvas.toBlob()` (no `preserveDrawingBuffer`), composites a caption strip (`caption.js`), and shares/downloads (`share.js`). `timelapse.js` records a deterministic 00:00→24:00 sweep (720 fixed-timestep frames) via `MediaRecorder` on `canvas.captureStream()`. Shortcuts: `P` = photo, `L` = time-lapse (hidden under reduced motion). `ModeController.setLocked()` blocks mode switching while recording. |
-| `webgpu/` | Renderer capability detection/factory, WebGL and WebGPU post-processing adapters, and TSL/WebGPU material adapters. WebGL remains the fallback. |
+| `webgpu/` | Renderer capability detection/factory, WebGL and WebGPU post-processing adapters, and TSL/WebGPU material adapters. WebGL remains the fallback. Rain/snow/splash are the exception: they are separate per-backend classes, not dual-material adapters — see `docs/WEBGPU_ARCHITECTURE.md`. |
 | `vendor/suncalc.js` | Vendored SunCalc library patched for ES module compatibility. |
 
 ### Timeline Subsystem (`src/timeline/`)
@@ -238,6 +239,8 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 `CloudSystem` uses `THREE.InstancedMesh` with procedurally generated canvas textures (`cumulus`, `stratus`, `cirrus`). Each cloud is composed of multiple puffs arranged in dome, sheet, or streak formations. Clouds billboard toward the camera and drift horizontally with wind.
 
 ### Precipitation & Collision
+_WebGL path. Under WebGPU these are simulated by TSL compute nodes in `src/effects/gpu-*-system.js`; see `docs/WEBGPU_ARCHITECTURE.md`._
+
 - **Rain:** `LineSegments` with a custom shader. Drops reset when they fall below the ground or collide with the sundial geometry (face, base top, or base slope).
 - **Snow:** `Points` with curl-noise turbulence.
 - **Splashes:** Small particle bursts spawn on the sundial surface when raindrops hit.
@@ -249,7 +252,8 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 _Last verified 2026-09-11 by running `lint`, `typecheck`, `format:check`, `test`, and `build` directly._
 
 - **`npm run lint` → 2 errors in `src/ground.js:16`** (`isWebGPU` and `snowMaskTexture` assigned but never used) — [#108](https://github.com/ford442/weather_clock/issues/108) tracks this. `typecheck`, `format:check`, `test`, and `build` are all green.
-- **WebGPU material stubs are incomplete** — [#111](https://github.com/ford442/weather_clock/issues/111) tracks finishing these; matches literal `// TODO` markers in `src/webgpu/materials/CloudMaterial.js:25`, `RainMaterial.js:26`, and `SplashMaterial.js:24` (volumetric lighting / distance-fade / ripple-ring TSL logic all deferred).
+- **WebGPU star point size** — Three's WebGPU backend renders `THREE.Points` as 1-pixel primitives and ignores `sizeNode`, so per-star size is folded into brightness instead. Sized stars would require switching the star field to instanced `Sprite`s.
+- **WebGPU is not covered by CI** — Playwright baselines run under SwiftShader (WebGL only). `?forceWebGL=1` pins the fallback path for side-by-side comparison on WebGPU-capable hardware; WebGPU-specific regressions still need a manual pass.
 
 ---
 

@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { ResourceManager } from './cloud-resources.js';
 import { cloudShaderInjection } from '../shaders.js';
-import { createCloudMaterial, createCloudMaterialWebGPU } from '../webgpu/materials/CloudMaterial.js';
+import {
+    createCloudMaterial,
+    createCloudMaterialWebGPU,
+    syncCloudNodeUniforms
+} from '../webgpu/materials/CloudMaterial.js';
 import { ParticleSystemBase } from './particle-base.js';
 
 export class CloudSystem extends ParticleSystemBase {
@@ -54,6 +58,8 @@ export class CloudSystem extends ParticleSystemBase {
         const map = ResourceManager.getCloudTexture(cloudType);
         this.map = map;
         this.material = createCloudMaterial(map);
+        /** @type {Record<string, {value: any}>|null} TSL uniforms, set by initWebGPU(). */
+        this.cloudNodeUniforms = null;
 
         const geometry = new THREE.PlaneGeometry(1, 1);
         this.mesh = new THREE.InstancedMesh(geometry, this.material, this.totalInstances);
@@ -99,6 +105,8 @@ export class CloudSystem extends ParticleSystemBase {
         }
         this.material = newMaterial;
         this.mesh.material = newMaterial;
+        // TSL mirror of `cloudShaderInjection.uniforms`; kept in sync in update().
+        this.cloudNodeUniforms = newMaterial.userData.cloudUniforms;
     }
 
     addCloud() {
@@ -200,6 +208,8 @@ export class CloudSystem extends ParticleSystemBase {
         if (moonPos) cloudShaderInjection.uniforms.uMoonPosition.value.copy(moonPos);
         if (sunColor) cloudShaderInjection.uniforms.uSunColor.value.copy(sunColor);
         if (moonColor) cloudShaderInjection.uniforms.uMoonColor.value.copy(moonColor);
+        // WebGPU: mirror the same values into the TSL uniform block (no-op on WebGL).
+        syncCloudNodeUniforms(this.cloudNodeUniforms);
 
         // Derive a storm darkness factor (0=clear, 1=heavy storm)
         const isStorm = weatherCode >= 95;

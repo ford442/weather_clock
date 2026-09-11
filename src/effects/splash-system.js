@@ -1,6 +1,13 @@
 import * as THREE from 'three';
-import { createSplashMaterial, createSplashMaterialWebGPU } from '../webgpu/materials/SplashMaterial.js';
+import { createSplashMaterial } from '../webgpu/materials/SplashMaterial.js';
 
+/**
+ * CPU/WebGL rain splashes: a `Points` cloud with per-particle life decayed on the CPU.
+ *
+ * WebGL only. Under WebGPU the factory in `src/scene-objects.js` substitutes
+ * `GPUSplashSystem` (TSL compute) and this class is never constructed, so it
+ * intentionally has no `initWebGPU()`. See `docs/WEBGPU_ARCHITECTURE.md`.
+ */
 export class SplashSystem {
     constructor(scene) {
         this.scene = scene;
@@ -25,10 +32,6 @@ export class SplashSystem {
         this.mesh = new THREE.Points(geometry, material);
         this.mesh.frustumCulled = false;
         this.scene.add(this.mesh);
-    }
-
-    async initWebGPU() {
-        this.mesh.material = await createSplashMaterialWebGPU();
     }
 
     spawnSplash(pos) {

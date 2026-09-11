@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { rainVertexShader, rainFragmentShader } from '../../shaders.js';
 
+/**
+ * WebGL-only rain material.
+ *
+ * There is deliberately no WebGPU/TSL counterpart here: under WebGPU, rain is
+ * simulated and drawn entirely by `src/effects/gpu-rain-system.js` (TSL compute
+ * nodes + a node material it owns), and `RainSystem` is never constructed.
+ * See `docs/WEBGPU_ARCHITECTURE.md`.
+ */
 export function createRainMaterial() {
     return new THREE.ShaderMaterial({
         uniforms: {
@@ -13,16 +21,4 @@ export function createRainMaterial() {
         depthWrite: false,
         side: THREE.DoubleSide
     });
-}
-
-export async function createRainMaterialWebGPU() {
-    const { LineBasicNodeMaterial } = await import('three/webgpu');
-    const material = new LineBasicNodeMaterial({
-        color: 0x88ccff,
-        transparent: true,
-        depthWrite: false,
-        opacity: 0.0
-    });
-    // TODO: Full distance-fade TSL logic is future work
-    return material;
 }

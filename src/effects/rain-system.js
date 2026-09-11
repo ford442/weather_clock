@@ -1,10 +1,17 @@
 import * as THREE from 'three';
-import { createRainMaterial, createRainMaterialWebGPU } from '../webgpu/materials/RainMaterial.js';
+import { createRainMaterial } from '../webgpu/materials/RainMaterial.js';
 import { SUNDIAL_DIMENSIONS } from '../sundial.js';
 import { getNativeRuntime } from '../native/native-runtime.js';
 import { ParticleSystemBase } from './particle-base.js';
 import { SCENE_LAYOUT } from '../scene-layout.js';
 
+/**
+ * CPU/WebGL rain: native-kernel particle stepping into a `LineSegments` buffer.
+ *
+ * WebGL only. Under WebGPU the factory in `src/scene-objects.js` substitutes
+ * `GPURainSystem` (TSL compute) and this class is never constructed, so it
+ * intentionally has no `initWebGPU()`. See `docs/WEBGPU_ARCHITECTURE.md`.
+ */
 export class RainSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 1500) {
         super(scene);
@@ -35,12 +42,6 @@ export class RainSystem extends ParticleSystemBase {
             this.resetParticle(i, true);
         }
         this.mesh.visible = true;
-    }
-
-    async initWebGPU() {
-        const oldMaterial = this.mesh.material;
-        this.mesh.material = await createRainMaterialWebGPU();
-        oldMaterial?.dispose?.();
     }
 
     setSplashSystem() {}

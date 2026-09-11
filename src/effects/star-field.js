@@ -31,6 +31,10 @@ export class StarField {
         geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
         const material = createStarFieldMaterial();
+        // Backend-agnostic handle on the twinkle/fade uniforms. The WebGL material
+        // exposes them as `uniforms`, the TSL one as `userData.starUniforms`; both
+        // expose the same `{ uTime: { value }, uOpacity: { value } }` shape.
+        this.uniforms = material.uniforms;
 
         this.mesh = new THREE.Points(geometry, material);
         this.mesh.renderOrder = -1; // Render with background
@@ -38,7 +42,11 @@ export class StarField {
     }
 
     async initWebGPU() {
-        this.mesh.material = await createStarFieldMaterialWebGPU();
+        const material = await createStarFieldMaterialWebGPU();
+        const oldMaterial = this.mesh.material;
+        this.mesh.material = material;
+        this.uniforms = material.userData.starUniforms;
+        oldMaterial?.dispose?.();
     }
 
     update(sunPos) {
@@ -67,8 +75,8 @@ export class StarField {
 
         if (targetOpacity > 0.01) {
             const time = Date.now() * 0.001;
-            this.mesh.material.uniforms.uTime.value = time;
-            this.mesh.material.uniforms.uOpacity.value = targetOpacity;
+            this.uniforms.uTime.value = time;
+            this.uniforms.uOpacity.value = targetOpacity;
             this.mesh.visible = true;
         } else {
             this.mesh.visible = false;

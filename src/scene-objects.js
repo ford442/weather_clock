@@ -45,6 +45,19 @@ export function setupMoon() {
     return { moonGroup, moonPhaseData };
 }
 
+/**
+ * Build the weather-effect stack for the active backend.
+ *
+ * Particle systems are the one place the two backends diverge structurally:
+ *  - WebGL: `RainSystem` / `SnowSystem` / `SplashSystem` step particles on the CPU
+ *    (native kernels) and draw them with `ShaderMaterial`s.
+ *  - WebGPU: `GPURainSystem` / `GPUSnowSystem` / `GPUSplashSystem` own both the TSL
+ *    compute kernels and their node materials. The WebGL classes above are never
+ *    constructed in this mode, and have no WebGPU code path of their own.
+ *
+ * Everything else (clouds, stars, ground, sundial) is one class per feature that
+ * swaps its material in `initWebGPU()`. See `docs/WEBGPU_ARCHITECTURE.md`.
+ */
 export async function setupWeatherEffects(scene, sundial, camera, isWebGPU = false, renderer = null) {
     const quality = getQualityTier();
     /** @type {{RainSystem: new (...args: any[]) => any, SnowSystem: new (...args: any[]) => any, SplashSystem: new (...args: any[]) => any}|null} */

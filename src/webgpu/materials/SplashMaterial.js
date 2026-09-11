@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { splashVertexShader, splashFragmentShader } from '../../shaders.js';
 
+/**
+ * WebGL-only splash material.
+ *
+ * There is deliberately no WebGPU/TSL counterpart here: under WebGPU, splashes
+ * are simulated and drawn entirely by `src/effects/gpu-splash-system.js` (TSL
+ * compute nodes + a node material it owns), and `SplashSystem` is never
+ * constructed. See `docs/WEBGPU_ARCHITECTURE.md`.
+ */
 export function createSplashMaterial() {
     return new THREE.ShaderMaterial({
         uniforms: {
@@ -11,16 +19,4 @@ export function createSplashMaterial() {
         transparent: true,
         depthWrite: false
     });
-}
-
-export async function createSplashMaterialWebGPU() {
-    const { PointsNodeMaterial } = await import('three/webgpu');
-    const material = new PointsNodeMaterial({
-        color: 0xffffff,
-        transparent: true,
-        depthWrite: false,
-        opacity: 1.0
-    });
-    // TODO: Full ripple-ring TSL logic is future work
-    return material;
 }

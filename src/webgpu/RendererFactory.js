@@ -32,7 +32,7 @@ const DEFAULT_OPTIONS = {
  */
 export async function createRenderer(canvasContainer, userOptions = {}) {
     const options = { ...DEFAULT_OPTIONS, ...userOptions };
-    const forceWebGL = consumeWebGLFallbackRequest();
+    const forceWebGL = hasForceWebGLParam() || consumeWebGLFallbackRequest();
     const hasWebGPU = !forceWebGL && (await isWebGPUSupported());
 
     if (hasWebGPU) {
@@ -92,6 +92,23 @@ export async function createRenderer(canvasContainer, userOptions = {}) {
 }
 
 const FORCE_WEBGL_ONCE_KEY = 'weatherclock_force_webgl_once';
+
+/**
+ * `?forceWebGL=1` pins the session to the native WebGL renderer.
+ *
+ * Unlike the one-shot sessionStorage request below, this is sticky for as long as
+ * the parameter is in the URL, so the WebGL path can be compared side by side with
+ * the default (WebGPU-first) path on the same machine.
+ */
+function hasForceWebGLParam() {
+    if (typeof window === 'undefined' || !window.location) return false;
+    try {
+        return new URLSearchParams(window.location.search).get('forceWebGL') === '1';
+    } catch (error) {
+        console.warn('[RendererFactory] Could not read forceWebGL parameter:', error);
+        return false;
+    }
+}
 
 function consumeWebGLFallbackRequest() {
     if (typeof sessionStorage === 'undefined') return false;
