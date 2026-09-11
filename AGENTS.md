@@ -76,7 +76,7 @@ The app has three viewing modes:
 - `TimelineController.js` — Manages 21-day 3D column visualization, raycasting, hover/selection states.
 - `TimelineUI.js` — DOM overlay for timeline details.
 - `DayColumn.js` — Individual 3D column representing one day, with custom GLSL temperature-gradient shaders.
-- `TimelineData.js` — Fetches and caches timeline weather data from Open-Meteo.
+- `TimelineData.js` — Fetches and caches timeline weather data from Open-Meteo. `enrichWithAccuracy()` scores historical days against the Open-Meteo Previous Runs API's one-day-ahead forecast (MAE/RMSE/skill vs. a persistence baseline, cached once per day per location), populating `day.accuracy` for the timeline's accuracy rings and detail panel when coverage exists.
 - `AnomalyCalculator.js` — Computes weather anomalies (z-scores) for the timeline.
 - `index.js` — Re-exports.
 - `timeline.css` — Style entry point; imports the split timeline core and overlay styles.
@@ -224,7 +224,6 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 `ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
 
 ### Known Limitations
-- **Timeline accuracy placeholder:** `TimelineData.enrichWithAccuracy()` returns no data. `WeatherService.getPredictionAccuracy()` is implemented via the Open-Meteo Previous Runs API (day-1/day-3 MAE vs. observed temperatures over the last 24 h, shown in the Advanced drawer's Accuracy tab), but the timeline-mode accuracy rings are not yet wired up. Tracked as [#110](https://github.com/ford442/weather_clock/issues/110).
 - **Hardcoded zone offsets:** The visual separation of temporal zones relies on hardcoded X offsets (e.g., `-8`, `0`, `8`) in multiple files. Changing scene scale requires updating these values consistently. Tracked as [#109](https://github.com/ford442/weather_clock/issues/109) (centralize into a `SCENE_LAYOUT` config).
 
 ### Known Issues / Blockers

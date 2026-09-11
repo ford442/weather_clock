@@ -16,7 +16,10 @@ import SunCalc from 'suncalc';
 const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1';
 const OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1';
 const OPEN_METEO_CLIMATE = 'https://climate-api.open-meteo.com/v1';
+const OPEN_METEO_PREVIOUS_RUNS = 'https://previous-runs-api.open-meteo.com/v1';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
+const ACCURACY_CACHE_TTL = 24 * 60 * 60 * 1000; // Once per day per location
+const ACCURACY_MIN_SAMPLE_SIZE = 8; // Hours of valid comparison pairs required per day
 
 /**
  * DayData interface:
@@ -73,7 +76,7 @@ export class TimelineData {
             const allDays = this.mergeTimelineData(historical, forecast, climatology);
 
             // Calculate accuracy metrics for historical days that have predictions
-            this.enrichWithAccuracy(allDays);
+            await this.enrichWithAccuracy(allDays, lat, lon);
 
             return allDays;
         } catch (error) {
@@ -485,15 +488,108 @@ export class TimelineData {
     }
 
     /**
-     * Enrich historical days with prediction data and accuracy metrics
-     * Compares what was forecasted X days ago with what actually happened
+     * Fetch archived model predictions from Open-Meteo's Previous Runs API,
+     * used to score historical days against what was forecast for them a day
+     * ahead of time. Cached once per day per location (separate from the
+     * general 1-hour timeline cache) since the underlying data only changes
+     * as new model runs land.
      *
-     * @param {DayData[]} days - Array of day data
+     * @param {number} lat - Latitude
+     * @param {number} lon - Longitude
+     * @returns {Promise<Object|null>} Raw API response, or null on failure /
+     *   when the endpoint lacks coverage for this location
      */
-    enrichWithAccuracy(_days) {
-        // Forecast accuracy requires archived forecast runs (Previous Runs API).
-        // This is not yet implemented. Accuracy rings and detail panels will
-        // naturally be hidden when day.accuracy is undefined.
+    async fetchAccuracyData(lat, lon) {
+        const cacheKey = this.getCacheKey(lat, lon, 'accuracy');
+        const cached = this.getFromCache(cacheKey, false, ACCURACY_CACHE_TTL);
+
+        if (cached) {
+            return cached.data;
+        }
+
+        const url = new URL(`${OPEN_METEO_PREVIOUS_RUNS}/forecast`);
+        url.searchParams.append('latitude', lat);
+        url.searchParams.append('longitude', lon);
+        url.searchParams.append('hourly', 'temperature_2m,temperature_2m_previous_day1');
+        url.searchParams.append('past_days', 10);
+        url.searchParams.append('forecast_days', 0);
+        url.searchParams.append('timezone', 'auto');
+
+        try {
+            const response = await fetch(url.toString());
+
+            if (!response.ok) {
+                throw new Error(`Previous Runs API error: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            this.setCache(cacheKey, data);
+            return data;
+        } catch (error) {
+            console.error('Previous runs fetch failed:', error);
+
+            const stale = this.getFromCache(cacheKey, true, ACCURACY_CACHE_TTL);
+            return stale ? stale.data : null;
+        }
+    }
+
+    /**
+     * Enrich historical days with prediction data and accuracy metrics.
+     * Compares the one-day-ahead forecast (Previous Runs API) against the
+     * observed temperature for each historical day. Days without enough
+     * comparison hours (e.g. no Previous Runs coverage for this location)
+     * are left without an `accuracy` field, which the timeline UI treats as
+     * "no data" rather than showing a fabricated number.
+     *
+     * @param {DayData[]} days - Array of day data (mutated in place)
+     * @param {number} lat - Latitude
+     * @param {number} lon - Longitude
+     */
+    async enrichWithAccuracy(days, lat, lon) {
+        const historicalDays = days.filter((d) => d.type === 'historical');
+        if (historicalDays.length === 0) return;
+
+        const data = await this.fetchAccuracyData(lat, lon);
+        const hourly = data?.hourly;
+        const times = hourly?.time;
+        const actualAll = hourly?.temperature_2m;
+        const predictedAll = hourly?.temperature_2m_previous_day1;
+
+        if (!Array.isArray(times) || !Array.isArray(actualAll) || !Array.isArray(predictedAll)) {
+            return; // Endpoint has no data for this location - leave accuracy undefined
+        }
+
+        for (const day of historicalDays) {
+            const actual = [];
+            const predicted = [];
+
+            for (let i = 0; i < times.length; i++) {
+                if (!times[i].startsWith(day.date)) continue;
+                const a = actualAll[i];
+                const p = predictedAll[i];
+                if (typeof a === 'number' && typeof p === 'number') {
+                    actual.push(a);
+                    predicted.push(p);
+                }
+            }
+
+            if (actual.length < ACCURACY_MIN_SAMPLE_SIZE) continue;
+
+            const metrics = this.calculateAccuracy(actual, predicted);
+            if (metrics.mae == null) continue;
+
+            // tempScore: UI-friendly 0-1 score, 1.0 = perfect, 0 at 6°C+ mean absolute error
+            const tempScore = Math.max(0, Math.min(1, 1 - metrics.mae / 6));
+
+            day.prediction = {
+                source: 'previous-runs-day1',
+                sampleSize: actual.length
+            };
+            day.accuracy = {
+                ...metrics,
+                tempScore: parseFloat(tempScore.toFixed(2))
+            };
+        }
     }
 
     /**
@@ -518,7 +614,7 @@ export class TimelineData {
 
         // Skill score vs persistence (using actual[0] as reference)
         const persistenceError = actual.reduce((sum, act) => sum + Math.abs(act - actual[0]), 0) / n;
-        const skill = (persistenceError - mae) / persistenceError;
+        const skill = persistenceError > 0 ? (persistenceError - mae) / persistenceError : mae === 0 ? 1 : 0;
 
         return {
             mae: parseFloat(mae.toFixed(2)),
@@ -724,15 +820,16 @@ export class TimelineData {
      *
      * @param {string} key - Cache key
      * @param {boolean} allowExpired - Return even if expired (stale-while-revalidate)
+     * @param {number} ttlMs - Time-to-live override (default: 1 hour)
      * @returns {Object|null} Cached data or null
      */
-    getFromCache(key, allowExpired = false) {
+    getFromCache(key, allowExpired = false, ttlMs = CACHE_TTL) {
         const cached = this.cache.get(key);
 
         if (!cached) return null;
 
         const now = Date.now();
-        const isExpired = now - cached.timestamp > CACHE_TTL;
+        const isExpired = now - cached.timestamp > ttlMs;
 
         if (isExpired && !allowExpired) {
             this.cache.delete(key);
