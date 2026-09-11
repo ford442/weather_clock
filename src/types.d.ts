@@ -199,6 +199,10 @@ interface TimelineHourlyPoint {
     cloudCover: number;
     windSpeed: number;
     precipitation: number;
+    /** Relative humidity, 0-100%; null when the API had no coverage for this hour. */
+    humidity: number | null;
+    /** Mean sea-level pressure, hPa; null when the API had no coverage for this hour. */
+    pressure: number | null;
 }
 
 /** One day of the 21-day timeline (10 past + today + 10 forecast). */
@@ -213,6 +217,10 @@ interface TimelineDayData {
     weatherCode: number;
     condition: 'clear' | 'cloudy' | 'rain' | 'snow' | 'storm';
     hourly: TimelineHourlyPoint[];
+    /** Day-mean relative humidity, 0-100%; null when the API had no coverage. */
+    humidityAvg: number | null;
+    /** Day-mean sea-level pressure, hPa; null when the API had no coverage. */
+    pressureAvg: number | null;
     /** Present only on historical days once accuracy data is available. */
     prediction?: { source: string; sampleSize: number };
     accuracy?: TimelineForecastAccuracy;

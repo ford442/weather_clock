@@ -1,6 +1,7 @@
 // Weather simulation: interpolation and data management
 import { getSeverity } from './weatherLighting.js';
 import { getPollenIntensity } from './air-quality.js';
+import { STANDARD_PRESSURE_HPA } from './moisture-pressure.js';
 
 /**
  * Ensure weather data object has rainIntensity, snowIntensity, and fogIntensity
@@ -139,6 +140,7 @@ export function getWeatherAtTime(time, timeline) {
         temp: lerp(prevInt.temp, nextInt.temp),
         apparentTemp: lerp(prevInt.apparentTemp ?? prevInt.temp, nextInt.apparentTemp ?? nextInt.temp),
         humidity: lerp(prevInt.humidity, nextInt.humidity),
+        pressure: lerp(prevInt.pressure ?? STANDARD_PRESSURE_HPA, nextInt.pressure ?? STANDARD_PRESSURE_HPA),
         uvIndex: lerp(prevInt.uvIndex, nextInt.uvIndex),
         precipProb: lerp(prevInt.precipProb, nextInt.precipProb),
         weatherCode: weatherCode,

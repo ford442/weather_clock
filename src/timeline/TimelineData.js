@@ -74,7 +74,7 @@ export class TimelineData {
      * Fetch historical observations from Open-Meteo Archive API
      *
      * @param {number} lat - Latitude
-     * @param {number} lon - Longitude  
+     * @param {number} lon - Longitude
      * @param {number} days - Number of days to fetch (default 10)
      * @returns {Promise<Object>} Raw API response with daily/hourly data
      */
@@ -99,7 +99,7 @@ export class TimelineData {
             start_date: startStr,
             end_date: endStr,
             daily: 'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum',
-            hourly: 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation',
+            hourly: 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation,relative_humidity_2m,pressure_msl',
             timezone: 'auto'
         });
 
@@ -139,7 +139,7 @@ export class TimelineData {
             forecast_days: days,
             past_days: 10, // Include past forecast data for comparison
             daily: 'temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code,precipitation_sum',
-            hourly: 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation',
+            hourly: 'temperature_2m,weather_code,cloud_cover,wind_speed_10m,precipitation,relative_humidity_2m,pressure_msl',
             timezone: 'auto'
         });
 
@@ -302,7 +302,7 @@ export class TimelineData {
      * Merge historical and forecast data into unified DayData array
      *
      * @param {Object} historical - Raw historical API response
-     * @param {Object} forecast - Raw forecast API response  
+     * @param {Object} forecast - Raw forecast API response
      * @param {Object} climatology - Processed climatology data
      * @returns {TimelineDayData[]} Unified array of 21 days
      */
@@ -388,6 +388,13 @@ export class TimelineData {
         // Extract hourly data for this day
         const hourly = this.extractHourlyData(rawData.hourly, dateStr);
 
+        // Day-level moisture/pressure cues for the column visuals (haze tint,
+        // pressure ring) — null when the API didn't return coverage for this day.
+        const humidityValues = hourly.map((h) => h.humidity).filter((v) => v != null);
+        const humidityAvg = humidityValues.length > 0 ? this.calculateMean(humidityValues) : null;
+        const pressureValues = hourly.map((h) => h.pressure).filter((v) => v != null);
+        const pressureAvg = pressureValues.length > 0 ? this.calculateMean(pressureValues) : null;
+
         return {
             date: dateStr,
             type,
@@ -398,7 +405,9 @@ export class TimelineData {
             zScore,
             weatherCode,
             condition: this.simplifyWeatherCondition(weatherCode),
-            hourly
+            hourly,
+            humidityAvg,
+            pressureAvg
             // Prediction and accuracy may be added by enrichWithAccuracy() when real archived forecast data is available
         };
     }
@@ -425,7 +434,9 @@ export class TimelineData {
                     weatherCode: hourlyData.weather_code?.[i] ?? 0,
                     cloudCover: hourlyData.cloud_cover?.[i] ?? 0,
                     windSpeed: hourlyData.wind_speed_10m?.[i] ?? 0,
-                    precipitation: hourlyData.precipitation?.[i] ?? 0
+                    precipitation: hourlyData.precipitation?.[i] ?? 0,
+                    humidity: hourlyData.relative_humidity_2m?.[i] ?? null,
+                    pressure: hourlyData.pressure_msl?.[i] ?? null
                 });
             }
         }
