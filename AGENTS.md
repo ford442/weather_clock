@@ -57,7 +57,8 @@ The app has three viewing modes:
 | `animation.js` | `AnimationController` class. Drives the `requestAnimationFrame` loop, advances `simulationTime`, handles time-warp, throttles UI updates. |
 | `ui.js`, `ui/` | DOM-facing facade plus focused modules for time/date, weather panels, search, gauges, sparklines, toasts, shortcuts, and event listeners. |
 | `weather-simulation.js` | Weather interpolation over the hourly timeline (`getWeatherAtTime`), plus `getActiveWeatherData` for past/current/forecast snapshots. |
-| `weather.js` | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timelines, handles geolocation/search, unit conversion, and advanced analytics. Forecast accuracy (`getPredictionAccuracy`) compares Previous Runs API predictions against observed temperatures (cached once per day per location). |
+| `weather.js` | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timelines, handles geolocation/search, unit conversion, and advanced analytics. Forecast accuracy (`getPredictionAccuracy`) compares Previous Runs API predictions against observed temperatures (cached once per day per location) using the shared math in `accuracy.js`. |
+| `accuracy.js` | Shared forecast-accuracy math used by both `weather.js` (clock mode) and `timeline/TimelineData.js` (timeline mode): mean-absolute-error pairing/gating, MAE+RMSE+skill-vs-persistence scoring, and the once-per-day cache TTL/key suffix — kept in one place so the two modes never compute accuracy differently. |
 | `astronomy.js` | `AstronomyService` class. Wraps SunCalc to compute sun/moon positions and illumination, converting spherical coordinates to Three.js Cartesian. |
 | `effects/weather-effects.js`, `effects/` | Weather-effect coordinator plus pooled rain, snow, dust, cloud, fog, star, and splash systems. |
 | `weatherLighting.js` | `updateWeatherLighting()` — calculates day/night factor, weighted cloud cover, severity, fog density, sky shader uniforms, and smoothly interpolates sun/moon/ambient colors and intensities. |
@@ -76,7 +77,7 @@ The app has three viewing modes:
 - `TimelineController.js` — Manages 21-day 3D column visualization, raycasting, hover/selection states.
 - `TimelineUI.js` — DOM overlay for timeline details.
 - `DayColumn.js` — Individual 3D column representing one day, with custom GLSL temperature-gradient shaders.
-- `TimelineData.js` — Fetches and caches timeline weather data from Open-Meteo. `enrichWithAccuracy()` scores historical days against the Open-Meteo Previous Runs API's one-day-ahead forecast (MAE/RMSE/skill vs. a persistence baseline, cached once per day per location), populating `day.accuracy` for the timeline's accuracy rings and detail panel when coverage exists.
+- `TimelineData.js` — Fetches and caches timeline weather data from Open-Meteo. `enrichWithAccuracy()` scores historical days against the Open-Meteo Previous Runs API's one-day-ahead forecast (MAE/RMSE/skill vs. a persistence baseline, via the shared `../accuracy.js` math, cached once per day per location), populating `day.accuracy` for the timeline's accuracy rings and detail panel when coverage exists.
 - `AnomalyCalculator.js` — Computes weather anomalies (z-scores) for the timeline.
 - `index.js` — Re-exports.
 - `timeline.css` — Style entry point; imports the split timeline core and overlay styles.
