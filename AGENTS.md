@@ -145,6 +145,24 @@ The specs append `?test=1` to every URL so the service worker is disabled during
 
 ---
 
+## TypeScript / Typing Conventions
+
+The runtime language is vanilla JavaScript; types come from JSDoc annotations checked by `tsc --noEmit` (`npm run typecheck`), not from `.ts` files. `tsconfig.json` has `allowJs`/`checkJs` on and `strictNullChecks` on; `strict` (the rest of the strict-mode family — `noImplicitAny`, `strictFunctionTypes`, etc.) is still off.
+
+- **Every file under `src/` is type-checked.** `@ts-nocheck` is not used anywhere in `src/` (excluding `src/vendor/` and `src/tests/`, which stay excluded via `tsconfig.json`). Do not reintroduce it as a way to silence errors — fix the types or, if a type is genuinely unknowable at that point, use a narrow `/** @type {T} */ (expr)` cast with a one-line comment explaining why it's safe.
+- **Add JSDoc types when you touch a function/method**, even if the surrounding file predates this convention and is loosely typed elsewhere. At minimum: `@param` types for anything non-obvious, and a `@returns` type for anything a caller will branch on. Public methods on shared classes (`WeatherService`, `TimelineData`, `ModeController`, `AstronomyService`, and friends) should have complete `@param`/`@returns` JSDoc — callers rely on it and `tsc` enforces it.
+- **Shared data shapes live in `src/types.d.ts`** as global ambient `interface`/`type` declarations (`WeatherSnapshot`, `WeatherData`, `AppState`, `TimelineDayData`, `DailyForecastDay`, etc.) — no import needed, just reference the type name in JSDoc. Add a new shape there when it's used across more than one or two files; keep genuinely file-local shapes as a local `@typedef` instead.
+- **Common `strictNullChecks` fixes, in priority order:**
+  1. A `let x = null;` or `const obj = { field: null, ... }` with no annotation infers the literal type `null` (not `T|null`) from that single assignment — this is the single most common cause of a cascading "possibly null" or "does not exist on type never" error far from the actual bug. Fix at the declaration: `/** @type {T|null} */ let x = null;`.
+  2. A value that's null-typed but provably non-null at a given point by program logic TS can't see (e.g. two variables gated by the same upstream `if`, narrowing lost across an `await`, or lost inside a hoisted `function` declaration nested in a narrowed block) — bind a local non-null `const` right after the guard and use that, rather than repeating casts at every use site.
+  3. A value that can never actually be null in practice (e.g. `canvas.getContext('2d')` on a freshly-created canvas) — cast once at that point: `/** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'))`.
+  4. Real optionality (DOM query results, optional numeric/string fields, optional callbacks) — use a guard clause, `?.`, or a `?? default`, matching whatever pattern is already used nearby in the same file.
+  5. Never use TypeScript's `!` non-null assertion operator here — it doesn't parse the same way in a `.js`+JSDoc file. Use the `/** @type {T} */ (expr)` cast form instead.
+- **`.ts` files are allowed** for a module that would clearly benefit from real generics, discriminated unions, or other TS-only syntax JSDoc can't express cleanly — but none exist yet, and the bar is high given the project's vanilla-JS-runtime philosophy (see Technology Stack above). Prefer JSDoc unless you have a concrete reason.
+- **`src/vendor/` and generated native glue stay excluded** from typechecking (see `tsconfig.json`'s `exclude`); don't add types there.
+
+---
+
 ## Testing Instructions
 
 1. **Unit Tests**
@@ -227,15 +245,10 @@ Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Fore
 - **Hardcoded zone offsets:** The visual separation of temporal zones relies on hardcoded X offsets (e.g., `-8`, `0`, `8`) in multiple files. Changing scene scale requires updating these values consistently. Tracked as [#109](https://github.com/ford442/weather_clock/issues/109) (centralize into a `SCENE_LAYOUT` config).
 
 ### Known Issues / Blockers
-_Last verified 2026-09-07 by running `lint`, `typecheck`, and `format:check` directly — this section was stale relative to the code for ~32 days before this pass._
+_Last verified 2026-09-11 by running `lint`, `typecheck`, `format:check`, `test`, and `build` directly._
 
-- **CI is currently red** — [#108](https://github.com/ford442/weather_clock/issues/108) is open and matches what's actually failing right now:
-  - `npm run lint` → 2 errors in `src/ground.js:16` (`isWebGPU` and `snowMaskTexture` assigned but never used).
-  - `npm run typecheck` → 17 errors across 5 files: `src/audio/AmbienceEngine.js` (`webkitAudioContext` typo, missing `rainIntensity`/`windSpeed` on an untyped object), `src/effects/ground-effects.js` (`THREE` namespace not found — likely a missing type import), `src/weather-simulation.js` and `src/weatherLighting.js` (`aqi`/`airQuality` not on `WeatherSnapshot`), `src/webgpu/PostProcessingPipeline.js` (`setHeatShimmer` not in the post-processing adapter's type).
-  - `npm run format:check` → 5 files need a Prettier pass: `src/atmosphereTheme.js`, `src/audio/AmbienceEngine.js`, `src/effects/ground-effects.js`, `src/effects/lightning-bolt-system.js`, `src/tests/weather.test.js`.
-  - Anyone starting new work here should either fix #108 first or expect their own CI run to be noisy with pre-existing failures.
+- **`npm run lint` → 2 errors in `src/ground.js:16`** (`isWebGPU` and `snowMaskTexture` assigned but never used) — [#108](https://github.com/ford442/weather_clock/issues/108) tracks this. `typecheck`, `format:check`, `test`, and `build` are all green.
 - **WebGPU material stubs are incomplete** — [#111](https://github.com/ford442/weather_clock/issues/111) tracks finishing these; matches literal `// TODO` markers in `src/webgpu/materials/CloudMaterial.js:25`, `RainMaterial.js:26`, and `SplashMaterial.js:24` (volumetric lighting / distance-fade / ripple-ring TSL logic all deferred).
-- **`@ts-nocheck` on 20 files under `src/`** — [#106](https://github.com/ford442/weather_clock/issues/106) tracks removing these; `typecheck` above only surfaces errors in the files that have already lost their `@ts-nocheck`, so more type errors are likely hiding in the other 20 once each is turned back on.
 
 ---
 
