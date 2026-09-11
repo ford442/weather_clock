@@ -2,6 +2,7 @@
 import { updateWeatherLighting } from './weatherLighting.js';
 import { updateWeatherDisplay } from './ui.js';
 import { buildHourlyTimelineFromDay } from './dailyForecast.js';
+import { SCENE_LAYOUT } from './scene-layout.js';
 
 /**
  * Generate debug weather timeline
@@ -137,6 +138,7 @@ export function setupDebugAPI(state, services, scene3d) {
         }),
         getForecastPreviewMetrics: () => window.modeController?.forecastUI?.previewMetrics || null,
         getMode: () => window.modeController?.getMode?.(),
+        getSceneLayout: () => SCENE_LAYOUT,
         spawnBolt: () => {
             weatherEffects.createLightning();
         },

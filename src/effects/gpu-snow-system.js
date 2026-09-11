@@ -15,11 +15,12 @@ import {
     vec3
 } from 'three/tsl';
 import { ParticleSystemBase } from './particle-base.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 export class GPUSnowSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 7500, renderer = null) {
         super(scene);
-        this.zone = zone || { minX: -8, maxX: 8 };
+        this.zone = zone || SCENE_LAYOUT.zones.current;
         this.maxParticles = maxParticles;
         this.renderer = renderer;
         this.currentIntensity = 0;

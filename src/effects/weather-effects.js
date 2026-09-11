@@ -7,6 +7,7 @@ import { StarField } from './star-field.js';
 import { FogEffect } from './fog-effect.js';
 import { SplashSystem } from './splash-system.js';
 import { LightningBoltSystem } from './lightning-bolt-system.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -96,11 +97,7 @@ export class WeatherEffects {
         this.renderer = renderer;
         this.gpuClasses = gpuClasses;
         this.quality = quality;
-        this._zones = {
-            past: { minX: -12, maxX: -4 },
-            current: { minX: -4, maxX: 4 },
-            future: { minX: 4, maxX: 12 }
-        };
+        this._zones = SCENE_LAYOUT.zones;
 
         this.raycaster = new THREE.Raycaster();
         this.downVector = new THREE.Vector3(0, -1, 0);
@@ -432,11 +429,15 @@ export class WeatherEffects {
         return this.flashIntensity;
     }
 
+    getSceneLayout() {
+        return SCENE_LAYOUT;
+    }
+
     createLightning() {
         if (this.reducedMotion) return;
         if (this.flashIntensity > 0.5) return;
 
-        const zone = { minX: -8, maxX: 8 };
+        const zone = SCENE_LAYOUT.lightning;
         // Reuse pooled light
         this.lightningLight.position.set(
             zone.minX + Math.random() * (zone.maxX - zone.minX),

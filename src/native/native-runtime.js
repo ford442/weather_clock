@@ -6,6 +6,7 @@ import {
     generateForecastPrimitivesJS,
     stepParticlesJS
 } from './js-kernels.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 // Flip individual entries only after the authoritative throttled-browser gate
 // documented in docs/WASM_EXPERIMENT.md clears 2x in every measured run.
@@ -147,8 +148,8 @@ function createWasmRuntime(module, enabledKernels) {
                 windZ,
                 dt,
                 options.mode || 0,
-                options.minX ?? -8,
-                options.maxX ?? 8,
+                options.minX ?? SCENE_LAYOUT.zones.current.minX,
+                options.maxX ?? SCENE_LAYOUT.zones.current.maxX,
                 options.time || 0
             );
         },
