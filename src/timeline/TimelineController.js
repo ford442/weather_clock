@@ -107,6 +107,15 @@ export class TimelineController {
         days.forEach((dayData, index) => {
             const x = startX + index * TIMELINE_CONFIG.columnSpacing;
 
+            // Day-over-day mean-temperature change drives the column's rising/falling
+            // chevrons — the timeline's version of the clock scene's trend language.
+            const previous = index > 0 ? days[index - 1] : null;
+            if (typeof dayData.tempAvg === 'number' && typeof previous?.tempAvg === 'number') {
+                dayData.trendDelta = dayData.tempAvg - previous.tempAvg;
+            } else {
+                dayData.trendDelta = 0;
+            }
+
             const dayColumn = new DayColumn(dayData, {
                 x,
                 z: 0,

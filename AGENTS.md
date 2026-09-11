@@ -232,6 +232,19 @@ Particle systems (rain, snow, dust, fog) are constrained to zone boundaries. Whe
 
 Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Forecast (30%). Do not set `sunLight.position` in `weatherLighting.js`; position is handled exclusively by `astronomy.js`.
 
+### Temporal Narrative (the past/present/future visual grammar)
+`src/temporal-narrative.js` turns the three zone snapshots into the numbers every "time" visual shares, so clock mode and timeline mode tell the same story:
+
+- **Time flows leftward.** Every zone's `drift` is negative — weather departs through the past zone (fastest) and eases in from the future zone (slowest), scaled by `changeRate`. Anything new that moves with time should drift toward −X; never toward +X.
+- **Temperature is colour.** `warmth` / `tint` map temperature onto one blue→red ramp (`coldAnchorC`…`hotAnchorC`). Cold time reads blue, warm time reads red, in the clouds, the band, and the timeline columns alike.
+- **Trend is motion.** `tempTrend` / `trendDirection` (rising / falling / steady) drive chevrons: they tilt up while warming, down while cooling, and a steady stretch shows none at all.
+
+Consumers: `effects/weather-effects.js` feeds each zone's slice to that zone's `CloudSystem`s via `setNarrative()` and to `effects/temporal-band.js` (the horizon backdrop carrying the gradient, the chevrons, and the warm dusk shoulder that fades into the past); `timeline/DayColumn.js` renders the same chevron language per day from `trendDelta`. Inspect it live with `aetherDebug.getTemporalNarrative()`.
+
+Cloud fields deliberately overlap their zone bounds by `CLOUD_ZONE_OVERLAP` and fade at those overlap edges, so the sky reads as one continuous scene rather than three cut-off blocks. Precipitation and fog still wrap on the hard zone bounds — only clouds overlap.
+
+Prefer graphical language over HUD text for anything in this vocabulary.
+
 ### Coordinate Systems
 `SunCalc` uses spherical coordinates (azimuth/altitude). These are converted to Three.js Cartesian in `astronomy.js`. Azimuth 0° (South) maps to Z-, meaning North is Z+.
 
