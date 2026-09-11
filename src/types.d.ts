@@ -76,6 +76,81 @@ interface DailyForecastDay {
     };
 }
 
+/**
+ * Canonical hourly point used by the 21-day timeline and 10-day forecast
+ * strip (src/timeline/TimelineData.js). Deliberately narrower than
+ * {@link WeatherSnapshot}, which is the clock/current-conditions hourly
+ * shape — the two are kept distinct rather than unified because the timeline
+ * only carries what its charts/vignettes need, while WeatherSnapshot mirrors
+ * the full Open-Meteo hourly payload consumed by the 3D scene.
+ */
+interface TimelineHourlyPoint {
+    time: string;
+    temp: number | null;
+    weatherCode: number;
+    cloudCover: number;
+    windSpeed: number;
+    precipitation: number;
+}
+
+/** One day of the 21-day timeline (10 past + today + 10 forecast). */
+interface TimelineDayData {
+    date: string;
+    type: 'historical' | 'forecast';
+    tempMax: number | null;
+    tempMin: number | null;
+    tempAvg: number | null;
+    tempAnomaly: number;
+    zScore: number;
+    weatherCode: number;
+    condition: 'clear' | 'cloudy' | 'rain' | 'snow' | 'storm';
+    hourly: TimelineHourlyPoint[];
+    /** Present only on historical days once accuracy data is available. */
+    prediction?: { source: string; sampleSize: number };
+    accuracy?: TimelineForecastAccuracy;
+}
+
+/** 30-year (1991-2020) daily climate normal for one day-of-year. */
+interface ClimatologyDayNormal {
+    mean: number;
+    max: number;
+    min: number;
+    stdDev: number;
+}
+
+interface Climatology {
+    daily: Record<number, ClimatologyDayNormal>;
+    isFallback: boolean;
+}
+
+/**
+ * Timeline accuracy metrics: one-day-ahead model forecast vs. observed
+ * temperature for a historical day, scored against a persistence baseline.
+ * Computed by TimelineData.calculateAccuracy.
+ */
+interface TimelineForecastAccuracy {
+    mae: number | null;
+    rmse: number | null;
+    skill: number | null;
+    /** UI-friendly 0-1 score derived from mae; only present once attached via enrichWithAccuracy. */
+    tempScore?: number;
+}
+
+/**
+ * Clock/current-conditions accuracy metrics: day-1 (and day-3) mean absolute
+ * error over the trailing 24 observed hours. Computed by
+ * WeatherService.getPredictionAccuracy. Kept distinct from
+ * {@link TimelineForecastAccuracy} since the two compare different things
+ * (a single rolling 24h window vs. per-calendar-day skill-vs-persistence).
+ */
+interface ClockForecastAccuracy {
+    mae: number;
+    maeDay3: number | null;
+    score: number;
+    sampleSize: number;
+    updatedAt: number;
+}
+
 interface EffectConfig {
     weatherCode: number;
     cloudCover: number;

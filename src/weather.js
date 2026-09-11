@@ -5,6 +5,21 @@ import {
     parseDailyForecast,
     getRepresentativeTimeForDay
 } from './dailyForecast.js';
+import {
+    WeatherServiceError,
+    fetchJSON,
+    withRetry,
+    isRetryableError,
+    isOffline,
+    forecastUrl,
+    archiveUrl,
+    previousRunsUrl,
+    airQualityUrl,
+    geocodeSearchUrl,
+    reverseGeocodeUrl,
+    alertsUrl
+} from './net/openMeteoClient.js';
+import { TTLCache } from './net/weatherCache.js';
 
 // localStorage is shared by the whole origin (other apps on the same host
 // included), so the weather cache must stay bounded rather than growing
@@ -12,17 +27,7 @@ import {
 const CACHE_STORAGE_PREFIX = 'weatherclock_cache_v1_';
 const MAX_CACHE_ENTRIES = 24;
 
-export class WeatherServiceError extends Error {
-    constructor(message, status = null, endpoint = null, options = {}) {
-        super(message);
-        this.name = 'WeatherServiceError';
-        this.status = status;
-        this.endpoint = endpoint;
-        this.code = options.code ?? null;
-        this.isOffline = options.isOffline ?? false;
-        if (options.cause) this.cause = options.cause;
-    }
-}
+export { WeatherServiceError };
 
 export class WeatherService {
     constructor({ timeoutMs = 10000, retryDelaysMs = [2000, 4000, 8000] } = {}) {
@@ -31,70 +36,19 @@ export class WeatherService {
         this.location = null;
         this.unit = 'imperial'; // Default to Fahrenheit
         this.windUnit = 'metric'; // 'metric' = km/h, 'imperial' = mph
-        this.cache = new Map();
+        this._cacheStore = new TTLCache({ storagePrefix: CACHE_STORAGE_PREFIX, maxStorageEntries: MAX_CACHE_ENTRIES });
+        this.cache = this._cacheStore.memory;
         this.timeoutMs = timeoutMs;
         this.retryDelaysMs = retryDelaysMs;
         this.searchController = null;
     }
 
     /**
-     * @param {string} url
+     * @param {string|URL} url
      * @param {{timeoutMs?: number, signal?: AbortSignal}} [options]
      */
     async #fetchJSON(url, { timeoutMs = this.timeoutMs, signal } = {}) {
-        const controller = new AbortController();
-        let timedOut = false;
-
-        const forwardAbort = () => controller.abort(signal?.reason);
-        if (signal?.aborted) {
-            forwardAbort();
-        } else {
-            signal?.addEventListener('abort', forwardAbort, { once: true });
-        }
-
-        const timeoutId = setTimeout(() => {
-            timedOut = true;
-            controller.abort();
-        }, timeoutMs);
-
-        try {
-            const response = await fetch(url, { signal: controller.signal });
-            if (response.ok === false) {
-                throw new WeatherServiceError(
-                    `Request failed with status ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
-                    response.status,
-                    url,
-                    { code: 'HTTP_ERROR' }
-                );
-            }
-            return await response.json();
-        } catch (error) {
-            if (error instanceof WeatherServiceError) throw error;
-
-            if (timedOut) {
-                throw new WeatherServiceError(`Request timed out after ${timeoutMs}ms`, null, url, {
-                    code: 'TIMEOUT',
-                    cause: error
-                });
-            }
-
-            if (signal?.aborted) {
-                throw new WeatherServiceError('Request cancelled', null, url, {
-                    code: 'ABORTED',
-                    cause: error
-                });
-            }
-
-            const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
-            throw new WeatherServiceError(isOffline ? 'Device is offline' : 'Network request failed', null, url, {
-                code: isOffline ? 'OFFLINE' : 'NETWORK_ERROR',
-                isOffline,
-                cause: error
-            });
-        } finally {
-            clearTimeout(timeoutId);
-            signal?.removeEventListener('abort', forwardAbort);
-        }
+        return fetchJSON(url, { timeoutMs, signal });
     }
 
     async initialize() {
@@ -129,10 +83,9 @@ export class WeatherService {
         this.searchController = controller;
 
         try {
-            return await this.#fetchJSON(
-                `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&accept-language=${encodeURIComponent(navigator.language || 'en')}&q=${encodeURIComponent(query)}`,
-                { signal: controller.signal }
-            );
+            return await this.#fetchJSON(geocodeSearchUrl(query, navigator.language || 'en'), {
+                signal: controller.signal
+            });
         } catch (error) {
             if (error.code !== 'ABORTED') console.error('Search location failed:', error);
             throw error;
@@ -205,9 +158,7 @@ export class WeatherService {
 
     async reverseGeocode(lat, lon) {
         try {
-            const data = await this.#fetchJSON(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=${encodeURIComponent(navigator.language || 'en')}`
-            );
+            const data = await this.#fetchJSON(reverseGeocodeUrl(lat, lon, navigator.language || 'en'));
 
             if (data.address) {
                 const city = data.address.city || data.address.town || data.address.village;
@@ -247,30 +198,28 @@ export class WeatherService {
     async fetchWeather() {
         let lastError;
 
-        for (let attempt = 0; attempt <= this.retryDelaysMs.length; attempt++) {
-            try {
-                return await this._fetchWeatherOnce();
-            } catch (error) {
-                lastError = error;
-                const retryDelay = this.retryDelaysMs[attempt];
-                if (retryDelay === undefined || !this._isRetryable(error)) break;
-
-                console.warn(
-                    `Weather fetch failed. Retrying in ${retryDelay}ms (attempt ${attempt + 1}/${this.retryDelaysMs.length})...`
-                );
-                await new Promise((resolve) => setTimeout(resolve, retryDelay));
-            }
+        try {
+            return await withRetry(() => this._fetchWeatherOnce(), {
+                retryDelaysMs: this.retryDelaysMs,
+                onRetry: (error, attempt, delayMs) => {
+                    console.warn(
+                        `Weather fetch failed. Retrying in ${delayMs}ms (attempt ${attempt + 1}/${this.retryDelaysMs.length})...`
+                    );
+                }
+            });
+        } catch (error) {
+            lastError = error;
         }
 
         console.error('Weather fetch failed, attempting cache fallback:', lastError);
         const cached = this.getFromCache(this.getCacheKey(this.latitude, this.longitude), true);
         if (cached) {
-            const isOffline = lastError?.isOffline === true || this._isOffline();
+            const offline = lastError?.isOffline === true || isOffline();
             console.warn('Serving cached weather data due to fetch error');
             return {
                 ...cached.data,
                 isCached: true,
-                isOffline,
+                isOffline: offline,
                 cachedAt: cached.timestamp
             };
         }
@@ -278,14 +227,11 @@ export class WeatherService {
     }
 
     _isRetryable(error) {
-        if (!(error instanceof WeatherServiceError)) return false;
-        if (error.code === 'ABORTED' || error.code === 'OFFLINE') return false;
-        if (error?.status == null) return true;
-        return error.status === 408 || error.status === 429 || error.status >= 500;
+        return isRetryableError(error);
     }
 
     _isOffline() {
-        return typeof navigator !== 'undefined' && navigator.onLine === false;
+        return isOffline();
     }
 
     async _fetchWeatherOnce() {
@@ -303,7 +249,13 @@ export class WeatherService {
         // Request past_days=1 to ensure we have historical hourly data for the "Past" zone interpolation
         // even if the current time is just after midnight.
         const currentData = await this.#fetchJSON(
-            `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl,uv_index&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl,uv_index,precipitation_probability&timezone=auto&past_days=1`
+            forecastUrl(this.latitude, this.longitude, {
+                current:
+                    'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl,uv_index',
+                hourly: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility,rain,showers,snowfall,pressure_msl,uv_index,precipitation_probability',
+                timezone: 'auto',
+                past_days: 1
+            })
         );
 
         // Archive API — no UV/precipProb in archive, use apparent_temp + humidity
@@ -312,7 +264,12 @@ export class WeatherService {
         const todayStr = now.toISOString().split('T')[0];
 
         const historicalData = await this.#fetchJSON(
-            `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${pastDateStr}&end_date=${todayStr}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,rain,showers,snowfall,pressure_msl&timezone=auto`
+            archiveUrl(this.latitude, this.longitude, {
+                start_date: pastDateStr,
+                end_date: todayStr,
+                hourly: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,rain,showers,snowfall,pressure_msl',
+                timezone: 'auto'
+            })
         );
 
         // Build hourly timeline
@@ -440,7 +397,12 @@ export class WeatherService {
 
         try {
             const data = await this.#fetchJSON(
-                `https://archive-api.open-meteo.com/v1/archive?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code,cloud_cover,wind_speed_10m&timezone=auto`
+                archiveUrl(this.latitude, this.longitude, {
+                    start_date: dateStr,
+                    end_date: dateStr,
+                    hourly: 'temperature_2m,weather_code,cloud_cover,wind_speed_10m',
+                    timezone: 'auto'
+                })
             );
             const index = this.findClosestHourIndex(data.hourly.time, lastYear);
             return {
@@ -468,7 +430,7 @@ export class WeatherService {
             const rLon = this.longitude + offset.lon;
             try {
                 const data = await this.#fetchJSON(
-                    `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(rLat)}&longitude=${encodeURIComponent(rLon)}&current=temperature_2m,weather_code&timezone=auto`
+                    forecastUrl(rLat, rLon, { current: 'temperature_2m,weather_code', timezone: 'auto' })
                 );
                 return {
                     name: offset.name,
@@ -503,8 +465,10 @@ export class WeatherService {
             const cached = this.getFromCache(cacheKey);
             if (cached) return cached.data;
 
-            const params = 'pm10,pm2_5,ozone,us_aqi,european_aqi,birch_pollen,grass_pollen,ragweed_pollen';
-            const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&current=${params}&timezone=auto`;
+            const url = airQualityUrl(this.latitude, this.longitude, {
+                current: 'pm10,pm2_5,ozone,us_aqi,european_aqi,birch_pollen,grass_pollen,ragweed_pollen',
+                timezone: 'auto'
+            });
             const data = await this.#fetchJSON(url);
             const cur = data.current || {};
 
@@ -538,9 +502,7 @@ export class WeatherService {
      * @param {number} lon
      */
     buildAlertsUrl(lat, lon) {
-        const roundedLat = Math.round(lat * 10000) / 10000;
-        const roundedLon = Math.round(lon * 10000) / 10000;
-        return `https://api.weather.gov/alerts/active?point=${roundedLat},${roundedLon}`;
+        return alertsUrl(lat, lon);
     }
 
     /**
@@ -608,16 +570,15 @@ export class WeatherService {
                 return cached.data;
             }
 
-            const url = new URL('https://api.open-meteo.com/v1/forecast');
-            url.searchParams.append('latitude', String(latitude));
-            url.searchParams.append('longitude', String(longitude));
-            url.searchParams.append('forecast_days', String(clampedDays));
-            url.searchParams.append('daily', DAILY_FORECAST_PARAMS);
-            url.searchParams.append('hourly', DAILY_HOURLY_PARAMS);
-            url.searchParams.append('daily_units', ''); // Request units metadata
-            url.searchParams.append('timezone', 'auto');
+            const url = forecastUrl(latitude, longitude, {
+                forecast_days: clampedDays,
+                daily: DAILY_FORECAST_PARAMS,
+                hourly: DAILY_HOURLY_PARAMS,
+                daily_units: '', // Request units metadata
+                timezone: 'auto'
+            });
 
-            const data = await this.#fetchJSON(url.toString());
+            const data = await this.#fetchJSON(url);
             const forecast = parseDailyForecast(data, { expectedDays: clampedDays });
 
             if (!forecast || forecast.length === 0) {
@@ -662,110 +623,15 @@ export class WeatherService {
     }
 
     getFromCache(key, allowExpired = false, ttlMs = 60 * 60 * 1000) {
-        // Try memory first
-        let cached = this.cache.get(key);
-
-        if (!cached && typeof localStorage !== 'undefined') {
-            // Try localStorage using a key-scoped entry so multiple cache types
-            // (weather, daily, etc.) can coexist for the same location.
-            try {
-                const storageStr = localStorage.getItem(`${CACHE_STORAGE_PREFIX}${key}`);
-                if (storageStr) {
-                    cached = JSON.parse(storageStr);
-                    if (cached) {
-                        this.cache.set(key, cached);
-                    }
-                }
-            } catch (e) {
-                console.error('Failed to read from localStorage cache:', e);
-            }
-        }
-
-        if (!cached) return null;
-
-        const now = Date.now();
-        const isExpired = now - cached.timestamp > ttlMs;
-
-        if (isExpired && !allowExpired) {
-            this.deleteFromCache(key);
-            return null;
-        }
-
-        return cached;
+        return this._cacheStore.get(key, { allowExpired, ttlMs });
     }
 
     setCache(key, data) {
-        const cacheEntry = {
-            data,
-            timestamp: Date.now(),
-            lat: this.latitude,
-            lon: this.longitude
-        };
-        this.cache.set(key, cacheEntry);
-
-        if (typeof localStorage === 'undefined') return;
-
-        const storageKey = `${CACHE_STORAGE_PREFIX}${key}`;
-        const serialized = JSON.stringify(cacheEntry);
-
-        try {
-            this.#pruneStorageCache(MAX_CACHE_ENTRIES - 1, [storageKey]);
-            localStorage.setItem(storageKey, serialized);
-        } catch (e) {
-            console.error('Failed to write to localStorage cache, evicting oldest entries and retrying:', e);
-            try {
-                // The quota may already be exhausted by other apps sharing this
-                // origin; evict more aggressively and retry once before giving up.
-                this.#pruneStorageCache(Math.floor(MAX_CACHE_ENTRIES / 2), [storageKey]);
-                localStorage.setItem(storageKey, serialized);
-            } catch (retryError) {
-                console.error('Failed to write to localStorage cache after eviction, giving up:', retryError);
-            }
-        }
+        return this._cacheStore.set(key, data, { lat: this.latitude, lon: this.longitude });
     }
 
     deleteFromCache(key) {
-        this.cache.delete(key);
-        if (typeof localStorage !== 'undefined') {
-            try {
-                localStorage.removeItem(`${CACHE_STORAGE_PREFIX}${key}`);
-            } catch (e) {
-                console.error('Failed to delete from localStorage cache:', e);
-            }
-        }
-    }
-
-    /**
-     * Keep at most `maxRemaining` weather cache entries in localStorage,
-     * evicting the oldest ones first. `preserveKeys` are never evicted (used
-     * to protect the entry currently being written before its own count is
-     * reflected in storage).
-     */
-    #pruneStorageCache(maxRemaining, preserveKeys = []) {
-        const entries = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const storageKey = localStorage.key(i);
-            if (!storageKey || !storageKey.startsWith(CACHE_STORAGE_PREFIX)) continue;
-            if (preserveKeys.includes(storageKey)) continue;
-
-            let timestamp = 0;
-            try {
-                const parsed = JSON.parse(localStorage.getItem(storageKey));
-                timestamp = parsed?.timestamp ?? 0;
-            } catch {
-                // Malformed entry; evict it first by treating it as oldest.
-            }
-            entries.push({ storageKey, timestamp });
-        }
-
-        const overflow = entries.length - Math.max(0, maxRemaining);
-        if (overflow <= 0) return;
-
-        entries.sort((a, b) => a.timestamp - b.timestamp);
-        for (const { storageKey } of entries.slice(0, overflow)) {
-            localStorage.removeItem(storageKey);
-            this.cache.delete(storageKey.slice(CACHE_STORAGE_PREFIX.length));
-        }
+        this._cacheStore.delete(key);
     }
 
     /**
@@ -797,7 +663,12 @@ export class WeatherService {
             if (cached) return cached.data;
 
             const data = await this.#fetchJSON(
-                `https://previous-runs-api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(this.latitude)}&longitude=${encodeURIComponent(this.longitude)}&hourly=temperature_2m,temperature_2m_previous_day1,temperature_2m_previous_day3&past_days=2&forecast_days=0&timezone=auto`
+                previousRunsUrl(this.latitude, this.longitude, {
+                    hourly: 'temperature_2m,temperature_2m_previous_day1,temperature_2m_previous_day3',
+                    past_days: 2,
+                    forecast_days: 0,
+                    timezone: 'auto'
+                })
             );
 
             const hourly = data?.hourly;
