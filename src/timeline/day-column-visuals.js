@@ -1,8 +1,6 @@
 // DayColumn.js - 3D Weather Timeline Visualization Component
 // Represents a single day as a vertical column with temperature gradient and weather particles
 
-// @ts-nocheck
-// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 import * as THREE from 'three';
 
 // --- Shader Code for Temperature Gradient ---
@@ -142,6 +140,10 @@ const WEATHER_CONDITIONS = {
     STORM: [95, 96, 99]
 };
 
+/**
+ * @param {number} code - WMO weather code
+ * @returns {'clear'|'cloudy'|'rain'|'snow'|'storm'}
+ */
 export function getConditionFromCode(code) {
     if (WEATHER_CONDITIONS.CLEAR.includes(code)) return 'clear';
     if (WEATHER_CONDITIONS.CLOUDY.includes(code)) return 'cloudy';
@@ -153,6 +155,11 @@ export function getConditionFromCode(code) {
 
 // --- Mini Particle System for Weather State ---
 export class MiniParticleSystem {
+    /**
+     * @param {'clear'|'cloudy'|'rain'|'snow'|'storm'} condition
+     * @param {THREE.Object3D} parentMesh
+     * @param {number} [radius]
+     */
     constructor(condition, parentMesh, radius = 1) {
         this.condition = condition;
         this.parentMesh = parentMesh;
@@ -382,14 +389,17 @@ export class MiniParticleSystem {
     }
 
     updateRain(_delta, _time) {
+        const velocities = this.velocities;
+        if (!velocities) return;
+
         const positions = this.mesh.geometry.attributes.position.array;
 
-        for (let i = 0; i < this.velocities.length; i++) {
+        for (let i = 0; i < velocities.length; i++) {
             const i6 = i * 6;
 
             // Move rain down
-            positions[i6 + 1] += this.velocities[i];
-            positions[i6 + 4] += this.velocities[i];
+            positions[i6 + 1] += velocities[i];
+            positions[i6 + 4] += velocities[i];
 
             // Reset if below bottom
             if (positions[i6 + 1] < -2.5) {
@@ -472,6 +482,11 @@ export class MiniParticleSystem {
 
 // --- Accuracy Ring for Historical Days ---
 export class AccuracyRing {
+    /**
+     * @param {TimelineForecastAccuracy} accuracy
+     * @param {THREE.Object3D} parentMesh
+     * @param {number} radius
+     */
     constructor(accuracy, parentMesh, radius) {
         this.accuracy = accuracy; // { mae, rmse, skill, tempScore }
         this.parentMesh = parentMesh;
@@ -483,7 +498,10 @@ export class AccuracyRing {
     }
 
     init() {
-        const { skill } = this.accuracy;
+        // skill is null when there's not enough data to score (legitimate no-data
+        // case); treat it as 0 (lowest accuracy) which is also what `null` coerces
+        // to in the arithmetic comparisons below, so this is behavior-preserving.
+        const skill = this.accuracy.skill ?? 0;
 
         // Color based on skill score
         // Green (>0.7): Highly accurate

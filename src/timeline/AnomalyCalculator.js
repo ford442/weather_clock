@@ -1,5 +1,3 @@
-// @ts-nocheck
-// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 /**
  * AnomalyCalculator.js
  *
@@ -24,6 +22,9 @@
  * @property {string} date - ISO date string (YYYY-MM-DD)
  * @property {number} temperature - Daily temperature value
  * @property {number} [zScore] - Pre-calculated z-score
+ * @property {number} [anomaly] - Set by processDays()
+ * @property {string} [classification] - Set by processDays(), see classifyZScore()
+ * @property {number} [_originalIndex] - Optional index into the caller's source array, echoed onto detected events
  */
 
 /**
@@ -164,7 +165,7 @@ export class AnomalyCalculator {
      * Classifies a z-score into meteorological categories.
      *
      * @param {number} zScore - The z-score to classify
-     * @returns {string} Classification category
+     * @returns {'significantly_above_normal'|'above_normal'|'near_normal'|'below_normal'|'significantly_below_normal'} Classification category
      */
     classifyZScore(zScore) {
         if (zScore > ZSCORE_THRESHOLDS.EXTREMELY_HOT) {
@@ -298,11 +299,11 @@ export class AnomalyCalculator {
      * Creates an ExtremeWeatherEvent object from a sequence of days.
      *
      * @private
-     * @param {DayData[]} sequence - Array of consecutive days
+     * @param {DayData[]} sequence - Array of consecutive days (zScore already populated by the caller)
      * @returns {ExtremeWeatherEvent} Formatted event object
      */
     _createEventFromSequence(sequence) {
-        const zScores = sequence.map((d) => d.zScore);
+        const zScores = sequence.map((d) => /** @type {number} */ (d.zScore));
         const maxZScore = Math.max(...zScores);
         const minZScore = Math.min(...zScores);
         const avgZScore = zScores.reduce((a, b) => a + b, 0) / zScores.length;
@@ -346,7 +347,7 @@ export class AnomalyCalculator {
      * Batch processes an array of days to add z-scores and anomalies.
      *
      * @param {DayData[]} days - Array of day data objects
-     * @returns {DayData[]} Array with added zScore and anomaly properties
+     * @returns {Array<DayData & {zScore: number, anomaly: number, classification: string}>} Array with added zScore and anomaly properties
      */
     processDays(days) {
         return days.map((day) => {

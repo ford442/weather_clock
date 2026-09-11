@@ -1,12 +1,18 @@
-// @ts-nocheck
 import { getWeatherAtTime } from '../weather-simulation.js';
 
-// Draws a ±6 h bezier temperature curve on #sparkline canvas.
+/**
+ * Draws a ±6 h bezier temperature curve on #sparkline canvas.
+ *
+ * @param {Date} simulationTime
+ * @param {{timeline?: WeatherSnapshot[]}|null|undefined} weatherData
+ * @param {import('../weather.js').WeatherService|null} [weatherService]
+ */
 export function drawSparkline(simulationTime, weatherData, weatherService) {
-    const canvas = document.getElementById('sparkline');
+    const canvas = /** @type {HTMLCanvasElement|null} */ (document.getElementById('sparkline'));
     if (!canvas || !weatherData || !weatherData.timeline) return;
 
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const W = canvas.width;
     const H = canvas.height;
     ctx.clearRect(0, 0, W, H);
@@ -20,7 +26,7 @@ export function drawSparkline(simulationTime, weatherData, weatherService) {
     for (let t = startMs; t <= endMs; t += 30 * 60 * 1000) {
         const w = getWeatherAtTime(new Date(t), weatherData.timeline);
         if (w) {
-            const dispTemp = weatherService ? weatherService.convertTemp(w.temp) : w.temp;
+            const dispTemp = weatherService ? weatherService.convertTemp(w.temp ?? 0) : (w.temp ?? 0);
             pts.push({ t, y: dispTemp });
         }
     }
@@ -66,7 +72,7 @@ export function drawSparkline(simulationTime, weatherData, weatherService) {
     const nowW = getWeatherAtTime(simulationTime, weatherData.timeline);
     if (nowW) {
         const nx = toX(simulationTime.getTime());
-        const ny = toY(weatherService ? weatherService.convertTemp(nowW.temp) : nowW.temp);
+        const ny = toY(weatherService ? weatherService.convertTemp(nowW.temp ?? 0) : (nowW.temp ?? 0));
         ctx.beginPath();
         ctx.arc(nx, ny, 3.5, 0, Math.PI * 2);
         ctx.fillStyle = '#fff';

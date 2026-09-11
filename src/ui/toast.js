@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Show a toast notification.
  * @param {string} message

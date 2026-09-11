@@ -1,9 +1,9 @@
-// @ts-nocheck
 import { animateModeCamera } from './camera-transition.js';
 
 const CLOCK_UI_SELECTORS = ['#panel-left', '#panel-right', '#panel-advanced', '#timeline-scrubber', '.center-stats'];
 
 export class ClockModeAdapter {
+    /** @param {import('../ModeController.js').ModeController} owner */
     constructor(owner) {
         this.owner = owner;
     }
@@ -13,9 +13,10 @@ export class ClockModeAdapter {
         this.owner.clockCameraState.target.copy(this.owner.controls.target);
     }
 
+    /** @param {boolean} visible */
     setVisible(visible) {
         CLOCK_UI_SELECTORS.forEach((selector) => {
-            const element = document.querySelector(selector);
+            const element = /** @type {HTMLElement|null} */ (document.querySelector(selector));
             if (!element) return;
             element.classList.toggle('hidden', !visible);
             element.style.opacity = visible ? '' : '0';
@@ -23,7 +24,8 @@ export class ClockModeAdapter {
         });
     }
 
-    async enter() {
+    /** @param {{from?: import('../ModeController.js').AppMode}} [_transition] */
+    async enter(_transition) {
         const currentPosition = this.owner.camera.position.clone();
         const currentTarget = this.owner.controls.target.clone();
         await animateModeCamera(
@@ -37,7 +39,8 @@ export class ClockModeAdapter {
         this.setVisible(true);
     }
 
-    exit() {
+    /** @param {{to?: import('../ModeController.js').AppMode}} [_transition] */
+    exit(_transition) {
         this.saveCameraState();
         this.owner.controls.enabled = false;
         this.setVisible(false);

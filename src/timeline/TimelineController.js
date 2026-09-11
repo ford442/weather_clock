@@ -8,8 +8,6 @@
  * - Selection and highlighting of days
  */
 
-// @ts-nocheck
-// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 import * as THREE from 'three';
 import { DayColumn } from './DayColumn.js';
 import { TimelineData } from './TimelineData.js';
@@ -23,22 +21,32 @@ const TIMELINE_CONFIG = {
 };
 
 export class TimelineController {
+    /**
+     * @param {THREE.Scene} scene
+     * @param {THREE.Camera} camera
+     * @param {THREE.WebGLRenderer|import('three/webgpu').WebGPURenderer} renderer
+     */
     constructor(scene, camera, renderer) {
         this.scene = scene;
         this.camera = camera;
         this.renderer = renderer;
 
         this.timelineData = new TimelineData();
+        /** @type {DayColumn[]} */
         this.dayColumns = []; // Array of DayColumn instances
+        /** @type {THREE.Group|null} */
         this.timelineGroup = null; // Group containing all timeline objects
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
 
         this.isVisible = false;
         this.isInteractionsEnabled = false;
+        /** @type {DayColumn|null} */
         this.selectedDay = null;
+        /** @type {DayColumn|null} */
         this.hoveredDay = null;
 
+        /** @type {((data: import('./DayColumn.js').DayColumnData) => void)|null} */
         this.onDaySelect = null; // Callback when a day is selected
 
         this.init();
@@ -61,6 +69,8 @@ export class TimelineController {
 
     /**
      * Load timeline data for a location
+     * @param {number} lat
+     * @param {number} lon
      */
     async loadData(lat, lon) {
         if (!lat || !lon) {
@@ -88,6 +98,7 @@ export class TimelineController {
 
     /**
      * Create DayColumn instances from day data
+     * @param {import('./DayColumn.js').DayColumnData[]} days
      */
     createDayColumns(days) {
         const totalWidth = (days.length - 1) * TIMELINE_CONFIG.columnSpacing;
@@ -157,6 +168,7 @@ export class TimelineController {
 
     /**
      * Handle mouse move for hover effects
+     * @param {MouseEvent} event
      */
     onMouseMove(event) {
         if (!this.isInteractionsEnabled || !this.isVisible) {
@@ -173,6 +185,7 @@ export class TimelineController {
 
     /**
      * Handle click for day selection
+     * @param {MouseEvent} event
      */
     onClick(event) {
         if (!this.isInteractionsEnabled || !this.isVisible) {
@@ -180,13 +193,14 @@ export class TimelineController {
         }
 
         // Don't trigger if clicking on UI
-        if (event.target.closest('.timeline-ui') || event.target.closest('.mode-toggle-btn')) {
+        const target = /** @type {HTMLElement|null} */ (event.target);
+        if (target?.closest('.timeline-ui') || target?.closest('.mode-toggle-btn')) {
             return;
         }
 
         const intersected = this.raycast();
         if (intersected) {
-            this.selectDay(intersected.dayColumn);
+            this.selectDay(intersected);
         } else {
             this.deselectDay();
         }
@@ -217,11 +231,13 @@ export class TimelineController {
 
     /**
      * Perform raycast against day columns
+     * @returns {DayColumn|null}
      */
     raycast() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
 
         // Get all meshes from day columns
+        /** @type {THREE.Object3D[]} */
         const meshes = [];
         this.dayColumns.forEach((column) => {
             const columnMeshes = column.getRaycastMeshes();
@@ -233,7 +249,7 @@ export class TimelineController {
         if (intersects.length > 0) {
             // Find which day column was hit
             const hitMesh = intersects[0].object;
-            return this.dayColumns.find((column) => column.containsMesh(hitMesh));
+            return this.dayColumns.find((column) => column.containsMesh(hitMesh)) ?? null;
         }
 
         return null;
@@ -241,6 +257,7 @@ export class TimelineController {
 
     /**
      * Select a day
+     * @param {DayColumn} dayColumn
      */
     selectDay(dayColumn) {
         // Deselect previous
@@ -289,6 +306,7 @@ export class TimelineController {
 
     /**
      * Set timeline visibility
+     * @param {boolean} visible
      */
     setVisible(visible) {
         this.isVisible = visible;
@@ -299,6 +317,7 @@ export class TimelineController {
 
     /**
      * Update method (called each frame)
+     * @param {number} deltaTime
      */
     update(deltaTime) {
         if (!this.isVisible) {

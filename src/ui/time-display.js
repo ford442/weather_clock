@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { formatDate, formatTime } from '../i18n/strings.js';
 
 const UI_CONFIG = {
@@ -16,11 +15,16 @@ const UI_CONFIG = {
 // Name kept for compatibility with existing callers; formatting is now
 // locale-aware via Intl.DateTimeFormat (falls back to a 24h-style display
 // for locales that don't use 12-hour clocks).
+/** @param {Date} date */
 export function formatTime12(date) {
     return formatTime(date, { hour: 'numeric', minute: '2-digit' });
 }
 
 // ── updateTimeDisplay ────────────────────────────────────────────────────────
+/**
+ * @param {Date} simulationTime
+ * @param {boolean} isTimeWarping
+ */
 export function updateTimeDisplay(simulationTime, isTimeWarping) {
     const timeDisplay = document.getElementById('time-display');
     if (!timeDisplay) return;
@@ -49,6 +53,11 @@ const PLAY_ICON_SVG = `<polygon points="5,3 13,8 5,13" stroke="currentColor" fil
 const PAUSE_ICON_SVG = `<line x1="6" y1="3" x2="6" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="3" x2="10" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`;
 
 // ── updateTimelineScrubber ───────────────────────────────────────────────────
+/**
+ * @param {Date} simulationTime
+ * @param {boolean} isPlaying
+ * @param {number} speed
+ */
 export function updateTimelineScrubber(simulationTime, isPlaying, speed) {
     const playIcon = document.getElementById('scrubber-play-icon');
     const timeChip = document.getElementById('scrubber-time-chip');
@@ -85,11 +94,11 @@ export function updateTimelineScrubber(simulationTime, isPlaying, speed) {
  */
 export function updateSunriseSunset(sunrise, sunset) {
     const riseEl = document.getElementById('sunrise-time');
-    if (riseEl && sunrise instanceof Date && !isNaN(sunrise)) {
+    if (riseEl && sunrise instanceof Date && !isNaN(sunrise.getTime())) {
         riseEl.textContent = formatTime12(sunrise);
     }
     const setEl = document.getElementById('sunset-time');
-    if (setEl && sunset instanceof Date && !isNaN(sunset)) {
+    if (setEl && sunset instanceof Date && !isNaN(sunset.getTime())) {
         setEl.textContent = formatTime12(sunset);
     }
 }

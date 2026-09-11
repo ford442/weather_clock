@@ -1,11 +1,14 @@
-// @ts-nocheck
 import { animateModeCamera, MODE_CAMERA } from './camera-transition.js';
 
 export class TimelineModeAdapter {
+    /** @param {import('../ModeController.js').ModeController} owner */
     constructor(owner) {
         this.owner = owner;
+        /** @type {import('../timeline/TimelineController.js').TimelineController|null} */
         this.controller = null;
+        /** @type {import('../timeline/TimelineUI.js').TimelineUI|null} */
         this.ui = null;
+        /** @type {Promise<{TimelineController: typeof import('../timeline/TimelineController.js').TimelineController, TimelineUI: typeof import('../timeline/TimelineUI.js').TimelineUI}>|null} */
         this.modulesPromise = null;
     }
 
@@ -35,17 +38,19 @@ export class TimelineModeAdapter {
 
         this.controller = new TimelineController(this.owner.scene, this.owner.camera, this.owner.renderer);
         this.ui = new TimelineUI(container);
-        await this.controller.loadData(location.lat, location.lon);
-        this.controller.onDaySelect = (dayData) => this.ui.showDayDetails(dayData);
-        this.ui.setDayProxies(this.controller.dayColumns, (column) => this.controller.selectDay(column));
+        await this.controller.loadData(/** @type {number} */ (location.lat), /** @type {number} */ (location.lon));
+        this.controller.onDaySelect = (dayData) => this.ui?.showDayDetails(dayData);
+        this.ui.setDayProxies(this.controller.dayColumns, (column) => this.controller?.selectDay(column));
     }
 
+    /** @param {boolean} visible */
     setVisible(visible) {
         document.getElementById('timeline-ui-container')?.classList.toggle('visible', visible);
         this.controller?.setVisible(visible);
     }
 
-    async enter() {
+    /** @param {{from?: import('../ModeController.js').AppMode}} [_transition] */
+    async enter(_transition) {
         this.owner.controls.enabled = false;
         await this.init();
         const fromPosition = this.owner.camera.position.clone();
@@ -61,7 +66,8 @@ export class TimelineModeAdapter {
         this.controller?.enableInteractions();
     }
 
-    exit() {
+    /** @param {{to?: import('../ModeController.js').AppMode}} [_transition] */
+    exit(_transition) {
         this.controller?.disableInteractions();
         this.setVisible(false);
     }

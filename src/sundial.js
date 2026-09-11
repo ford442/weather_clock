@@ -73,7 +73,7 @@ export function createSundial() {
 
         // Add hour numbers
         const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
+        const context = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
         canvas.width = 64;
         canvas.height = 64;
         context.fillStyle = '#000000';

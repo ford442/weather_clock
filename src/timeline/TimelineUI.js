@@ -8,11 +8,10 @@
  * - Weather condition indicators
  */
 
-// @ts-nocheck
-// Phase 1 opt-out: the timeline subsystem retains its existing local JSDoc models.
 import { formatDate } from '../i18n/strings.js';
 
 export class TimelineUI {
+    /** @param {HTMLElement} container */
     constructor(container) {
         this.container = container;
         this.currentPanel = null;
@@ -96,15 +95,25 @@ export class TimelineUI {
      * Cache DOM element references
      */
     cacheElements() {
+        /** @type {HTMLElement|null} */
         this.detailPanel = this.container.querySelector('#day-detail-panel');
+        /** @type {HTMLElement|null} */
         this.detailDate = this.container.querySelector('#detail-date');
+        /** @type {HTMLElement|null} */
         this.detailHigh = this.container.querySelector('#detail-high');
+        /** @type {HTMLElement|null} */
         this.detailLow = this.container.querySelector('#detail-low');
+        /** @type {HTMLElement|null} */
         this.detailCondition = this.container.querySelector('#detail-condition');
+        /** @type {HTMLElement|null} */
         this.detailAnomaly = this.container.querySelector('#detail-anomaly');
+        /** @type {HTMLElement|null} */
         this.detailAccuracy = this.container.querySelector('#detail-accuracy');
+        /** @type {HTMLElement|null} */
         this.accuracyValue = this.container.querySelector('#accuracy-value');
+        /** @type {HTMLElement|null} */
         this.detailClose = this.container.querySelector('#detail-close');
+        /** @type {HTMLElement|null} */
         this.dayProxyList = this.container.querySelector('#timeline-day-proxies');
     }
 
@@ -116,13 +125,14 @@ export class TimelineUI {
      * @param {(column: import('./DayColumn.js').DayColumn) => void} onSelect
      */
     setDayProxies(dayColumns, onSelect) {
-        if (!this.dayProxyList) return;
-        this.dayProxyList.innerHTML = '';
+        const dayProxyList = this.dayProxyList;
+        if (!dayProxyList) return;
+        dayProxyList.innerHTML = '';
         (dayColumns || []).forEach((column, i) => {
             const data = column.getData ? column.getData() : column.data;
             const date = data?.date ? new Date(data.date) : null;
             const label =
-                date && !isNaN(date)
+                date && !isNaN(date.getTime())
                     ? formatDate(date, { weekday: 'short', month: 'short', day: 'numeric' })
                     : `Day ${i + 1}`;
 
@@ -138,16 +148,18 @@ export class TimelineUI {
                     onSelect?.(column);
                 } else if (event.key === 'ArrowRight') {
                     event.preventDefault();
-                    this.dayProxyList.children[Math.min(this.dayProxyList.children.length - 1, i + 1)]?.focus();
+                    /** @type {HTMLElement|undefined} */ (
+                        this.dayProxyList?.children[Math.min((this.dayProxyList?.children.length ?? 1) - 1, i + 1)]
+                    )?.focus();
                 } else if (event.key === 'ArrowLeft') {
                     event.preventDefault();
-                    this.dayProxyList.children[Math.max(0, i - 1)]?.focus();
+                    /** @type {HTMLElement|undefined} */ (this.dayProxyList?.children[Math.max(0, i - 1)])?.focus();
                 }
             });
             btn.addEventListener('focus', () => column.setHovered?.(true));
             btn.addEventListener('blur', () => column.setHovered?.(false));
 
-            this.dayProxyList.appendChild(btn);
+            dayProxyList.appendChild(btn);
         });
     }
 
@@ -471,38 +483,67 @@ export class TimelineUI {
 
     /**
      * Show day details panel
+     * @param {TimelineDayData|null|undefined} dayData
      */
     showDayDetails(dayData) {
         if (!dayData) return;
+
+        // Cached elements are always present once cacheElements() has run against
+        // the fixed template above; guard defensively so a missing element is a
+        // no-op rather than a crash (matches hideDayDetails()'s pattern below).
+        const {
+            detailDate,
+            detailHigh,
+            detailLow,
+            detailCondition,
+            detailAnomaly,
+            detailAccuracy,
+            accuracyValue,
+            detailPanel
+        } = this;
+        if (
+            !detailDate ||
+            !detailHigh ||
+            !detailLow ||
+            !detailCondition ||
+            !detailAnomaly ||
+            !detailAccuracy ||
+            !accuracyValue ||
+            !detailPanel
+        ) {
+            return;
+        }
 
         // Format date
         const date = new Date(dayData.date);
         const dateStr = formatDate(date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
         // Update content
-        this.detailDate.textContent = dateStr;
-        this.detailHigh.textContent = `${Math.round(dayData.tempMax)}°`;
-        this.detailLow.textContent = `${Math.round(dayData.tempMin)}°`;
-        this.detailCondition.textContent = this.formatCondition(dayData.condition);
+        detailDate.textContent = dateStr;
+        detailHigh.textContent = `${Math.round(dayData.tempMax ?? 0)}°`;
+        detailLow.textContent = `${Math.round(dayData.tempMin ?? 0)}°`;
+        detailCondition.textContent = this.formatCondition(dayData.condition);
 
         // Anomaly display
         const anomaly = dayData.tempAnomaly;
         const anomalySign = anomaly > 0 ? '+' : '';
-        this.detailAnomaly.textContent = `${anomalySign}${anomaly.toFixed(1)}° from normal`;
-        this.detailAnomaly.className = 'detail-anomaly' + (anomaly > 0 ? ' positive' : anomaly < 0 ? ' negative' : '');
+        detailAnomaly.textContent = `${anomalySign}${anomaly.toFixed(1)}° from normal`;
+        detailAnomaly.className = 'detail-anomaly' + (anomaly > 0 ? ' positive' : anomaly < 0 ? ' negative' : '');
 
         // Accuracy (only for historical days with predictions)
         if (dayData.accuracy) {
-            this.detailAccuracy.style.display = 'block';
-            const accuracyPercent = Math.round(dayData.accuracy.tempScore * 100);
-            this.accuracyValue.textContent = `${accuracyPercent}%`;
-            this.accuracyValue.style.color = this.getAccuracyColor(accuracyPercent);
+            detailAccuracy.style.display = 'block';
+            // tempScore is always set alongside accuracy by enrichWithAccuracy().
+            const tempScore = /** @type {number} */ (dayData.accuracy.tempScore);
+            const accuracyPercent = Math.round(tempScore * 100);
+            accuracyValue.textContent = `${accuracyPercent}%`;
+            accuracyValue.style.color = this.getAccuracyColor(accuracyPercent);
         } else {
-            this.detailAccuracy.style.display = 'none';
+            detailAccuracy.style.display = 'none';
         }
 
         // Show panel
-        this.detailPanel.classList.add('visible');
+        detailPanel.classList.add('visible');
     }
 
     /**
@@ -516,6 +557,8 @@ export class TimelineUI {
 
     /**
      * Format condition for display
+     * @param {string|null|undefined} condition
+     * @returns {string}
      */
     formatCondition(condition) {
         if (!condition) return 'Unknown';
@@ -524,6 +567,8 @@ export class TimelineUI {
 
     /**
      * Get color based on accuracy percentage
+     * @param {number} percent
+     * @returns {string}
      */
     getAccuracyColor(percent) {
         if (percent >= 90) return '#22c55e'; // Green
@@ -533,6 +578,7 @@ export class TimelineUI {
 
     /**
      * Update location display
+     * @param {string|null|undefined} locationName
      */
     updateLocation(locationName) {
         const subtitle = this.container.querySelector('.timeline-subtitle');
@@ -543,6 +589,7 @@ export class TimelineUI {
 
     /**
      * Show/hide loading indicator
+     * @param {boolean} isLoading
      */
     setLoading(isLoading) {
         const header = this.container.querySelector('.timeline-header');

@@ -4,12 +4,12 @@ import { getSeverity } from './weatherLighting.js';
 /**
  * Ensure weather data object has rainIntensity, snowIntensity, and fogIntensity
  * @param {WeatherSnapshot|null|undefined} data - Weather data point
- * @returns {WeatherSnapshot|null} Data point with intensities populated
+ * @returns {WeatherSnapshotWithIntensities|null} Data point with intensities populated
  */
 export function ensureIntensities(data) {
     if (!data) return null;
     if (data.rainIntensity !== undefined && data.snowIntensity !== undefined && data.fogIntensity !== undefined) {
-        return data;
+        return /** @type {WeatherSnapshotWithIntensities} */ (data);
     }
 
     let rainVal = (data.rain || 0) + (data.showers || 0);
@@ -72,18 +72,23 @@ export function ensureIntensities(data) {
 export function getWeatherAtTime(time, timeline) {
     if (!timeline || timeline.length === 0) return null;
 
+    // Every hourly point on this timeline is built with `time` set (see
+    // weather.js's hourly-point construction), so it's safe to narrow the
+    // otherwise-optional WeatherSnapshot.time to non-null for this function.
+    const points = /** @type {Array<WeatherSnapshot & {time: Date}>} */ (timeline);
+
     const t = time.getTime();
 
     // Find surrounding data points
-    let prev = timeline[0];
-    let next = timeline[timeline.length - 1];
+    let prev = points[0];
+    let next = points[points.length - 1];
 
-    for (let i = 0; i < timeline.length - 1; i++) {
-        const t1 = timeline[i].time.getTime();
-        const t2 = timeline[i + 1].time.getTime();
+    for (let i = 0; i < points.length - 1; i++) {
+        const t1 = points[i].time.getTime();
+        const t2 = points[i + 1].time.getTime();
         if (t >= t1 && t <= t2) {
-            prev = timeline[i];
-            next = timeline[i + 1];
+            prev = points[i];
+            next = points[i + 1];
             break;
         }
     }
@@ -102,8 +107,11 @@ export function getWeatherAtTime(time, timeline) {
         factor = 1;
     }
 
-    const prevInt = ensureIntensities(prev);
-    const nextInt = ensureIntensities(next);
+    // prev/next always come from the timeline array (never null), so
+    // ensureIntensities() — which only returns null for a null/undefined input — can't
+    // actually return null here.
+    const prevInt = /** @type {WeatherSnapshotWithIntensities} */ (ensureIntensities(prev));
+    const nextInt = /** @type {WeatherSnapshotWithIntensities} */ (ensureIntensities(next));
 
     // Interpolate simple values, pick discrete for codes
     const weatherCode = factor < 0.5 ? prevInt.weatherCode : nextInt.weatherCode;
@@ -151,12 +159,13 @@ export function getWeatherAtTime(time, timeline) {
 /**
  * Get weather data for current, past, and forecast times
  * @param {Date} simulationTime - Current simulation time
- * @param {{timeline?: WeatherSnapshot[], current?: WeatherSnapshot, past?: WeatherSnapshot, forecast?: WeatherSnapshot}|null} weatherData
- * @returns {{current: WeatherSnapshot, past: WeatherSnapshot, forecast: WeatherSnapshot}|null}
+ * @param {WeatherData|null} weatherData
+ * @returns {{current: WeatherSnapshot, past: WeatherSnapshot|null, forecast: WeatherSnapshot|null}|null}
  */
 export function getActiveWeatherData(simulationTime, weatherData) {
     if (!weatherData) return null;
 
+    /** @type {WeatherSnapshot|null} */
     let simWeather = null;
     if (weatherData.timeline) {
         simWeather = getWeatherAtTime(simulationTime, weatherData.timeline);
@@ -164,7 +173,7 @@ export function getActiveWeatherData(simulationTime, weatherData) {
 
     // Fallback if no timeline
     if (!simWeather && weatherData) {
-        simWeather = weatherData.current;
+        simWeather = weatherData.current ?? null;
     }
 
     if (!simWeather) return null;
@@ -177,12 +186,12 @@ export function getActiveWeatherData(simulationTime, weatherData) {
         ? getWeatherAtTime(new Date(simulationTime.getTime() + 3 * 3600 * 1000), weatherData.timeline)
         : weatherData.forecast || simWeather;
 
-    const current = ensureIntensities(simWeather);
+    // simWeather is guaranteed non-null past the `if (!simWeather) return null;` above,
+    // and ensureIntensities() only returns null for a null/undefined input.
+    const current = /** @type {WeatherSnapshot} */ (ensureIntensities(simWeather));
     // Air quality is only ever "current" (no hourly/forecast timeline for it), so it's
     // attached directly rather than interpolated like the rest of `current`.
-    if (current) {
-        current.aqi = weatherData.airQuality?.usAqi ?? null;
-    }
+    current.aqi = weatherData.airQuality?.usAqi ?? null;
 
     return {
         current,

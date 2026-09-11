@@ -11,6 +11,7 @@
 import { TimelineData } from '../timeline/TimelineData.js';
 
 export class ForecastController {
+    /** @param {import('../weather.js').WeatherService|null} [weatherService] */
     constructor(scene, camera, renderer, weatherService = null) {
         this.scene = scene;
         this.camera = camera;
@@ -32,6 +33,7 @@ export class ForecastController {
         this.isLoading = false;
     }
 
+    /** @param {DailyForecastDay[]|null} [prefetchedDaily] */
     async loadData(lat, lon, prefetchedDaily = null) {
         if (this.isLoading) return;
         this.isLoading = true;
@@ -66,8 +68,12 @@ export class ForecastController {
         if (!this.days[index]) return;
         this.focusedIndex = index;
         const day = this.days[index];
+        // getDailyForecastRepresentativeTime's JSDoc marks lat/lon as required numbers, but its
+        // implementation falls back to `this.latitude`/`this.longitude` via `??` when omitted
+        // (see weather.js) — cast to satisfy the declared signature without changing this call.
+        const noLatLon = /** @type {number} */ (/** @type {unknown} */ (undefined));
         const repDate = this.weatherService
-            ? this.weatherService.getDailyForecastRepresentativeTime(day)
+            ? this.weatherService.getDailyForecastRepresentativeTime(day, noLatLon, noLatLon)
             : this.timelineData.getRepresentativeTimeForDay(day);
         if (this.onDayFocus) {
             this.onDayFocus(index, day, repDate);

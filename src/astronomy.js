@@ -12,10 +12,10 @@ export class AstronomyService {
     /**
      * Calculate Sun and Moon positions for a given date and location.
      * @param {Date} date - The date/time to calculate for.
-     * @param {number} lat - Latitude.
-     * @param {number} lon - Longitude.
+     * @param {number|null} lat - Latitude. Falls back to New York when null/falsy.
+     * @param {number|null} lon - Longitude. Falls back to New York when null/falsy.
      * @param {number} distance - Distance from origin for the returned vectors.
-     * @returns {Object} { sunPosition: Vector3, moonPosition: Vector3, moonIllumination: Object }
+     * @returns {{sunPosition: THREE.Vector3, moonPosition: THREE.Vector3, moonIllumination: {fraction: number, phase: number, angle: number}, sunrise: Date, sunset: Date}}
      */
     update(date, lat, lon, distance = 20) {
         // Default to New York if no location

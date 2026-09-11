@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { calculateMoonPhase } from '../moonPhase.js';
 import { drawPressureGauge } from './gauge.js';
 import { formatTime12 } from './time-display.js';
@@ -12,13 +11,35 @@ function hexToRgbTriplet(hex) {
 
 let prefersReducedMotion = false;
 
+/** @param {boolean} reducedMotion */
 export function setReducedMotionPreference(reducedMotion) {
     prefersReducedMotion = reducedMotion;
 }
 
+/**
+ * Aggregate panel data consumed by {@link updateWeatherDisplay}. Assembled by
+ * main.js from WeatherService + AstronomyService + timeline accuracy output.
+ * @typedef {Object} WeatherDisplayData
+ * @property {string|null} [location]
+ * @property {WeatherSnapshot} [current]
+ * @property {WeatherSnapshot} [past]
+ * @property {WeatherSnapshot} [forecast]
+ * @property {Date|string} [sunrise]
+ * @property {Date|string} [sunset]
+ * @property {{temp?: number, description?: string}|null} [historicalYearAgo]
+ * @property {ClockForecastAccuracy|null} [accuracy]
+ * @property {Array<{name: string, temp: number}>|null} [regional]
+ */
+
 // ── countTo: rAF-driven number animation (800 ms, ease-out cubic) ──────────
+/** @type {Map<HTMLElement, number>} */
 const _countState = new Map();
 
+/**
+ * @param {HTMLElement|null} el
+ * @param {number} newVal
+ * @param {string} [suffix]
+ */
 export function countTo(el, newVal, suffix = '') {
     if (!el) return;
     const currentVal = parseFloat(el.dataset.animVal ?? el.textContent) || 0;
@@ -28,7 +49,7 @@ export function countTo(el, newVal, suffix = '') {
         return;
     }
 
-    if (_countState.has(el)) cancelAnimationFrame(_countState.get(el));
+    if (_countState.has(el)) cancelAnimationFrame(/** @type {number} */ (_countState.get(el)));
 
     if (prefersReducedMotion) {
         el.textContent = newVal + suffix;
@@ -65,6 +86,10 @@ export function countTo(el, newVal, suffix = '') {
 }
 
 // ── updateWeatherDisplay ─────────────────────────────────────────────────────
+/**
+ * @param {WeatherDisplayData|null|undefined} data
+ * @param {import('../weather.js').WeatherService} weatherService
+ */
 export function updateWeatherDisplay(data, weatherService) {
     if (!data) return;
 
@@ -113,7 +138,7 @@ export function updateWeatherDisplay(data, weatherService) {
         setText('past-description', data.past.description);
         setTemp('past-temp', data.past.temp);
         setTemp('past-feels-like', data.past.apparentTemp ?? data.past.temp);
-        const pastWindConverted = weatherService.convertWind(data.past.windSpeed);
+        const pastWindConverted = weatherService.convertWind(data.past.windSpeed ?? 0);
         const wind = document.getElementById('past-wind');
         if (wind) {
             if (!prefersReducedMotion) {
@@ -154,7 +179,7 @@ export function updateWeatherDisplay(data, weatherService) {
 
     // ── Advanced: accuracy ──
     const accuracyDeltaEl = document.getElementById('accuracy-delta');
-    const accuracyTabBtn = document.querySelector('.tab-btn[data-tab="accuracy"]');
+    const accuracyTabBtn = /** @type {HTMLElement|null} */ (document.querySelector('.tab-btn[data-tab="accuracy"]'));
 
     if (data.accuracy) {
         // MAE is a temperature *delta*: °C → °F scales by 9/5 with no offset
@@ -187,8 +212,8 @@ export function updateWeatherDisplay(data, weatherService) {
             if (accuracyTabBtn.classList.contains('active')) {
                 accuracyTabBtn.classList.remove('active');
                 document.querySelector('.tab-btn[data-tab="history"]')?.classList.add('active');
-                document.getElementById('tab-accuracy').classList.remove('active');
-                document.getElementById('tab-history').classList.add('active');
+                document.getElementById('tab-accuracy')?.classList.remove('active');
+                document.getElementById('tab-history')?.classList.add('active');
             }
         }
     }
@@ -222,15 +247,19 @@ export function updateWeatherDisplay(data, weatherService) {
 // Offscreen text alternative for the 3D scene: screen-reader users get an
 // equivalent summary of what's rendered, built from the same panel data
 // above rather than duplicating any weather logic.
+/**
+ * @param {WeatherDisplayData|null|undefined} data
+ * @param {import('../weather.js').WeatherService} weatherService
+ */
 export function updateSceneSummary(data, weatherService) {
     const el = document.getElementById('scene-summary');
     if (!el || !data?.current) return;
 
     const unit = weatherService.unit === 'imperial' ? 'F' : 'C';
-    const temp = formatNumber(Math.round(weatherService.convertTemp(data.current.temp)), {
+    const temp = formatNumber(Math.round(weatherService.convertTemp(data.current.temp ?? 0)), {
         maximumFractionDigits: 0
     });
-    const precipProb = data.current.precipProb ?? data.forecast?.precipProb;
+    const precipProb = data.current.precipProb ?? data.forecast?.precipProb ?? 0;
     const precip = precipProb > 20 ? `${Math.round(precipProb)}% chance of precipitation` : '';
     const sunset = data.sunset ? formatTime12(new Date(data.sunset)) : '';
 
@@ -244,6 +273,7 @@ export function updateSceneSummary(data, weatherService) {
 }
 
 // ── updateUnitButton ─────────────────────────────────────────────────────────
+/** @param {import('../weather.js').WeatherService} weatherService */
 export function updateUnitButton(weatherService) {
     const toggle = document.getElementById('unit-toggle');
     if (!toggle) return;
@@ -255,8 +285,9 @@ export function updateUnitButton(weatherService) {
 }
 
 // ── updateQualityButton ──────────────────────────────────────────────────────
+/** @param {QualityTier} tier */
 export function updateQualityButton(tier) {
-    const btns = document.querySelectorAll('.quality-btn');
+    const btns = /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.quality-btn'));
     btns.forEach((btn) => {
         if (btn.dataset.quality === tier) {
             btn.classList.add('active');
@@ -276,6 +307,7 @@ export function updateQualityButton(tier) {
 window.updateQualityButton = updateQualityButton;
 
 // ── updateWindCompass ────────────────────────────────────────────────────────
+/** @param {number} degrees */
 export function updateWindCompass(degrees) {
     const arrow = document.getElementById('wind-arrow');
     if (!arrow) return;
@@ -286,6 +318,11 @@ export function updateWindCompass(degrees) {
 // dayFactor: -1 = deep night, 0 = dawn/dusk, 1 = noon
 // weatherSeverity: 0 = clear, 1 = storm
 // tempTrend: -1 = much cooler than year-ago, +1 = much warmer
+/**
+ * @param {number} dayFactor
+ * @param {number} weatherSeverity
+ * @param {number} [tempTrend]
+ */
 export function updatePanelTheme(dayFactor, weatherSeverity, tempTrend = 0) {
     const root = document.documentElement;
     const day = Math.max(-1, Math.min(1, dayFactor || 0));
@@ -337,7 +374,7 @@ export function updateAirQualityDisplay(airQuality) {
         const category = getUsAqiCategory(airQuality?.usAqi);
         if (category) {
             aqiEl.hidden = false;
-            aqiEl.textContent = `AQI ${Math.round(airQuality.usAqi)}`;
+            aqiEl.textContent = `AQI ${Math.round(/** @type {number} */ (airQuality?.usAqi))}`;
             aqiEl.title = category.label;
             aqiEl.style.setProperty('--badge-color', category.color);
             aqiEl.style.setProperty('--badge-rgb', hexToRgbTriplet(category.color));
@@ -353,7 +390,7 @@ export function updateAirQualityDisplay(airQuality) {
             pollenEl.hidden = false;
             pollenEl.textContent = `Pollen: ${dominant.label}`;
             pollenEl.title = `${dominant.type} pollen: ${dominant.label}`;
-            pollenEl.style.setProperty('--badge-color', dominant.color);
+            pollenEl.style.setProperty('--badge-color', dominant.color ?? null);
             pollenEl.style.setProperty('--badge-rgb', hexToRgbTriplet(dominant.color));
         } else {
             pollenEl.hidden = true;

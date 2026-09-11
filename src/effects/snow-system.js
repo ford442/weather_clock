@@ -12,6 +12,7 @@ export class SnowSystem extends ParticleSystemBase {
         this.zone = zone || { minX: -8, maxX: 8 };
 
         this.nativeRuntime = getNativeRuntime();
+        /** @type {{backend: string, positions: Float32Array, velocities: Float32Array, offsets: Float32Array, disposed: boolean, dispose(): void}|null} */
         this.nativeBuffers = this.nativeRuntime.allocateParticleBuffers(maxParticles, 3);
         const geometry = new THREE.BufferGeometry();
         const positions = this.nativeBuffers.positions;

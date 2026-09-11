@@ -34,7 +34,9 @@ export class WeatherService {
         this.latitude = null;
         this.longitude = null;
         this.location = null;
+        /** @type {'metric'|'imperial'} */
         this.unit = 'imperial'; // Default to Fahrenheit
+        /** @type {'metric'|'imperial'} */
         this.windUnit = 'metric'; // 'metric' = km/h, 'imperial' = mph
         this._cacheStore = new TTLCache({ storagePrefix: CACHE_STORAGE_PREFIX, maxStorageEntries: MAX_CACHE_ENTRIES });
         this.cache = this._cacheStore.memory;
@@ -56,20 +58,30 @@ export class WeatherService {
         return await this.fetchWeather();
     }
 
+    /** @returns {'metric'|'imperial'} */
     toggleUnit() {
         this.unit = this.unit === 'metric' ? 'imperial' : 'metric';
         return this.unit;
     }
 
+    /**
+     * @param {number} celsius
+     * @returns {number}
+     */
     convertTemp(celsius) {
         if (this.unit === 'metric') return celsius;
         return (celsius * 9) / 5 + 32;
     }
 
+    /** @param {'metric'|'imperial'} unit */
     setWindUnit(unit) {
         this.windUnit = unit; // 'metric' or 'imperial'
     }
 
+    /**
+     * @param {number} kmh
+     * @returns {{value: number, unit: string}}
+     */
     convertWind(kmh) {
         if (this.windUnit === 'imperial') {
             return { value: Math.round(kmh * 0.621371), unit: 'mph' };
@@ -195,6 +207,7 @@ export class WeatherService {
         };
     }
 
+    /** @returns {Promise<WeatherData>} */
     async fetchWeather() {
         let lastError;
 
@@ -426,8 +439,9 @@ export class WeatherService {
         ];
 
         const promises = offsets.map(async (offset) => {
-            const rLat = this.latitude + offset.lat;
-            const rLon = this.longitude + offset.lon;
+            // Only called after the Nearby tab is opened, by which point a location fetch has run.
+            const rLat = /** @type {number} */ (this.latitude) + offset.lat;
+            const rLon = /** @type {number} */ (this.longitude) + offset.lon;
             try {
                 const data = await this.#fetchJSON(
                     forecastUrl(rLat, rLon, { current: 'temperature_2m,weather_code', timezone: 'auto' })
@@ -609,7 +623,7 @@ export class WeatherService {
      * @param {DailyForecastDay} day - Normalized daily forecast object
      * @param {number} lat - Latitude
      * @param {number} lon - Longitude
-     * @returns {Date}
+     * @returns {Date|null}
      */
     getDailyForecastRepresentativeTime(day, lat, lon) {
         if (!day || !day.date) return null;

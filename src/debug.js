@@ -192,8 +192,10 @@ export function setupDebugAPI(state, services, scene3d) {
         );
 
         const timeline = buildHourlyTimelineFromDay(day, repDate);
+        // buildHourlyTimelineFromDay() always sets `time` on every entry.
         const currentMock =
-            timeline.find((t) => Math.abs(t.time.getTime() - repDate.getTime()) < 3600 * 1000) || timeline[12];
+            timeline.find((t) => Math.abs(/** @type {Date} */ (t.time).getTime() - repDate.getTime()) < 3600 * 1000) ||
+            timeline[12];
 
         state.simulationTime = new Date(repDate);
         state.weatherData = {

@@ -57,6 +57,7 @@ import { ModeController } from './ModeController.js';
 import { updateAtmosphereTheme } from './atmosphereTheme.js';
 
 // ── Application State ────────────────────────────────────────────────────────
+/** @type {AppState} */
 const state = {
     weatherData: null,
     simulationTime: new Date(),
@@ -67,6 +68,7 @@ const state = {
 };
 
 // ── Mode Controller (Clock/Timeline) ─────────────────────────────────────────
+/** @type {import('./ModeController.js').ModeController|null} */
 let modeController = null;
 
 const WEATHER_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
@@ -176,10 +178,10 @@ async function bootstrap() {
         if (lat && lon && location) {
             weatherService.setManualLocation(lat, lon, location);
         }
-        if (unit) {
+        if (unit === 'metric' || unit === 'imperial') {
             weatherService.unit = unit;
         }
-        if (windUnit) {
+        if (windUnit === 'metric' || windUnit === 'imperial') {
             weatherService.windUnit = windUnit;
         }
         return !!(lat && lon);
@@ -339,13 +341,18 @@ async function bootstrap() {
     }
 
     // Kiosk / wake-lock mode
+    /** @type {WakeLockSentinel|null} */
     let wakeLock = null;
     const kioskToggle = document.getElementById('kiosk-toggle');
     if (kioskToggle) {
+        // Function declarations below are hoisted, so TS can't see they're only
+        // ever invoked from within this `if (kioskToggle)` guard — rebind to a
+        // local so it type-narrows to non-null inside them too.
+        const toggle = kioskToggle;
         const canWakeLock = 'wakeLock' in navigator;
         const canFullscreen = document.documentElement.requestFullscreen != null;
         if (canWakeLock || canFullscreen) {
-            kioskToggle.hidden = false;
+            toggle.hidden = false;
         }
 
         async function requestWakeLock() {
@@ -353,7 +360,7 @@ async function bootstrap() {
             try {
                 wakeLock = await navigator.wakeLock.request('screen');
                 wakeLock.addEventListener('release', () => {
-                    if (wakeLock == null) kioskToggle.classList.remove('active');
+                    if (wakeLock == null) toggle.classList.remove('active');
                 });
             } catch (error) {
                 console.warn('Wake lock request failed:', error);
@@ -380,9 +387,9 @@ async function bootstrap() {
                 }
             }
             await requestWakeLock();
-            kioskToggle.classList.add('active');
-            kioskToggle.setAttribute('aria-pressed', 'true');
-            kioskToggle.title = 'Exit kiosk mode';
+            toggle.classList.add('active');
+            toggle.setAttribute('aria-pressed', 'true');
+            toggle.title = 'Exit kiosk mode';
         }
 
         async function exitKiosk() {
@@ -394,13 +401,13 @@ async function bootstrap() {
                 }
             }
             await releaseWakeLock();
-            kioskToggle.classList.remove('active');
-            kioskToggle.setAttribute('aria-pressed', 'false');
-            kioskToggle.title = 'Enter kiosk mode (fullscreen + keep screen on)';
+            toggle.classList.remove('active');
+            toggle.setAttribute('aria-pressed', 'false');
+            toggle.title = 'Enter kiosk mode (fullscreen + keep screen on)';
         }
 
-        kioskToggle.addEventListener('click', () => {
-            const active = kioskToggle.classList.contains('active');
+        toggle.addEventListener('click', () => {
+            const active = toggle.classList.contains('active');
             if (active) {
                 exitKiosk();
             } else {
@@ -409,7 +416,7 @@ async function bootstrap() {
         });
 
         document.addEventListener('visibilitychange', () => {
-            if (!kioskToggle.classList.contains('active')) return;
+            if (!toggle.classList.contains('active')) return;
             if (document.visibilityState === 'visible') {
                 requestWakeLock();
             } else {
@@ -426,14 +433,15 @@ async function bootstrap() {
     function setupUICallbacks() {
         return {
             onRetryLocation: async () => {
-                document.getElementById('location').textContent = 'Retrying…';
+                const locationEl = document.getElementById('location');
+                if (locationEl) locationEl.textContent = 'Retrying…';
                 try {
                     await weatherService.getLocation();
                     const data = await weatherService.fetchWeather();
                     await applyWeatherData(data);
                 } catch (error) {
                     console.error('Location retry failed:', error);
-                    document.getElementById('location').textContent = 'Location unavailable';
+                    if (locationEl) locationEl.textContent = 'Location unavailable';
                     showToast(t('locationNotDetected'), 'error');
                 }
             },
@@ -463,7 +471,8 @@ async function bootstrap() {
                         weatherService.setWindUnit(isUS ? 'imperial' : 'metric');
                         weatherService.setManualLocation(best.lat, best.lon, best.display_name.split(',')[0]);
 
-                        document.getElementById('location').textContent = 'Updating…';
+                        const locationEl = document.getElementById('location');
+                        if (locationEl) locationEl.textContent = 'Updating…';
                         const data = await weatherService.fetchWeather();
                         if (requestId !== searchRequestId) return;
                         await applyWeatherData(data);
@@ -521,12 +530,13 @@ async function bootstrap() {
                 const list = document.getElementById('regional-list');
                 if (!list) return;
 
-                if (state.weatherData && !state.weatherData.regional) {
+                const weatherData = state.weatherData;
+                if (weatherData && !weatherData.regional) {
                     list.innerHTML =
                         '<div class="loading" style="padding: 10px 0; color: rgba(255,255,255,0.6); font-size: 13px;">Loading nearby regions…</div>';
                     try {
                         const regional = await weatherService.fetchRegionalWeather();
-                        state.weatherData.regional = regional;
+                        weatherData.regional = regional;
 
                         list.innerHTML = '';
                         const deg = weatherService.unit === 'metric' ? 'C' : 'F';
@@ -589,7 +599,8 @@ async function bootstrap() {
     async function fetchAndDisplayWeather() {
         if (state.isDebugMode) return;
 
-        document.getElementById('location').textContent = 'Loading…';
+        const locationEl = document.getElementById('location');
+        if (locationEl) locationEl.textContent = 'Loading…';
         try {
             const hadSavedLocation = loadPreferences();
             updateUnitButton(weatherService);
@@ -606,8 +617,9 @@ async function bootstrap() {
             await applyWeatherData(data);
         } catch (error) {
             console.error('Weather initialization failed:', error);
-            document.getElementById('location').textContent = 'Weather data unavailable';
-            document.getElementById('current-description').textContent = 'Unable to fetch';
+            if (locationEl) locationEl.textContent = 'Weather data unavailable';
+            const descEl = document.getElementById('current-description');
+            if (descEl) descEl.textContent = 'Unable to fetch';
 
             const isOffline = error?.isOffline || !navigator.onLine;
             if (isOffline) {
@@ -622,6 +634,7 @@ async function bootstrap() {
 
     // Init
     async function init() {
+        /** @type {ReturnType<typeof setupCapture>|null} */
         let capture = null;
         const applyReducedMotionPreference = (isReduced) => {
             state.reducedMotion = isReduced;

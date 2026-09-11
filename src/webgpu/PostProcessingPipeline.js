@@ -20,7 +20,7 @@ import * as THREE from 'three';
  * @param {THREE.Camera} camera
  * @param {boolean} isWebGPU
  * @param {{strength?: number, radius?: number, threshold?: number, disableBloom?: boolean}} [bloomOptions]
- * @returns {Promise<{render: Function, setSize: Function, setPixelRatio: Function, setBloom: Function, dispose: Function}>}
+ * @returns {Promise<{render: Function, setSize: Function, setPixelRatio: Function, setBloom: Function, setHeatShimmer: Function, dispose: Function}>}
  */
 export async function createPostProcessingPipeline(renderer, scene, camera, isWebGPU, bloomOptions = {}) {
     const strength = bloomOptions.strength ?? 0.5;

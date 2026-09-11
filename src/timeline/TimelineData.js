@@ -1,8 +1,3 @@
-// @ts-nocheck
-// Phase 1 opt-out: full strict typing of this file's control flow is out of
-// scope for this refactor, but its data shapes are now canonical types in
-// src/types.d.ts (TimelineDayData, TimelineHourlyPoint, Climatology,
-// TimelineForecastAccuracy) rather than local @typedefs.
 /**
  * TimelineData.js - Data fetching service for the 21-day weather timeline
  *
@@ -220,8 +215,8 @@ export class TimelineData {
      * Used when climate API is unavailable
      *
      * @param {number} lat - Latitude
-     * @param {number} lon - Longitude
-     * @returns {Object} Estimated climatology data
+     * @param {number} _lon - Longitude
+     * @returns {Climatology} Estimated climatology data
      */
     generateFallbackClimatology(lat, _lon) {
         const absLat = Math.abs(lat);
@@ -349,7 +344,7 @@ export class TimelineData {
         }
 
         // Sort by date
-        days.sort((a, b) => new Date(a.date) - new Date(b.date));
+        days.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
         // Cache the merged result
         return days;
@@ -541,7 +536,7 @@ export class TimelineData {
      *
      * @param {number[]} actual - Array of actual values
      * @param {number[]} predicted - Array of predicted values
-     * @returns {Object} Accuracy metrics (MAE, RMSE, Skill)
+     * @returns {{mae: number|null, rmse: number|null, skill: number|null}} Accuracy metrics (MAE, RMSE, Skill)
      */
     calculateAccuracy(actual, predicted) {
         if (actual.length !== predicted.length || actual.length === 0) {
@@ -577,7 +572,7 @@ export class TimelineData {
      */
     getDayOfYear(date) {
         const start = new Date(date.getFullYear(), 0, 0);
-        const diff = date - start;
+        const diff = date.getTime() - start.getTime();
         const oneDay = 1000 * 60 * 60 * 24;
         return Math.floor(diff / oneDay);
     }
@@ -675,6 +670,11 @@ export class TimelineData {
      * Given a DayData (with .date and .hourly), return a representative Date for
      * vignette rendering (solar noon preferred via SunCalc, else local midday).
      * This Date can be fed directly to AstronomyService and getWeatherAtTime.
+     *
+     * @param {TimelineDayData|null|undefined} dayData
+     * @param {number} [lat]
+     * @param {number} [lon]
+     * @returns {Date|null}
      */
     getRepresentativeTimeForDay(dayData, lat, lon) {
         if (!dayData || !dayData.date) return null;
@@ -697,15 +697,29 @@ export class TimelineData {
      * Pick a weather snapshot for the day suitable for a vignette preview.
      * Prefers a point near the provided representative time or solar noon hour.
      * Falls back to first or avg-ish entry.
+     *
+     * @param {TimelineDayData|null|undefined} dayData
+     * @param {Date|null} [representativeDate]
+     * @returns {TimelineHourlyPoint|WeatherSnapshot}
      */
     getWeatherSnapshotForDay(dayData, representativeDate = null) {
-        if (!dayData || !Array.isArray(dayData.hourly) || dayData.hourly.length === 0) {
+        if (!dayData) {
+            // No day data at all; return an empty/minimal snapshot.
+            return {
+                weatherCode: 0,
+                cloudCover: 50,
+                windSpeed: 10,
+                temp: undefined,
+                description: this.simplifyWeatherCondition(0)
+            };
+        }
+        if (!Array.isArray(dayData.hourly) || dayData.hourly.length === 0) {
             // Synthesize minimal from daily
             return {
                 weatherCode: dayData.weatherCode || 0,
                 cloudCover: 50,
                 windSpeed: 10,
-                temp: dayData.tempAvg,
+                temp: dayData.tempAvg ?? undefined,
                 description: this.simplifyWeatherCondition(dayData.weatherCode || 0)
             };
         }
@@ -719,8 +733,8 @@ export class TimelineData {
         let best = dayData.hourly[0];
         let bestDiff = Infinity;
         for (const h of dayData.hourly) {
-            const ht = h.time instanceof Date ? h.time.getTime() : new Date(h.time).getTime();
-            const diff = Math.abs(ht - targetTs);
+            const ht = new Date(h.time).getTime();
+            const diff = Math.abs(ht - (targetTs ?? 0));
             if (diff < bestDiff) {
                 bestDiff = diff;
                 best = h;
