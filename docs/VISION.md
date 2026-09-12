@@ -25,6 +25,7 @@
 ## Optional Symbolic Layer
 
 - A toggleable zodiacal / horoscopic overlay for the Moon, planets, and months that does not interfere with the photorealistic atmospheric experience.
+- Delivered as an ecliptic band over the real star field (`Z` to cycle off → tropical → sidereal), off by default, with the Sun's and Moon's signs lit and everything else left quiet.
 
 ## Guiding Principles
 

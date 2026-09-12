@@ -57,6 +57,13 @@ The goal: make time *visible* and *tactile*—a living, breathing environment in
 - **Physically motivated fading** — Stars fade out between nautical and civil twilight, dim under cloud cover, and wash out under a light-pollution knob that erases the faint field long before the named stars.
 - **Everywhere it's night** — Clock, Timeline, and Forecast modes all drive the same layer; forecast vignettes get the sky for the day and hour being scrubbed.
 
+### ♈ Zodiacal Overlay (optional)
+
+- **The ecliptic, drawn on the real sky** — a thin gold arc along the Sun's path with a tick at each of the twelve sign cusps and a glyph floating beside every slice. Because it shares the star field's equatorial group, the naked-eye planets already land on the line without either layer knowing about the other.
+- **Off by default** — press `Z` to cycle off → tropical → sidereal; the choice persists to `localStorage`. Nothing about the scientific sky changes when it is hidden.
+- **Both conventions, honestly** — *tropical* signs are 30° slices from the vernal equinox of date (what a Western sun sign means); *sidereal* signs are shifted back by the Lahiri ayanamsa so they sit on the constellations they are named after. Switching between them visibly slides the glyphs by ~24°, which is precession made legible.
+- **The Sun's sign and the Moon's sign are lit** — the slice holding the Sun glows warm, the one holding the Moon glows cool, and the other ten stay quiet. The layer says what it has to say by where it sits, not with a data panel.
+
 ### 🔊 Ambient Audio
 
 - **Generative, asset-free ambience** — `src/audio/AmbienceEngine.js` synthesizes rain, wind, distant thunder, and a diurnal bird/cricket bed entirely from filtered Web Audio noise nodes. There are no sample files to download, so the feature adds a few KB of JS (no bundled media) and has zero impact on the critical boot chunk.

@@ -8,7 +8,8 @@
  *   onToggleUnit?: () => void,
  *   onCapturePhoto?: () => void,
  *   onToggleTimelapse?: () => void,
- *   onCycleNightSky?: () => void
+ *   onCycleNightSky?: () => void,
+ *   onCycleZodiac?: () => void
  * }} callbacks
  */
 export function setupKeyboardShortcuts(callbacks) {
@@ -16,6 +17,11 @@ export function setupKeyboardShortcuts(callbacks) {
         // Don't fire when user is typing in an input
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+        // Every shortcut here is a bare letter, so a modified press belongs to
+        // the browser or the OS, not to us — Ctrl/Cmd+Z is undo, Ctrl+P is
+        // print, Ctrl+L is the address bar. Never hijack those.
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
 
         switch (e.key.toLowerCase()) {
             case 'w':
@@ -39,6 +45,9 @@ export function setupKeyboardShortcuts(callbacks) {
                 break;
             case 'c':
                 callbacks.onCycleNightSky?.();
+                break;
+            case 'z':
+                callbacks.onCycleZodiac?.();
                 break;
         }
     });

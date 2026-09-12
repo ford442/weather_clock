@@ -37,6 +37,9 @@
  * @property {string} nightSkyOff
  * @property {string} nightSkyLines
  * @property {string} nightSkyLabels
+ * @property {string} zodiacOff
+ * @property {string} zodiacTropical
+ * @property {string} zodiacSidereal
  * @property {(args: {description?: string, temp?: number|string, unit?: string, precip?: string, sunset?: string}) => string} sceneSummary
  */
 
@@ -73,6 +76,9 @@ const STRINGS = {
         nightSkyOff: 'Constellations hidden.',
         nightSkyLines: 'Constellation lines on.',
         nightSkyLabels: 'Constellation lines and labels on.',
+        zodiacOff: 'Zodiac band hidden.',
+        zodiacTropical: 'Zodiac band on — tropical signs.',
+        zodiacSidereal: 'Zodiac band on — sidereal signs.',
         sceneSummary: ({ description, temp, unit, precip, sunset }) => {
             let s = `${description}, ${temp}°${unit}`;
             if (precip) s += `, ${precip}`;
@@ -112,6 +118,9 @@ const STRINGS = {
         nightSkyOff: 'Constelaciones ocultas.',
         nightSkyLines: 'Líneas de constelaciones activadas.',
         nightSkyLabels: 'Líneas y etiquetas de constelaciones activadas.',
+        zodiacOff: 'Banda zodiacal oculta.',
+        zodiacTropical: 'Banda zodiacal activada — signos tropicales.',
+        zodiacSidereal: 'Banda zodiacal activada — signos siderales.',
         sceneSummary: ({ description, temp, unit, precip, sunset }) => {
             let s = `${description}, ${temp}°${unit}`;
             if (precip) s += `, ${precip}`;

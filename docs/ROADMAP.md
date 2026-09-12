@@ -50,6 +50,7 @@ These items deepen the core philosophy of a mostly graphical representation of w
 
 - [#117 — Optional zodiacal / horoscopic layer for Moon, planets, and months](https://github.com/ford442/weather_clock/issues/117)
   - Toggleable symbolic overlay (off by default) that can show traditional signs without compromising the photorealistic atmospheric experience.
+  - Shipped: the ecliptic arc, sign cusps, and glyphs render in `src/effects/zodiac-overlay.js` on top of `src/sky/zodiac.js`; `Z` cycles off → tropical → sidereal.
 
 ## Research and performance experiments
 

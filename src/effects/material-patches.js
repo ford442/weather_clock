@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 // onBeforeCompile shader patches shared by the ground disc and sundial materials
 // (WebGL path). Each patch returns a plain uniforms bag created up-front, so
 // callers can always safely mutate `.value` regardless of whether the material
@@ -113,7 +115,13 @@ export function applyGroundPatch(material, snowNoiseTexture) {
         uWetness: { value: 0 },
         uReflectionEnabled: { value: 0 },
         uReflectionMap: { value: null },
-        uTextureMatrix: { value: null }
+        // Must be a real matrix, never null: the ground's reflection sample is
+        // gated in the shader by `uReflectionEnabled`, but the uniform is still
+        // uploaded on every frame, and three's `setValueM4` reads `.elements`
+        // unconditionally. `ground-effects.js` only assigns this while the
+        // ground is wet, so a dry scene would otherwise crash the renderer on
+        // its first frame.
+        uTextureMatrix: { value: new THREE.Matrix4() }
     };
 
     material.onBeforeCompile = (shader) => {

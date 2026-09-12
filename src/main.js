@@ -82,7 +82,8 @@ const PREF_KEYS = {
     unit: 'weatherclock_unit',
     windUnit: 'weatherclock_wind_unit',
     ambienceMuted: 'weatherclock_ambience_muted',
-    nightSky: 'weatherclock_night_sky'
+    nightSky: 'weatherclock_night_sky',
+    zodiac: 'weatherclock_zodiac'
 };
 
 /**
@@ -94,6 +95,17 @@ const NIGHT_SKY_LEVELS = Object.freeze([
     { constellations: false, labels: false, toast: 'nightSkyOff' },
     { constellations: true, labels: false, toast: 'nightSkyLines' },
     { constellations: true, labels: true, toast: 'nightSkyLabels' }
+]);
+
+/**
+ * Zodiac overlay levels, cycled with `Z`. Off first, so the scientific sky is
+ * what the app shows until someone asks for the symbolic layer.
+ * @type {readonly {zodiac: boolean, mode: import('./sky/zodiac.js').ZodiacMode, toast: 'zodiacOff'|'zodiacTropical'|'zodiacSidereal'}[]}
+ */
+const ZODIAC_LEVELS = Object.freeze([
+    { zodiac: false, mode: 'tropical', toast: 'zodiacOff' },
+    { zodiac: true, mode: 'tropical', toast: 'zodiacTropical' },
+    { zodiac: true, mode: 'sidereal', toast: 'zodiacSidereal' }
 ]);
 
 // localStorage can throw (quota exceeded, private browsing, blocked storage)
@@ -461,6 +473,20 @@ async function bootstrap() {
         });
     }
 
+    // The zodiacal band is a cultural layer over the astronomy, so it starts
+    // off and never changes what the scientific sky draws.
+    let zodiacLevel = (() => {
+        const saved = readPref(PREF_KEYS.zodiac);
+        if (saved === null) return 0;
+        const level = Number(saved);
+        return Number.isInteger(level) && level >= 0 && level < ZODIAC_LEVELS.length ? level : 0;
+    })();
+
+    function applyZodiacLevel() {
+        const level = ZODIAC_LEVELS[zodiacLevel];
+        weatherEffects.setSkyLayers?.({ zodiac: level.zodiac, zodiacMode: level.mode });
+    }
+
     function setupUICallbacks() {
         return {
             onRetryLocation: async () => {
@@ -494,6 +520,13 @@ async function bootstrap() {
                 applyNightSkyLevel();
                 writePref(PREF_KEYS.nightSky, String(nightSkyLevel));
                 showToast(t(NIGHT_SKY_LEVELS[nightSkyLevel].toast));
+            },
+
+            onCycleZodiac: () => {
+                zodiacLevel = (zodiacLevel + 1) % ZODIAC_LEVELS.length;
+                applyZodiacLevel();
+                writePref(PREF_KEYS.zodiac, String(zodiacLevel));
+                showToast(t(ZODIAC_LEVELS[zodiacLevel].toast));
             },
 
             onSearch: async (query) => {
@@ -705,6 +738,7 @@ async function bootstrap() {
         });
 
         applyNightSkyLevel();
+        applyZodiacLevel();
 
         const callbacks = setupUICallbacks();
         setupEventListeners(callbacks, modeController);

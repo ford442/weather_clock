@@ -177,3 +177,60 @@ export function equatorialToSceneMatrix(lstRad, latitudeDeg) {
     // Derived from alt/az: east = -cos(dec)sin(H), up = sin(alt), north follows.
     return [-sinL, cosL, 0, cosLat * cosL, cosLat * sinL, sinLat, -sinLat * cosL, -sinLat * sinL, cosLat];
 }
+
+/**
+ * Mean obliquity of the ecliptic for a date (IAU 1980 / Meeus eq. 22.2), in
+ * radians. The ecliptic-based frames below need the tilt *of date* rather than
+ * the frozen J2000 value, because a sign cusp is defined against the equinox of
+ * the moment, not against 2000.
+ *
+ * @param {number} centuries - Julian centuries since J2000 (see {@link julianCenturies}).
+ * @returns {number}
+ */
+export function meanObliquity(centuries) {
+    const t = centuries;
+    const arcseconds = 21.448 - t * (46.815 + t * (0.00059 - t * 0.001813));
+    return (23 + (26 + arcseconds / 60) / 60) * DEG;
+}
+
+/**
+ * Equatorial → ecliptic coordinates (Meeus eq. 13.1).
+ *
+ * @param {number} raRad
+ * @param {number} decRad
+ * @param {number} obliquityRad
+ * @returns {{longitude: number, latitude: number}} Ecliptic longitude λ in [0, 2π) and latitude β.
+ */
+export function equatorialToEcliptic(raRad, decRad, obliquityRad) {
+    const sinE = Math.sin(obliquityRad);
+    const cosE = Math.cos(obliquityRad);
+    const sinRa = Math.sin(raRad);
+    const cosDec = Math.cos(decRad);
+    const sinDec = Math.sin(decRad);
+
+    const longitude = Math.atan2(sinRa * cosE + (cosDec === 0 ? 0 : (sinDec / cosDec) * sinE), Math.cos(raRad));
+    const latitude = Math.asin(Math.max(-1, Math.min(1, sinDec * cosE - cosDec * sinE * sinRa)));
+    return { longitude: normalizeAngle(longitude), latitude };
+}
+
+/**
+ * Ecliptic → equatorial coordinates (Meeus eq. 13.3/13.4). Used to lay the
+ * zodiac band out in the same equatorial frame the star catalog lives in, so
+ * one group rotation carries both.
+ *
+ * @param {number} longitudeRad
+ * @param {number} latitudeRad
+ * @param {number} obliquityRad
+ * @returns {{ra: number, dec: number}}
+ */
+export function eclipticToEquatorial(longitudeRad, latitudeRad, obliquityRad) {
+    const sinE = Math.sin(obliquityRad);
+    const cosE = Math.cos(obliquityRad);
+    const sinLon = Math.sin(longitudeRad);
+    const cosLat = Math.cos(latitudeRad);
+    const sinLat = Math.sin(latitudeRad);
+
+    const ra = Math.atan2(sinLon * cosE - (cosLat === 0 ? 0 : (sinLat / cosLat) * sinE), Math.cos(longitudeRad));
+    const dec = Math.asin(Math.max(-1, Math.min(1, sinLat * cosE + cosLat * sinE * sinLon)));
+    return { ra: normalizeAngle(ra), dec };
+}

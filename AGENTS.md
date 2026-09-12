@@ -73,8 +73,10 @@ The app has three viewing modes:
 | `forecast/` | ForecastController + ForecastUI + DailyPreview (2D). New mode for immersive future-day vignettes. |
 | `capture/` | Photo mode + time-lapse export. `photo.js` renders one frame at 2× pixel ratio and captures it via same-task `canvas.toBlob()` (no `preserveDrawingBuffer`), composites a caption strip (`caption.js`), and shares/downloads (`share.js`). `timelapse.js` records a deterministic 00:00→24:00 sweep (720 fixed-timestep frames) via `MediaRecorder` on `canvas.captureStream()`. Shortcuts: `P` = photo, `L` = time-lapse (hidden under reduced motion). `ModeController.setLocked()` blocks mode switching while recording. |
 | `webgpu/` | Renderer capability detection/factory, WebGL and WebGPU post-processing adapters, and TSL/WebGPU material adapters. WebGL remains the fallback. Rain/snow/splash are the exception: they are separate per-backend classes, not dual-material adapters — see `docs/WEBGPU_ARCHITECTURE.md`. |
-| `sky/` | Night-sky astronomy, all pure math with no Three.js: `celestialCoordinates.js` (Julian dates, sidereal time, IAU 1976 precession, equatorial→horizontal, and the single rotation matrix that maps the whole equatorial catalog into the scene frame), `starCatalog.js` (~190 bright stars at J2000 plus 37 stylized constellation figures and B–V→RGB tinting), and `planets.js` (JPL approximate Keplerian elements for Mercury–Neptune, geocentric RA/Dec and apparent magnitude, accurate to well under 1°). |
-| `effects/star-field.js` | The night-sky layer. Real stars in true positions, constellation lines, and the naked-eye planets, all parented to one group whose matrix carries observer latitude + local sidereal time — so per-star alt/az is never recomputed. Fades with twilight, cloud cover, and a light-pollution knob; constellations/labels toggle with `C`. |
+| `sky/` | Night-sky astronomy, all pure math with no Three.js: `celestialCoordinates.js` (Julian dates, sidereal time, IAU 1976 precession, equatorial↔ecliptic with the obliquity of date, and the single rotation matrix that maps the whole equatorial catalog into the scene frame), `starCatalog.js` (~190 bright stars at J2000 plus 37 stylized constellation figures and B–V→RGB tinting), `planets.js` (JPL approximate Keplerian elements for Mercury–Neptune, geocentric RA/Dec and apparent magnitude, accurate to well under 1°), and `zodiac.js` (the twelve signs, a truncated ELP-2000 lunar longitude, the Lahiri ayanamsa, and tropical/sidereal sign assignment for the Sun, Moon, and planets). |
+| `effects/star-field.js` | The night-sky layer. Real stars in true positions, constellation lines, and the naked-eye planets, all parented to one group whose matrix carries observer latitude + local sidereal time — so per-star alt/az is never recomputed. Fades with twilight, cloud cover, and a light-pollution knob; constellations/labels toggle with `C`. Owns the zodiac overlay as a child of the same group. |
+| `effects/zodiac-overlay.js` | The optional zodiacal band: the ecliptic as a thin arc, a tick at each of the twelve sign cusps, and a glyph beside each slice, with the Sun's and Moon's signs lit brighter. Parents into the star field's `skyGroup`, so one rotation carries it and the planets land on its line for free. Off by default; `Z` cycles off → tropical → sidereal. |
+| `effects/text-sprite.js` | Shared canvas-texture label sprite used by the star field's planet/constellation names and the zodiac glyphs. |
 | `vendor/suncalc.js` | Vendored SunCalc library patched for ES module compatibility. |
 
 ### Timeline Subsystem (`src/timeline/`)
@@ -88,6 +90,7 @@ The app has three viewing modes:
 
 ### Tests (`src/tests/`)
 - Unit tests cover astronomy, weather, forecast logic, rendering quality/recovery, weather effects, and lighting.
+- `zodiac.test.js` cross-checks the zodiac layer the same way: the Sun reaching λ=0/90/180/270 within arcminutes of the published 2024 equinox and solstice instants, the Moon against Meeus' worked example 47.a and against SunCalc's independent lunar series via the illuminated fraction, an equatorial↔ecliptic round trip, and the drawn band's cusps measuring exactly 30° apart once projected back off the sky sphere.
 - `nightSky.test.js` cross-checks the star/planet astronomy against independent references: the Sun's ecliptic longitude at known equinox/solstice instants (within ~1.5 arcminutes), SunCalc's own sun position, Polaris sitting at the observer's latitude, and the scene rotation matrix agreeing with the alt/az formula to 12 decimals.
 
 ### Shaders (`shaders/`)
@@ -197,6 +200,7 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
      window.aetherDebug.getMoonPosition();
      window.aetherDebug.getPlanetPositions();   // RA/Dec + apparent magnitude per planet
      window.aetherDebug.getNightSkyState();     // observer, cloud cover, overlay toggles
+     window.aetherDebug.getZodiacState();       // Sun/Moon/planet signs under the active convention
      window.aetherDebug.setLightPollution(0.8); // wash the faint stars out
      ```
 
@@ -215,6 +219,8 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
   - `weatherclock_location`
   - `weatherclock_unit`
   - `weatherclock_wind_unit`
+  - `weatherclock_night_sky`
+  - `weatherclock_zodiac`
 
 ---
 
@@ -257,6 +263,15 @@ Prefer graphical language over HUD text for anything in this vocabulary.
 
 Keep the modulations small and continuous — the point is nuance, not drama. Scene-level tuning constants belong in `CELESTIAL_LIGHT_CONFIG` (weatherLighting.js) or `MOON_DISK_CONFIG` (moonPhase.js); the physics constants stay in `CELESTIAL_CONFIG`. Because every mode reaches the lights through `updateSingleWeatherLighting()`, a change here lands in clock, forecast, and timeline modes at once.
 
+### Zodiacal Overlay (the optional symbolic layer)
+The zodiac is a *cultural* layer sitting on top of the astronomy, and the split in the code says so: `src/sky/zodiac.js` is pure math with no opinion about rendering, and `src/effects/zodiac-overlay.js` draws it with no ephemeris of its own.
+
+- **It adds one ephemeris and nothing else.** The Sun and the planets come from `sky/planets.js`, precessed to the date and converted with `equatorialToEcliptic`. Only the Moon needed a new series — a truncated ELP-2000/82 (Meeus ch. 47), good to ~0.01°, two orders of magnitude finer than a 30° sign.
+- **Both conventions are real.** `tropical` slices from the vernal equinox of date; `sidereal` subtracts the Lahiri ayanamsa so the signs stay on the constellations. Neither is "the" zodiac — the overlay draws whichever is selected and the cusps move visibly between them.
+- **It rides the star field's rotation.** `ZodiacOverlay` parents into `StarField.skyGroup`, so the single latitude + LST matrix carries it, and the planets the star field already draws land on the ecliptic line without either layer coordinating. Geometry is relaid out only when precession has moved or the convention changed.
+- **Off by default, and it never touches the scientific sky.** `Z` cycles off → tropical → sidereal through `setSkyLayers({ zodiac, zodiacMode })`, persisted under `weatherclock_zodiac`. The band fades with the same twilight/cloud opacity the bright stars get, so it is gone in daylight like everything else up there.
+- **Graphical, not a panel.** The only emphasis it uses is light: the slice holding the Sun glows warm, the slice holding the Moon glows cool, the other ten stay quiet. Resist adding degrees, aspects, or houses as text — that is the HUD the vision explicitly rules out.
+
 ### Coordinate Systems
 `SunCalc` uses spherical coordinates (azimuth/altitude). These are converted to Three.js Cartesian in `astronomy.js`. Azimuth 0° (South) maps to Z-, meaning North is Z+.
 
@@ -271,7 +286,7 @@ _WebGL path. Under WebGPU these are simulated by TSL compute nodes in `src/effec
 - **Splashes:** Small particle bursts spawn on the sundial surface when raindrops hit.
 
 ### Mode Switching
-`ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
+`ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `C` to cycle the constellation overlay, `Z` to cycle the zodiacal band (off → tropical → sidereal). Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
 
 ### Known Issues / Blockers
 _Last verified 2026-09-11 by running `lint`, `typecheck`, `format:check`, `test`, and `build` directly._

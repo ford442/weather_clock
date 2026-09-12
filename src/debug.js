@@ -154,9 +154,13 @@ export function setupDebugAPI(state, services, scene3d) {
                 constellations: starField.showConstellations,
                 planets: starField.showPlanets,
                 labels: starField.showLabels,
+                zodiac: starField.showZodiac,
+                zodiacMode: starField.zodiacMode,
                 opacity: starField._opacity
             };
         },
+        /** Sun/Moon/planet placements in the twelve signs, under the active convention. */
+        getZodiacState: () => weatherEffects.starField?.zodiac?.getState?.() ?? null,
         setLightPollution: (amount) => weatherEffects.setSkyLayers?.({ lightPollution: amount }),
         /** Past→present→future narrative driving the zone tints, drift, and temporal band. */
         getTemporalNarrative: () => weatherEffects.narrative ?? null,
