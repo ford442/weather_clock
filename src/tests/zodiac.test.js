@@ -198,6 +198,8 @@ describe('zodiac state', () => {
         expect(state.moon.id).toBe('moon');
         expect(state.planets.map((p) => p.id)).toEqual(['mercury', 'venus', 'mars', 'jupiter', 'saturn']);
         for (const placement of [state.sun, state.moon, ...state.planets]) {
+            // Explicitly, because `null >= 0` is true and would slip through.
+            expect(Number.isFinite(placement.longitudeDeg)).toBe(true);
             expect(placement.longitudeDeg).toBeGreaterThanOrEqual(0);
             expect(placement.longitudeDeg).toBeLessThan(360);
             expect(placement.degreesInSign).toBeGreaterThanOrEqual(0);
@@ -210,7 +212,9 @@ describe('zodiac state', () => {
         const sun = state.sun.longitudeDeg;
         const elongation = (id) => {
             const planet = state.planets.find((p) => p.id === id);
-            return Math.abs((((planet?.longitudeDeg ?? 0) - sun + 540) % 360) - 180);
+            // No `?? 0` fallback: a missing planet must fail, not read as 0°.
+            expect(Number.isFinite(planet?.longitudeDeg)).toBe(true);
+            return Math.abs(((Number(planet?.longitudeDeg) - sun + 540) % 360) - 180);
         };
         expect(elongation('mercury')).toBeLessThan(29);
         expect(elongation('venus')).toBeLessThan(48);
@@ -297,6 +301,57 @@ describe('ZodiacOverlay scene layer', () => {
         const after = overlay.cuspTicks.geometry.getAttribute('position').getX(0);
         expect(after).not.toBeCloseTo(before, 3);
         expect(overlay.getState()?.mode).toBe('sidereal');
+        overlay.dispose();
+    });
+
+    // Glyph sprites need a DOM canvas, which this environment has none of, so
+    // the two behaviours below are exercised against stand-in sprites carrying
+    // only the fields the overlay actually reads.
+    const stubGlyph = (signIndex, position = new THREE.Vector3(0, 100, 0)) => ({
+        userData: { signIndex },
+        position,
+        material: { color: new THREE.Color(), opacity: 0 },
+        visible: false
+    });
+
+    it('colours the Sun and Moon signs as soon as the glyphs exist', () => {
+        // The overlay starts hidden, so the Sun and Moon are placed long before
+        // the sprites are built — and the cached placement refresh would not
+        // recolour them. Building glyphs must therefore colour them itself.
+        const { overlay } = makeOverlay();
+        const state = overlay.getState();
+        expect(state).not.toBeNull();
+
+        const quietIndex = [...Array(12).keys()].find((i) => i !== state.sun.signIndex && i !== state.moon.signIndex);
+        overlay._glyphs = [stubGlyph(state.sun.signIndex), stubGlyph(state.moon.signIndex), stubGlyph(quietIndex)];
+        overlay._applyGlyphColors();
+
+        const [sun, moon, quiet] = overlay._glyphs;
+        expect(sun.material.color.getHex()).not.toBe(quiet.material.color.getHex());
+        if (state.moon.signIndex !== state.sun.signIndex) {
+            expect(moon.material.color.getHex()).not.toBe(quiet.material.color.getHex());
+        }
+        overlay._glyphs = [];
+        overlay.dispose();
+    });
+
+    it('fades glyphs out below the horizon so they cannot shine through the ground', () => {
+        const { parent, overlay } = makeOverlay();
+        // Identity parent: a glyph's own +Y is its altitude above the horizon.
+        parent.matrix.identity();
+        const at = (altitudeDeg) => {
+            const a = altitudeDeg * DEG;
+            return stubGlyph(0, new THREE.Vector3(100 * Math.cos(a), 100 * Math.sin(a), 0));
+        };
+
+        expect(overlay._horizonFade(at(60))).toBe(1);
+        expect(overlay._horizonFade(at(ZODIAC_CONFIG.horizonFadeStartDeg))).toBe(1);
+        expect(overlay._horizonFade(at(-5))).toBe(0);
+        expect(overlay._horizonFade(at(-60))).toBe(0);
+        // Continuous across the band rather than popping at the horizon.
+        const mid = overlay._horizonFade(at(ZODIAC_CONFIG.horizonFadeStartDeg / 2));
+        expect(mid).toBeGreaterThan(0);
+        expect(mid).toBeLessThan(1);
         overlay.dispose();
     });
 

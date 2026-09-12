@@ -18,6 +18,11 @@ export function setupKeyboardShortcuts(callbacks) {
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
+        // Every shortcut here is a bare letter, so a modified press belongs to
+        // the browser or the OS, not to us — Ctrl/Cmd+Z is undo, Ctrl+P is
+        // print, Ctrl+L is the address bar. Never hijack those.
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+
         switch (e.key.toLowerCase()) {
             case 'w':
                 callbacks.onToggleTimeWarp?.();
