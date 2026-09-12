@@ -8,7 +8,8 @@
  *   onToggleUnit?: () => void,
  *   onCapturePhoto?: () => void,
  *   onToggleTimelapse?: () => void,
- *   onCycleNightSky?: () => void
+ *   onCycleNightSky?: () => void,
+ *   onCycleZodiac?: () => void
  * }} callbacks
  */
 export function setupKeyboardShortcuts(callbacks) {
@@ -39,6 +40,9 @@ export function setupKeyboardShortcuts(callbacks) {
                 break;
             case 'c':
                 callbacks.onCycleNightSky?.();
+                break;
+            case 'z':
+                callbacks.onCycleZodiac?.();
                 break;
         }
     });
