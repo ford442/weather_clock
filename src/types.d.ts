@@ -4,6 +4,7 @@ type QualityTier = 'low' | 'medium' | 'high';
 type EffectQuality = QualityTier | 'focused' | 'thumbnail';
 type PrecipitationType = 'none' | 'rain' | 'snow';
 type VisualPreset = 'clear' | 'partly-cloudy' | 'cloudy' | 'fog' | 'rain' | 'snow' | 'thunderstorm';
+type AppMode = 'clock' | 'timeline' | 'forecast';
 
 interface AtmosphereUniforms {
     turbidity: number;
@@ -278,6 +279,25 @@ interface EffectConfig {
     snowIntensity: number;
     fogIntensity: number;
     particleScale: number;
+}
+
+/**
+ * Shared post-processing surface for WebGL EffectComposer and WebGPU TSL
+ * bloom (see `src/webgpu/PostProcessingPipeline.js`).
+ */
+interface PostProcessingPipeline {
+    render(): void;
+    setSize(width: number, height: number): void;
+    setPixelRatio(pixelRatio: number): void;
+    setBloom(options?: { enabled?: boolean; strength?: number; radius?: number; threshold?: number }): void;
+    setHeatShimmer(options?: { enabled?: boolean; intensity?: number }): void;
+    dispose(): void;
+}
+
+interface AnimationControllerServices {
+    weatherService: import('./weather.js').WeatherService;
+    astronomyService: import('./astronomy.js').AstronomyService;
+    ambienceEngine?: import('./audio/AmbienceEngine.js').AmbienceEngine;
 }
 
 interface Navigator {

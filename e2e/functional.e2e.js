@@ -41,9 +41,31 @@ test.describe('functional', () => {
         await expect(page).not.toHaveURL(/[?&]mode=/);
         await expect(modeToggle).toHaveAttribute('title', 'Switch to Timeline View (T)');
 
-        // The on-screen button follows the same cycle.
+        // The on-screen button follows the same cycle (ModeShell click, not index.html).
         await modeToggle.click();
         await expect(page).toHaveURL(/[?&]mode=timeline/);
+    });
+
+    test('advanced tabs and drawer grip work without the classic index.html script', async ({ page }) => {
+        await launchApp(page);
+
+        const api = await page.evaluate(() => ({
+            hasValidateAll: typeof window.aetherDebug?.validateAll,
+            stubGone:
+                typeof window.DOMBindingValidator === 'undefined' && typeof window.ZIndexManager === 'undefined'
+        }));
+        expect(api.hasValidateAll).toBe('function');
+        expect(api.stubGone).toBe(true);
+
+        await page.locator('#panel-advanced .drawer-handle-grip').click();
+        await expect(page.locator('#panel-advanced')).toHaveClass(/expanded/);
+
+        await page.locator('#panel-advanced .tab-btn[data-tab="health"]').click();
+        await expect(page.locator('#tab-health')).toHaveClass(/active/);
+        await expect(page.locator('#tab-history')).not.toHaveClass(/active/);
+
+        await page.evaluate(() => window.aetherDebug.toggleDrawer('left'));
+        await expect(page.locator('#panel-left')).toHaveClass(/expanded/);
     });
 
     test('?forceWebGL=1 pins the renderer to the WebGL particle path', async ({ page }) => {

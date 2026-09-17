@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import SunCalc from '../vendor/suncalc.js';
+import SunCalc from 'suncalc';
 import {
     DEG,
     RAD_TO_DEG,

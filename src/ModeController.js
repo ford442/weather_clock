@@ -131,6 +131,7 @@ export class ModeController {
         this.shell.injectStyles();
     }
 
+    /** Cycle Clock → Timeline → Forecast. @returns {Promise<void>|void} */
     toggleMode() {
         const currentIndex = MODES.indexOf(this.currentMode);
         return this.switchMode(/** @type {AppMode} */ (MODES[(currentIndex + 1) % MODES.length]));
@@ -229,6 +230,7 @@ export class ModeController {
         this.shell.setupKeyboardShortcuts();
     }
 
+    /** @returns {{lat: number|null, lon: number|null}} */
     getCurrentLocation() {
         if (
             (this.weatherService.latitude == null || this.weatherService.longitude == null) &&
@@ -242,14 +244,17 @@ export class ModeController {
         };
     }
 
+    /** @returns {AppMode} */
     getMode() {
         return this.currentMode;
     }
 
+    /** @returns {boolean} */
     isTimelineMode() {
         return this.currentMode === 'timeline';
     }
 
+    /** @returns {boolean} */
     isForecastMode() {
         return this.currentMode === 'forecast';
     }

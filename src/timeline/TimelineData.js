@@ -24,6 +24,7 @@ const MAX_MEMORY_ENTRIES = 50;
 // HourlyData -> global TimelineHourlyPoint (src/types.d.ts)
 
 export class TimelineData {
+    /** Memory-backed Open-Meteo client for the 21-day timeline. */
     constructor() {
         this._cacheStore = new TTLCache({ defaultTtlMs: CACHE_TTL });
         this.cache = this._cacheStore.memory;

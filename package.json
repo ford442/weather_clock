@@ -2,7 +2,7 @@
     "name": "weather_clock",
     "version": "1.0.0",
     "description": "A clock that shows temperature, sunlight, moonlight, weather in 3d.",
-    "main": "index.js",
+    "main": "src/main.js",
     "type": "module",
     "scripts": {
         "dev": "vite",
