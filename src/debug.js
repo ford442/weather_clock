@@ -3,6 +3,7 @@ import { updateWeatherLighting } from './weatherLighting.js';
 import { updateWeatherDisplay } from './ui.js';
 import { buildHourlyTimelineFromDay } from './dailyForecast.js';
 import { SCENE_LAYOUT } from './scene-layout.js';
+import { toggleDrawer, validateDomBindings, verifyZIndexStack } from './ui/chrome.js';
 import { getRendererInfo } from './webgpu/RendererFactory.js';
 
 /**
@@ -74,10 +75,12 @@ export function createDebugWeatherData(simulationTime, weatherCode, timeline) {
 }
 
 /**
- * Setup debug API for testing and verification
- * @param {Object} state - Application state object
- * @param {Object} services - Services (weatherService, astronomyService)
- * @param {Object} scene3d - 3D scene objects (scene, sky, weatherEffects, lights)
+ * Setup debug API for testing and verification.
+ * This is the only place that assigns `window.aetherDebug`.
+ *
+ * @param {AppState} state
+ * @param {{weatherService: import('./weather.js').WeatherService, astronomyService: import('./astronomy.js').AstronomyService}} services
+ * @param {*} scene3d 3D scene objects (scene, sky, weatherEffects, lights)
  */
 export function setupDebugAPI(state, services, scene3d) {
     const { weatherService, astronomyService } = services;
@@ -91,12 +94,12 @@ export function setupDebugAPI(state, services, scene3d) {
         const timeline = generateDebugTimeline(state.simulationTime, weatherCode);
         const mock = createDebugWeatherData(state.simulationTime, weatherCode, timeline);
 
-        state.weatherData = mock;
+        state.weatherData = /** @type {WeatherData} */ (mock);
 
         const astroData = astronomyService.update(
             state.simulationTime,
-            weatherService.latitude,
-            weatherService.longitude,
+            weatherService.latitude ?? 0,
+            weatherService.longitude ?? 0,
             20
         );
 
@@ -111,8 +114,8 @@ export function setupDebugAPI(state, services, scene3d) {
         if (state.weatherData) {
             const astroData = astronomyService.update(
                 state.simulationTime,
-                weatherService.latitude,
-                weatherService.longitude,
+                weatherService.latitude ?? 0,
+                weatherService.longitude ?? 0,
                 20
             );
 
@@ -130,6 +133,26 @@ export function setupDebugAPI(state, services, scene3d) {
         ambientLight,
         getSimulationTime: () => state.simulationTime,
         getWeatherData: () => state.weatherData,
+        getLocation: () => ({
+            latitude: weatherService.latitude,
+            longitude: weatherService.longitude,
+            location: weatherService.location
+        }),
+        toggleDrawer,
+        validateDomBindings,
+        verifyZIndexStack,
+        validateAll: () => {
+            console.log('=== Aether Clock Debug Report ===');
+            const bindings = validateDomBindings();
+            const zIndices = verifyZIndexStack();
+            const location = {
+                latitude: weatherService.latitude,
+                longitude: weatherService.longitude,
+                location: weatherService.location
+            };
+            console.log('Location:', location);
+            return { bindings, zIndices, location };
+        },
         getDailyForecast: () => state.weatherData?.dailyForecast ?? null,
         getPerformanceMetrics: () => ({
             ...(window.aetherPerf || {}),
@@ -204,7 +227,11 @@ export function setupDebugAPI(state, services, scene3d) {
         let daily = state.weatherData?.dailyForecast;
         if (!daily || !daily.length) {
             try {
-                daily = await weatherService.getDailyForecast(weatherService.latitude, weatherService.longitude, 10);
+                daily = await weatherService.getDailyForecast(
+                    weatherService.latitude ?? 0,
+                    weatherService.longitude ?? 0,
+                    10
+                );
                 if (state.weatherData) {
                     state.weatherData.dailyForecast = daily;
                 }
@@ -223,9 +250,10 @@ export function setupDebugAPI(state, services, scene3d) {
         const day = daily[index];
         const repDate = weatherService.getDailyForecastRepresentativeTime(
             day,
-            weatherService.latitude,
-            weatherService.longitude
+            weatherService.latitude ?? 0,
+            weatherService.longitude ?? 0
         );
+        if (!repDate) return;
 
         const timeline = buildHourlyTimelineFromDay(day, repDate);
         // buildHourlyTimelineFromDay() always sets `time` on every entry.
@@ -234,7 +262,7 @@ export function setupDebugAPI(state, services, scene3d) {
             timeline[12];
 
         state.simulationTime = new Date(repDate);
-        state.weatherData = {
+        state.weatherData = /** @type {WeatherData} */ ({
             ...(state.weatherData || {}),
             current: currentMock,
             past: timeline[0],
@@ -242,12 +270,12 @@ export function setupDebugAPI(state, services, scene3d) {
             timeline,
             dailyForecast: daily,
             location: `Debug Daily Forecast (${day.date})`
-        };
+        });
 
         const astroData = astronomyService.update(
             state.simulationTime,
-            weatherService.latitude,
-            weatherService.longitude,
+            weatherService.latitude ?? 0,
+            weatherService.longitude ?? 0,
             20
         );
 

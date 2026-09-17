@@ -40,9 +40,15 @@ function getBrowserLanguage() {
 export { WeatherServiceError };
 
 export class WeatherService {
+    /**
+     * @param {{ timeoutMs?: number, retryDelaysMs?: number[] }} [options]
+     */
     constructor({ timeoutMs = 10000, retryDelaysMs = [2000, 4000, 8000] } = {}) {
+        /** @type {number|null} */
         this.latitude = null;
+        /** @type {number|null} */
         this.longitude = null;
+        /** @type {string|null} */
         this.location = null;
         /** @type {'metric'|'imperial'} */
         this.unit = 'imperial'; // Default to Fahrenheit
@@ -65,6 +71,7 @@ export class WeatherService {
         return fetchJSON(url, { timeoutMs, signal });
     }
 
+    /** @returns {Promise<WeatherData>} */
     async initialize() {
         await this.getLocation();
         return await this.fetchWeather();
@@ -101,6 +108,10 @@ export class WeatherService {
         return { value: Math.round(kmh), unit: 'km/h' };
     }
 
+    /**
+     * @param {string} query
+     * @returns {Promise<Array<{lat: string, lon: string, display_name: string, address?: {country_code?: string}}>>}
+     */
     async searchLocation(query) {
         this.searchController?.abort();
         const controller = new AbortController();
@@ -129,6 +140,7 @@ export class WeatherService {
         this.location = name;
     }
 
+    /** Resolve lat/lon via geolocation, falling back to New York. @returns {Promise<void>} */
     async getLocation() {
         return new Promise((resolve) => {
             if (!navigator.geolocation) {
@@ -173,6 +185,7 @@ export class WeatherService {
         this.setDefaultLocation();
     }
 
+    /** NYC fallback used when geolocation is missing or denied. */
     setDefaultLocation() {
         this.latitude = 40.7128;
         this.longitude = -74.006;
@@ -181,6 +194,11 @@ export class WeatherService {
         this.countryCode = 'us';
     }
 
+    /**
+     * @param {number} lat
+     * @param {number} lon
+     * @returns {Promise<string>}
+     */
     async reverseGeocode(lat, lon) {
         try {
             const data = await this.#fetchJSON(reverseGeocodeUrl(lat, lon, getBrowserLanguage()));
@@ -444,6 +462,7 @@ export class WeatherService {
         }
     }
 
+    /** @returns {Promise<Array<{name: string, temp: number}>>} */
     async fetchRegionalWeather() {
         const offsets = [
             { name: 'North', lat: 0.1, lon: 0 },
@@ -645,9 +664,15 @@ export class WeatherService {
         return getRepresentativeTimeForDay(day.date, lat ?? this.latitude, lon ?? this.longitude);
     }
 
+    /**
+     * @param {number|null} lat
+     * @param {number|null} lon
+     * @param {string} [type]
+     * @returns {string}
+     */
     getCacheKey(lat, lon, type = 'weather') {
-        const roundedLat = Math.round(lat * 100) / 100;
-        const roundedLon = Math.round(lon * 100) / 100;
+        const roundedLat = Math.round((lat ?? 0) * 100) / 100;
+        const roundedLon = Math.round((lon ?? 0) * 100) / 100;
         return `weatherclock_${roundedLat}_${roundedLon}_${type}`;
     }
 

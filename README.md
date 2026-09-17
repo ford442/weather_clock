@@ -192,7 +192,7 @@ Perfect for quickly testing edge cases (midnight snow, sunset storms, etc.) with
 ### Stack
 - **Engine:** Three.js (WebGL) — 3D rendering with optimized geometry and materials
 - **Data:** [Open-Meteo API](https://open-meteo.com/) — Free weather data (no auth required)
-- **Astronomy:** [SunCalc](https://github.com/mourner/suncalc) (patched for ES modules) — Sun/moon positions and twilight calculations
+- **Astronomy:** [SunCalc](https://github.com/mourner/suncalc) (npm `suncalc`) — Sun/moon positions and twilight calculations
 - **Visuals:** Custom GLSL shaders, InstancedMesh for particles, EffectComposer for post-processing
 
 ### Key Design Decisions

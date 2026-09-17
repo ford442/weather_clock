@@ -23,3 +23,4 @@ export { setupEventListeners } from './event-listeners.js';
 export { setSearchLoading } from './search.js';
 export { showToast, showActionToast } from './toast.js';
 export { setupKeyboardShortcuts } from './shortcuts.js';
+export { setupUiChrome, activateAdvancedTab, toggleDrawer } from './chrome.js';

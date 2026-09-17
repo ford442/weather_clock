@@ -6,6 +6,12 @@ export class ModeShell {
     /** @param {import('../ModeController.js').ModeController} owner */
     constructor(owner) {
         this.owner = owner;
+        /** True when this shell created #mode-toggle rather than binding the HTML button. */
+        this._ownsToggle = false;
+        this._toggleBound = false;
+        this._onToggleClick = () => {
+            this.toggleMode();
+        };
     }
 
     get state() {
@@ -104,40 +110,37 @@ export class ModeShell {
     }
 
     /**
-     * Create the mode toggle button in the UI
+     * Create the mode toggle button in the UI, or attach a click handler
+     * when `#mode-toggle` is already in the document (index.html).
      */
     createModeToggle() {
-        // Check if toggle already exists
-        if (document.getElementById('mode-toggle')) {
-            return;
-        }
+        let toggleBtn = document.getElementById('mode-toggle');
+        if (!toggleBtn) {
+            toggleBtn = document.createElement('button');
+            toggleBtn.id = 'mode-toggle';
+            toggleBtn.className = 'mode-toggle-btn';
+            toggleBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/><line x1="8" y1="8" x2="8" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="8" y1="8" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+            toggleBtn.title = 'Cycle views: Clock / Timeline / 10-Day Forecast (T)';
+            toggleBtn.setAttribute('aria-label', 'Cycle between clock, timeline and forecast views');
 
-        const toggleBtn = document.createElement('button');
-        toggleBtn.id = 'mode-toggle';
-        toggleBtn.className = 'mode-toggle-btn';
-        toggleBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/><line x1="8" y1="8" x2="8" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="8" y1="8" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
-        toggleBtn.title = 'Cycle views: Clock / Timeline / 10-Day Forecast (T)';
-        toggleBtn.setAttribute('aria-label', 'Cycle between clock, timeline and forecast views');
-
-        // Add to center panel
-        const centerPanel = document.getElementById('panel-center');
-        if (centerPanel) {
-            // Insert after the time display section
-            const timeDisplay = centerPanel.querySelector('.time-display');
-            if (timeDisplay && timeDisplay.parentElement) {
-                timeDisplay.parentElement.appendChild(toggleBtn);
-            } else {
-                centerPanel.insertBefore(toggleBtn, centerPanel.firstChild);
+            const centerPanel = document.getElementById('panel-center');
+            if (centerPanel) {
+                const timeDisplay = centerPanel.querySelector('.time-display');
+                if (timeDisplay && timeDisplay.parentElement) {
+                    timeDisplay.parentElement.appendChild(toggleBtn);
+                } else {
+                    centerPanel.insertBefore(toggleBtn, centerPanel.firstChild);
+                }
             }
+
+            this._ownsToggle = true;
+            this.injectStyles();
         }
 
-        // Add click handler
-        toggleBtn.addEventListener('click', () => {
-            this.toggleMode();
-        });
-
-        // Add CSS if not already present
-        this.injectStyles();
+        if (!this._toggleBound) {
+            toggleBtn.addEventListener('click', this._onToggleClick);
+            this._toggleBound = true;
+        }
     }
 
     /**
@@ -346,7 +349,14 @@ export class ModeShell {
     }
 
     dispose() {
-        document.getElementById('mode-toggle')?.remove();
+        const toggleBtn = document.getElementById('mode-toggle');
+        if (toggleBtn && this._toggleBound) {
+            toggleBtn.removeEventListener('click', this._onToggleClick);
+            this._toggleBound = false;
+        }
+        if (this._ownsToggle) {
+            toggleBtn?.remove();
+        }
         document.getElementById('mode-controller-styles')?.remove();
     }
 }

@@ -1,3 +1,5 @@
+import { setupUiChrome } from './chrome.js';
+
 // ── setupEventListeners ──────────────────────────────────────────────────────
 /**
  * @param {{
@@ -13,6 +15,7 @@
  * @param {import('../ModeController.js').ModeController|null|undefined} modeController
  */
 export function setupEventListeners(callbacks, modeController) {
+    setupUiChrome();
     const retryBtn = document.getElementById('retry-location');
     if (retryBtn) retryBtn.addEventListener('click', (e) => callbacks.onRetryLocation?.(e));
 

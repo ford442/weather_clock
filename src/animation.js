@@ -26,7 +26,7 @@ const ANIMATION_CONFIG = {
 export class AnimationController {
     /**
      * @param {AppState} state
-     * @param {{weatherService: import('./weather.js').WeatherService, astronomyService: import('./astronomy.js').AstronomyService, ambienceEngine?: import('./audio/AmbienceEngine.js').AmbienceEngine}} services
+     * @param {AnimationControllerServices} services
      * @param {Object} scene3d
      */
     constructor(state, services, scene3d) {
