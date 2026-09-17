@@ -7,6 +7,7 @@ import {
     syncCloudNodeUniforms
 } from '../webgpu/materials/CloudMaterial.js';
 import { ParticleSystemBase } from './particle-base.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 /** World units a cloud may drift beyond its zone before wrapping, for cross-zone continuity. */
 export const CLOUD_ZONE_OVERLAP = 2.2;
@@ -21,7 +22,7 @@ export class CloudSystem extends ParticleSystemBase {
         this.camera = camera;
         this.maxClouds = maxClouds;
         this.cloudType = cloudType;
-        this.zone = zone || { minX: -12, maxX: 12 };
+        this.zone = zone || SCENE_LAYOUT.sceneSpan;
         // Clouds are allowed to hang past their zone's hard edges so the three zones
         // read as one continuous sky instead of three cut-off blocks. Particles still
         // wrap on the zone bounds; only the cloud field overlaps.

@@ -4,8 +4,21 @@ How the dual WebGL / WebGPU rendering path is organised, which files own which
 backend, and which visual features differ between the two.
 
 Backend selection happens once, at startup, in `src/webgpu/RendererFactory.js`
-(capability probing in `WebGPUCapabilities.js`). Everything downstream receives an
-`isWebGPU` flag; there is no per-frame branching on backend.
+(capability probing in `WebGPUCapabilities.js`). `inspectWebGPUAdapter()` logs
+adapter `info` / `features` / selected limits and rejects adapters that cannot
+host the GPU particle path (storage-buffer / compute / 2K texture floors in
+`GPU_PARTICLE_REQUIRED_LIMITS`) before `WebGPURenderer.init()`. Everything
+downstream receives an `isWebGPU` flag; there is no per-frame branching on backend.
+
+Context flags live on `DEFAULT_OPTIONS` in the factory: `preserveDrawingBuffer`
+is false (photo capture is same-task `toBlob()`), `premultipliedAlpha`/`depth`
+match across backends, and `logarithmicDepthBuffer` follows
+`SCENE_LAYOUT.depth.mode` (currently linear: the Three.js Sky disc + bloom
+over-brighten under log depth). Camera far > sky scale > star-sphere radius
+keeps a 2000-unit star sphere inside the frustum without colliding with the
+sundial. The first native WebGL attempt sets `failIfMajorPerformanceCaveat: true`;
+a software fallback forces the low quality tier for that session. `?test=1`
+skips the caveat so SwiftShader visual baselines keep their captured quality.
 
 ---
 
@@ -18,13 +31,13 @@ builds a WebGL material in its constructor and swaps in a TSL node material from
 an `async initWebGPU()` when the WebGPU backend is active.
 `WeatherEffects.initWebGPU()` awaits all of them once, after renderer detection.
 
-| Feature | Class | WebGL material | WebGPU material |
-|---------|-------|----------------|-----------------|
-| Clouds | `effects/cloud-system.js` | `createCloudMaterial` (`onBeforeCompile` injection) | `createCloudMaterialWebGPU` (TSL) |
-| Stars | `effects/star-field.js` | `createStarFieldMaterial` | `createStarFieldMaterialWebGPU` (TSL) |
-| Ground | `ground.js` / `effects/ground-effects.js` | `MeshStandardMaterial` + patches | `createGroundMaterialWebGPU` (TSL) |
-| Sundial snow/frost | `effects/material-patches.js` | `onBeforeCompile` patches | `webgpu/materials/weather-node-patches.js` |
-| Moon | `moonPhase.js` | `createMoonMaterial` | `createMoonMaterialWebGPU` |
+| Feature            | Class                                     | WebGL material                                      | WebGPU material                            |
+| ------------------ | ----------------------------------------- | --------------------------------------------------- | ------------------------------------------ |
+| Clouds             | `effects/cloud-system.js`                 | `createCloudMaterial` (`onBeforeCompile` injection) | `createCloudMaterialWebGPU` (TSL)          |
+| Stars              | `effects/star-field.js`                   | `createStarFieldMaterial`                           | `createStarFieldMaterialWebGPU` (TSL)      |
+| Ground             | `ground.js` / `effects/ground-effects.js` | `MeshStandardMaterial` + patches                    | `createGroundMaterialWebGPU` (TSL)         |
+| Sundial snow/frost | `effects/material-patches.js`             | `onBeforeCompile` patches                           | `webgpu/materials/weather-node-patches.js` |
+| Moon               | `moonPhase.js`                            | `createMoonMaterial`                                | `createMoonMaterialWebGPU`                 |
 
 Materials in this group live in `src/webgpu/materials/`, one file per feature,
 exporting both factories side by side.
@@ -35,11 +48,11 @@ exporting both factories side by side.
 shading, differs by backend, so they are separate classes chosen by the factory
 in `src/scene-objects.js` and injected into `WeatherEffects` as `gpuClasses`:
 
-| Feature | WebGL class (CPU simulation) | WebGPU class (TSL compute) |
-|---------|------------------------------|----------------------------|
-| Rain | `effects/rain-system.js` | `effects/gpu-rain-system.js` |
-| Snow | `effects/snow-system.js` | `effects/gpu-snow-system.js` |
-| Splashes | `effects/splash-system.js` | `effects/gpu-splash-system.js` |
+| Feature  | WebGL class (CPU simulation) | WebGPU class (TSL compute)     |
+| -------- | ---------------------------- | ------------------------------ |
+| Rain     | `effects/rain-system.js`     | `effects/gpu-rain-system.js`   |
+| Snow     | `effects/snow-system.js`     | `effects/gpu-snow-system.js`   |
+| Splashes | `effects/splash-system.js`   | `effects/gpu-splash-system.js` |
 
 **TSL compute nodes are the canonical WebGPU particle path.** The `GPU*` classes
 own their node materials directly — they do not go through
@@ -55,15 +68,15 @@ either path.
 
 ## Feature parity
 
-| Feature | WebGL | WebGPU | Notes |
-|---------|-------|--------|-------|
-| Cloud volumetric lighting | ✅ | ✅ | Same sun forward-scatter / moon lobe / ambient / height-tint model, ported to TSL. |
-| Star twinkle | ✅ | ✅ | Same position hash and twinkle curve. |
-| Star point size | ✅ per-star `size` | ⚠️ 1 px | Three's WebGPU backend renders `THREE.Points` as 1-pixel primitives and ignores `sizeNode`; size is folded into brightness instead. Sized sprites would require switching the star field to instanced `Sprite`s. |
-| Rain / snow / splashes | CPU (native kernels) | GPU compute | Different simulations by design; the WebGPU path also gets a 5× particle budget at the high tier. |
-| Heat shimmer | ✅ `ShaderPass` | ✅ TSL `PostProcessing` | Both behind the `setHeatShimmer` member of the `PostProcessingPipeline` contract. |
-| Bloom | ✅ `UnrealBloomPass` | ✅ `bloom()` node | |
-| Wet-ground reflection | ✅ | ✅ | Screen-space sample of the reflection target. |
+| Feature                   | WebGL                | WebGPU                  | Notes                                                                                                                                                                                                            |
+| ------------------------- | -------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloud volumetric lighting | ✅                   | ✅                      | Same sun forward-scatter / moon lobe / ambient / height-tint model, ported to TSL.                                                                                                                               |
+| Star twinkle              | ✅                   | ✅                      | Same position hash and twinkle curve.                                                                                                                                                                            |
+| Star point size           | ✅ per-star `size`   | ⚠️ 1 px                 | Three's WebGPU backend renders `THREE.Points` as 1-pixel primitives and ignores `sizeNode`; size is folded into brightness instead. Sized sprites would require switching the star field to instanced `Sprite`s. |
+| Rain / snow / splashes    | CPU (native kernels) | GPU compute             | Different simulations by design; the WebGPU path also gets a 5× particle budget at the high tier.                                                                                                                |
+| Heat shimmer              | ✅ `ShaderPass`      | ✅ TSL `PostProcessing` | Both behind the `setHeatShimmer` member of the `PostProcessingPipeline` contract.                                                                                                                                |
+| Bloom                     | ✅ `UnrealBloomPass` | ✅ `bloom()` node       |                                                                                                                                                                                                                  |
+| Wet-ground reflection     | ✅                   | ✅                      | Screen-space sample of the reflection target.                                                                                                                                                                    |
 
 `src/webgpu/PostProcessingPipeline.js` defines the `PostProcessingPipeline`
 typedef: `render`, `setSize`, `setPixelRatio`, `setBloom`, `setHeatShimmer`,

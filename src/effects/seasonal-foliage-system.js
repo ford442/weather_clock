@@ -5,6 +5,7 @@
 // coupling to `wind-dust-system.js`'s native-buffer machinery.
 import * as THREE from 'three';
 import { ResourceManager } from './cloud-resources.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 const SEASON_COLORS = {
     spring: 0x5fae4a,
@@ -39,7 +40,7 @@ export class SeasonalFoliageSystem {
      */
     constructor(scene, groundRadius) {
         this.scene = scene;
-        this.groundRadius = groundRadius;
+        this.groundRadius = groundRadius ?? SCENE_LAYOUT.ground.radius;
         this.season = 'summer';
         this.particleDivisor = 1;
 

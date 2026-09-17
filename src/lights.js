@@ -1,5 +1,6 @@
 // Lighting setup: sun, moon, and ambient lights
 import * as THREE from 'three';
+import { SCENE_LAYOUT } from './scene-layout.js';
 
 const LIGHTS_CONFIG = {
     ambientColor: 0xffffff,
@@ -28,8 +29,8 @@ export function setupLights(scene, quality = 'high') {
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = shadowMapSize;
     sunLight.shadow.mapSize.height = shadowMapSize;
-    sunLight.shadow.camera.near = 0.5;
-    sunLight.shadow.camera.far = 50;
+    sunLight.shadow.camera.near = SCENE_LAYOUT.shadows.cameraNear;
+    sunLight.shadow.camera.far = SCENE_LAYOUT.shadows.cameraFar;
     sunLight.shadow.camera.left = -LIGHTS_CONFIG.sunShadowCameraSize;
     sunLight.shadow.camera.right = LIGHTS_CONFIG.sunShadowCameraSize;
     sunLight.shadow.camera.top = LIGHTS_CONFIG.sunShadowCameraSize;
@@ -42,8 +43,8 @@ export function setupLights(scene, quality = 'high') {
     moonLight.castShadow = true;
     moonLight.shadow.mapSize.width = moonShadowSize;
     moonLight.shadow.mapSize.height = moonShadowSize;
-    moonLight.shadow.camera.near = 0.5;
-    moonLight.shadow.camera.far = 50;
+    moonLight.shadow.camera.near = SCENE_LAYOUT.shadows.cameraNear;
+    moonLight.shadow.camera.far = SCENE_LAYOUT.shadows.cameraFar;
     moonLight.shadow.camera.left = -LIGHTS_CONFIG.moonShadowCameraSize;
     moonLight.shadow.camera.right = LIGHTS_CONFIG.moonShadowCameraSize;
     moonLight.shadow.camera.top = LIGHTS_CONFIG.moonShadowCameraSize;

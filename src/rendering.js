@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createRenderer, createPostProcessingPipeline, requestWebGLFallback } from './webgpu/index.js';
+import { getRendererInfo } from './webgpu/RendererFactory.js';
 import { t } from './i18n/strings.js';
 import { SCENE_LAYOUT } from './scene-layout.js';
 
@@ -36,6 +37,10 @@ export const QUALITY_CONFIG = {
 
 /** @returns {QualityTier} */
 export function getQualityTier() {
+    if (sessionQualityOverride && QUALITY_CONFIG[sessionQualityOverride]) {
+        return sessionQualityOverride;
+    }
+
     if (typeof localStorage !== 'undefined') {
         const saved = localStorage.getItem('weatherclock_quality');
         if (saved && ['high', 'medium', 'low'].includes(saved)) {
@@ -70,6 +75,7 @@ export function setQualityTier(tier) {
     if (!QUALITY_CONFIG[tier]) {
         throw new Error(`Unknown quality tier: ${tier}`);
     }
+    sessionQualityOverride = null;
     if (typeof localStorage !== 'undefined') {
         localStorage.setItem('weatherclock_quality', tier);
     }
@@ -127,15 +133,25 @@ const RENDERING_CONFIG = {
     bloomRadius: 0.5
 };
 
-export async function setupRendering() {
-    const quality = getQualityTier();
-    const config = QUALITY_CONFIG[quality];
+/** @type {QualityTier|null} */
+let sessionQualityOverride = null;
 
+/**
+ * Force a quality tier for this page load only (software WebGL). Cleared by
+ * `setQualityTier()` so an explicit user choice still wins.
+ * @param {QualityTier|null} tier
+ */
+export function setSessionQualityOverride(tier) {
+    sessionQualityOverride = tier;
+}
+
+export async function setupRendering() {
     // Scene setup
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(RENDERING_CONFIG.fogColor, RENDERING_CONFIG.fogDensity);
 
-    // Camera setup
+    // Camera setup — near/far come from SCENE_LAYOUT so they stay consistent
+    // with sky.scale, the star sphere, and SCENE_LAYOUT.depth.
     const camera = new THREE.PerspectiveCamera(
         RENDERING_CONFIG.cameraFOV,
         window.innerWidth / window.innerHeight,
@@ -151,11 +167,19 @@ export async function setupRendering() {
 
     // Renderer setup — dual-path (WebGPU preferred, WebGL fallback)
     const canvasContainer = document.getElementById('canvas-container');
-    const { renderer, isWebGPU } = await createRenderer(canvasContainer, {
+    const { renderer, isWebGPU, softwareRenderer } = await createRenderer(canvasContainer, {
         clearColor: RENDERING_CONFIG.clearColor,
         toneMappingExposure: RENDERING_CONFIG.toneMappingExposure,
         shadowMapType: THREE.PCFSoftShadowMap
     });
+
+    if (softwareRenderer) {
+        setSessionQualityOverride('low');
+        console.warn('[Rendering] Software WebGL: using low quality this session (not persisted).');
+    }
+
+    const quality = getQualityTier();
+    const config = QUALITY_CONFIG[quality];
 
     // Set pixel ratio capped by config
     const dpr = window.devicePixelRatio || 1;
@@ -188,7 +212,18 @@ export async function setupRendering() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
 
-    return { scene, camera, renderer, pipeline, clock: new THREE.Clock(), controls, isWebGPU };
+    return {
+        scene,
+        camera,
+        renderer,
+        pipeline,
+        clock: new THREE.Clock(),
+        controls,
+        isWebGPU,
+        softwareRenderer,
+        quality,
+        rendererInfo: getRendererInfo()
+    };
 }
 
 /**

@@ -6,9 +6,10 @@ import { WeatherEffects } from './effects/weather-effects.js';
 import { GroundEffects } from './effects/ground-effects.js';
 import { createGround } from './ground.js';
 import { getQualityTier } from './rendering.js';
+import { SCENE_LAYOUT } from './scene-layout.js';
 
 const SKY_CONFIG = {
-    scale: 450000,
+    scale: SCENE_LAYOUT.sky.scale,
     turbidity: 10,
     rayleigh: 3,
     mieCoefficient: 0.005,

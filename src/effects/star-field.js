@@ -13,9 +13,10 @@ import { CONSTELLATIONS, STARS, STAR_INDEX, colorFromBV, getConstellationLineInd
 import { NAKED_EYE_PLANETS, getPlanetPositions } from '../sky/planets.js';
 import { createTextSprite } from './text-sprite.js';
 import { ZodiacOverlay } from './zodiac-overlay.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 export const STAR_FIELD_CONFIG = Object.freeze({
-    radius: 2000,
+    radius: SCENE_LAYOUT.starSphere.radius,
     /** Procedural filler stars, so the catalog's ~190 real ones sit in a believable field. */
     faintStarCount: 2200,
     /** Rebuild catalog positions when precession has moved more than about a year. */
