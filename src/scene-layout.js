@@ -15,10 +15,10 @@ const FUTURE = Object.freeze(/** @type {SceneZoneBounds} */ ({ minX: 4, maxX: 12
 
 /**
  * Camera near/far vs sky vs star sphere:
- * logarithmic depth (WebGL + WebGPU) keeps the sundial (~1 unit) from
- * z-fighting a 2000-unit star sphere even while the procedural sky disc
- * sits at 450000 and `far` is 2e6. Do not drop log-depth without shrinking
- * `sky.scale` and `camera.far` together.
+ * `camera.far` (2e6) > `sky.scale` (450000) > `starSphere.radius` (2000) so
+ * the star sphere sits inside the sky disc and well away from the sundial.
+ * Depth is linear while the Three.js Sky + bloom stack is in use; logarithmic
+ * depth belongs with the celestial-sky replacement (it over-blooms this Sky).
  *
  * Shadow cameras stay tight around the sundial on purpose — weather volumes
  * and the sky disc live far outside `shadows.cameraFar`.
@@ -46,8 +46,15 @@ export const SCENE_LAYOUT = Object.freeze({
     sky: Object.freeze({ scale: 450000 }),
     starSphere: Object.freeze({ radius: 2000 }),
     depth: Object.freeze({
-        /** Shared strategy for WebGL and WebGPU; see RendererFactory. */
-        mode: /** @type {'logarithmic'} */ ('logarithmic')
+        /**
+         * Linear depth with the current Three.js `Sky` + bloom stack.
+         * Logarithmic depth is the right fix for a 2e6 far plane, but it
+         * rewrites `gl_FragDepth` and over-blooms the sky disc; turn it on
+         * only when the sky material is replaced (celestial-sky work).
+         * Until then: `camera.far` > `sky.scale` > `starSphere.radius` so a
+         * 2000-unit star sphere stays inside the frustum and clear of the sundial.
+         */
+        mode: /** @type {'linear'} */ ('linear')
     }),
     shadows: Object.freeze({
         cameraNear: 0.5,

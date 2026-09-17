@@ -99,9 +99,9 @@ describe('RendererFactory context flags', () => {
         vi.unstubAllGlobals();
     });
 
-    it('documents preserveDrawingBuffer false, log depth, and premultiplied alpha', () => {
+    it('documents preserveDrawingBuffer false, linear depth, and premultiplied alpha', () => {
         expect(DEFAULT_OPTIONS.preserveDrawingBuffer).toBe(false);
-        expect(DEFAULT_OPTIONS.logarithmicDepthBuffer).toBe(true);
+        expect(DEFAULT_OPTIONS.logarithmicDepthBuffer).toBe(false);
         expect(DEFAULT_OPTIONS.premultipliedAlpha).toBe(true);
         expect(DEFAULT_OPTIONS.depth).toBe(true);
         expect(DEFAULT_OPTIONS.failIfMajorPerformanceCaveat).toBe(true);
@@ -129,7 +129,7 @@ describe('RendererFactory context flags', () => {
         expect(result.softwareRenderer).toBe(true);
         expect(constructors[0].failIfMajorPerformanceCaveat).toBe(true);
         expect(constructors[1].failIfMajorPerformanceCaveat).toBe(false);
-        expect(constructors[0].logarithmicDepthBuffer).toBe(true);
+        expect(constructors[0].logarithmicDepthBuffer).toBe(false);
         expect(constructors[0].preserveDrawingBuffer).toBe(false);
         expect(constructors[0].premultipliedAlpha).toBe(true);
         expect(constructors[0].depth).toBe(true);

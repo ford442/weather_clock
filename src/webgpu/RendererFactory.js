@@ -27,8 +27,10 @@ import { SCENE_LAYOUT } from '../scene-layout.js';
  *   `?test=1` skips the caveat so Playwright's SwiftShader baselines stay on
  *   the quality tier they were captured with.
  * - `premultipliedAlpha` / `depth` are explicit so WebGPU matches WebGL.
- * - `logarithmicDepthBuffer` is the shared depth strategy (see SCENE_LAYOUT.depth)
- *   so a 2000-unit star sphere does not z-fight the sundial against a 2e6 far plane.
+ * - `logarithmicDepthBuffer` follows `SCENE_LAYOUT.depth.mode`. It stays false
+ *   while the Three.js `Sky` addon + bloom path is active (log depth over-blooms
+ *   the disc). Camera far > sky scale > star sphere still keeps a 2000-unit
+ *   star sphere from colliding with the sundial in clip space.
  * - `outputColorSpace` is sRGB; Three r181 configures the WebGL drawing-buffer
  *   color space and the WebGPU `GPUCanvasContext` from this property.
  */
@@ -59,7 +61,7 @@ export const DEFAULT_OPTIONS = Object.freeze(
         stencil: false,
         preserveDrawingBuffer: false,
         failIfMajorPerformanceCaveat: true,
-        logarithmicDepthBuffer: SCENE_LAYOUT.depth.mode === 'logarithmic',
+        logarithmicDepthBuffer: SCENE_LAYOUT.depth.mode !== 'linear',
         powerPreference: 'high-performance',
         clearColor: 0x000000,
         outputColorSpace: THREE.SRGBColorSpace,

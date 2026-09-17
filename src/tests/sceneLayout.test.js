@@ -60,7 +60,7 @@ describe('SCENE_LAYOUT', () => {
         expect(SCENE_LAYOUT.camera.far).toBeGreaterThan(SCENE_LAYOUT.sky.scale);
         expect(SCENE_LAYOUT.sky.scale).toBeGreaterThan(SCENE_LAYOUT.starSphere.radius);
         expect(SCENE_LAYOUT.starSphere.radius).toBeGreaterThan(SCENE_LAYOUT.ground.radius);
-        expect(SCENE_LAYOUT.depth.mode).toBe('logarithmic');
+        expect(SCENE_LAYOUT.depth.mode).toBe('linear');
         expect(SCENE_LAYOUT.camera.near).toBeLessThan(1);
     });
 

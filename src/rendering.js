@@ -151,7 +151,7 @@ export async function setupRendering() {
     scene.fog = new THREE.FogExp2(RENDERING_CONFIG.fogColor, RENDERING_CONFIG.fogDensity);
 
     // Camera setup — near/far come from SCENE_LAYOUT so they stay consistent
-    // with sky.scale, the star sphere, and logarithmic depth.
+    // with sky.scale, the star sphere, and SCENE_LAYOUT.depth.
     const camera = new THREE.PerspectiveCamera(
         RENDERING_CONFIG.cameraFOV,
         window.innerWidth / window.innerHeight,

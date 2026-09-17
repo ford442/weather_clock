@@ -1,7 +1,9 @@
 <!-- From: /root/weather_clock/AGENTS.md -->
+
 # AGENTS.md
 
 ## Scope
+
 This file applies to the entire `weather_clock` repository.
 
 ---
@@ -16,6 +18,7 @@ This file applies to the entire `weather_clock` repository.
 - **Time simulation** — runs on a decoupled `simulationTime` with an optional time-warp feature (24-hour cycle in 60 seconds).
 
 The app has three viewing modes:
+
 1. **Clock Mode** — A 3D sundial with analog hands, surrounding sky, and overlaid weather panels.
 2. **Timeline Mode** — A 21-day horizontal timeline of weather columns. Toggle with the button in the top-right or press `T`.
 3. **10-Day Forecast View** — Strip of 10 daily vignette cards (2D previews) + click-to-focus live 3D scene with date-specific astronomy, wind, clouds, and precipitation. Time-of-day scrubber per day. Cycle modes with the top-right button.
@@ -24,23 +27,24 @@ The app has three viewing modes:
 
 ## Technology Stack
 
-| Layer | Technology | Version / Notes |
-|-------|------------|-----------------|
-| **Language** | Vanilla JavaScript (ES modules) | `"type": "module"` in `package.json` |
-| **3D Engine** | Three.js | `^0.181.2` |
-| **Build Tool** | Vite | `^7.2.4` |
-| **Unit Tests** | Vitest | `^3.2.4` |
-| **Astronomy** | SunCalc | Vendored as ES module in `src/vendor/suncalc.js` |
-| **Weather Data** | Open-Meteo API | Forecast + Archive endpoints |
-| **Geocoding** | Nominatim (OpenStreetMap) | Used for search & reverse geocoding |
-| **PWA / Offline** | `vite-plugin-pwa` + Workbox | Precached app shell; runtime caching for Open-Meteo and Nominatim |
-| **Visual / E2E Testing** | Playwright Test (`@playwright/test`) | Unified suite in `e2e/`; see `playwright.config.js` |
+| Layer                    | Technology                           | Version / Notes                                                   |
+| ------------------------ | ------------------------------------ | ----------------------------------------------------------------- |
+| **Language**             | Vanilla JavaScript (ES modules)      | `"type": "module"` in `package.json`                              |
+| **3D Engine**            | Three.js                             | `^0.181.2`                                                        |
+| **Build Tool**           | Vite                                 | `^7.2.4`                                                          |
+| **Unit Tests**           | Vitest                               | `^3.2.4`                                                          |
+| **Astronomy**            | SunCalc                              | Vendored as ES module in `src/vendor/suncalc.js`                  |
+| **Weather Data**         | Open-Meteo API                       | Forecast + Archive endpoints                                      |
+| **Geocoding**            | Nominatim (OpenStreetMap)            | Used for search & reverse geocoding                               |
+| **PWA / Offline**        | `vite-plugin-pwa` + Workbox          | Precached app shell; runtime caching for Open-Meteo and Nominatim |
+| **Visual / E2E Testing** | Playwright Test (`@playwright/test`) | Unified suite in `e2e/`; see `playwright.config.js`               |
 
 ---
 
 ## File Structure
 
 ### Root
+
 - `index.html` — Entry point. Loads Three.js via an import map and mounts `src/main.js`.
 - `package.json` — NPM manifest with Vite/Vitest scripts.
 - `deploy.py` — Authenticated bundle deployment script. Configuration comes from environment variables or a gitignored `deploy.config.json`.
@@ -48,38 +52,40 @@ The app has three viewing modes:
 - `docs/WEBGPU_ARCHITECTURE.md` — How the dual WebGL/WebGPU path is split, which class owns which backend, and where the two differ visually.
 
 ### Source (`src/`)
-| File | Responsibility |
-|------|----------------|
-| `main.js` | Application orchestrator. Sets up state, rendering, lights, scene objects, services, animation loop, UI callbacks, mode controller, debug API, offline status, and kiosk/wake-lock mode. |
-| `registerSW.js` | Registers the Vite PWA service worker and shows the update-available toast prompt. Skips registration when `?test=1` is present. |
-| `rendering.js` | Scene/camera setup, quality tiers, renderer recovery, and the shared interface to the dual WebGL/WebGPU pipeline. |
-| `lights.js` | Ambient light, directional sun light, directional moon light; shadow map configuration. |
-| `scene-objects.js` | Factory functions for the `Sky` object, sundial, moon group, and weather effects. |
-| `animation.js` | `AnimationController` class. Drives the `requestAnimationFrame` loop, advances `simulationTime`, handles time-warp, throttles UI updates. |
-| `ui.js`, `ui/` | DOM-facing facade plus focused modules for time/date, weather panels, search, gauges, sparklines, toasts, shortcuts, and event listeners. |
-| `weather-simulation.js` | Weather interpolation over the hourly timeline (`getWeatherAtTime`), plus `getActiveWeatherData` for past/current/forecast snapshots. |
-| `weather.js` | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timelines, handles geolocation/search, unit conversion, and advanced analytics. Forecast accuracy (`getPredictionAccuracy`) compares Previous Runs API predictions against observed temperatures (cached once per day per location) using the shared math in `accuracy.js`. |
-| `accuracy.js` | Shared forecast-accuracy math used by both `weather.js` (clock mode) and `timeline/TimelineData.js` (timeline mode): mean-absolute-error pairing/gating, MAE+RMSE+skill-vs-persistence scoring, and the once-per-day cache TTL/key suffix — kept in one place so the two modes never compute accuracy differently. |
-| `astronomy.js` | `AstronomyService` class. Wraps SunCalc to compute sun/moon positions and illumination, converting spherical coordinates to Three.js Cartesian. Also returns the `sunlight`/`moonlight` models from `celestialLighting.js` for the instant it was asked about. |
-| `celestialLighting.js` | Pure physical models for the sun/moon light contrast: Earth–Sun distance from orbital elements (SunCalc has no such field) and its ~±3.4% irradiance swing, Allen's lunar brightness law (a half moon is ~1/11th of a full moon, not 1/2), the super/micromoon distance factor, and Kasten–Young atmospheric extinction + reddening. No Three.js, no DOM. |
-| `effects/weather-effects.js`, `effects/` | Weather-effect coordinator plus pooled rain, snow, dust, cloud, fog, star, and splash systems. |
-| `weatherLighting.js` | `updateWeatherLighting()` — calculates day/night factor, weighted cloud cover, severity, fog density, sky shader uniforms, and smoothly interpolates sun/moon/ambient colors and intensities. Applies the `celestialLighting.js` models on top of the weather terms, so clock, forecast, and timeline modes all share one lighting formula. |
-| `shaders.js` | GLSL shader strings used by rain and cloud materials. |
-| `sundial.js` | 3D sundial geometry (base, clock face, hour markers, gnomon, analog hands) with an `update(time)` method. |
-| `moonPhase.js` | Moon phase math and the moon mesh/terminator shader. `updateMoonVisuals()` drives the disk's Lommel–Seeliger photometry, earthshine, horizon warmth, and apparent size from the current `MoonlightModel`. |
-| `atmosphereTheme.js` | Updates CSS custom properties (`--accent`, `--glow`, `--trend-glow`, etc.) based on time of day and weather severity. |
-| `debug.js` | Exposes `window.setDebugWeather(code)`, `window.setDebugTime(hour)`, and `window.aetherDebug` for runtime inspection. |
-| `ModeController.js`, `modes/` | Mode orchestration, adapters, camera transitions, UI visibility, and browser history for Clock, Timeline, and Forecast modes. |
-| `forecast/` | ForecastController + ForecastUI + DailyPreview (2D). New mode for immersive future-day vignettes. |
-| `capture/` | Photo mode + time-lapse export. `photo.js` renders one frame at 2× pixel ratio and captures it via same-task `canvas.toBlob()` (no `preserveDrawingBuffer`), composites a caption strip (`caption.js`), and shares/downloads (`share.js`). `timelapse.js` records a deterministic 00:00→24:00 sweep (720 fixed-timestep frames) via `MediaRecorder` on `canvas.captureStream()`. Shortcuts: `P` = photo, `L` = time-lapse (hidden under reduced motion). `ModeController.setLocked()` blocks mode switching while recording. |
-| `webgpu/` | Renderer capability detection/factory, WebGL and WebGPU post-processing adapters, and TSL/WebGPU material adapters. WebGL remains the fallback. Rain/snow/splash are the exception: they are separate per-backend classes, not dual-material adapters — see `docs/WEBGPU_ARCHITECTURE.md`. |
-| `sky/` | Night-sky astronomy, all pure math with no Three.js: `celestialCoordinates.js` (Julian dates, sidereal time, IAU 1976 precession, equatorial↔ecliptic with the obliquity of date, and the single rotation matrix that maps the whole equatorial catalog into the scene frame), `starCatalog.js` (~190 bright stars at J2000 plus 37 stylized constellation figures and B–V→RGB tinting), `planets.js` (JPL approximate Keplerian elements for Mercury–Neptune, geocentric RA/Dec and apparent magnitude, accurate to well under 1°), and `zodiac.js` (the twelve signs, a truncated ELP-2000 lunar longitude, the Lahiri ayanamsa, and tropical/sidereal sign assignment for the Sun, Moon, and planets). |
-| `effects/star-field.js` | The night-sky layer. Real stars in true positions, constellation lines, and the naked-eye planets, all parented to one group whose matrix carries observer latitude + local sidereal time — so per-star alt/az is never recomputed. Fades with twilight, cloud cover, and a light-pollution knob; constellations/labels toggle with `C`. Owns the zodiac overlay as a child of the same group. |
-| `effects/zodiac-overlay.js` | The optional zodiacal band: the ecliptic as a thin arc, a tick at each of the twelve sign cusps, and a glyph beside each slice, with the Sun's and Moon's signs lit brighter. Parents into the star field's `skyGroup`, so one rotation carries it and the planets land on its line for free. Off by default; `Z` cycles off → tropical → sidereal. |
-| `effects/text-sprite.js` | Shared canvas-texture label sprite used by the star field's planet/constellation names and the zodiac glyphs. |
-| `vendor/suncalc.js` | Vendored SunCalc library patched for ES module compatibility. |
+
+| File                                     | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main.js`                                | Application orchestrator. Sets up state, rendering, lights, scene objects, services, animation loop, UI callbacks, mode controller, debug API, offline status, and kiosk/wake-lock mode.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `registerSW.js`                          | Registers the Vite PWA service worker and shows the update-available toast prompt. Skips registration when `?test=1` is present.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `rendering.js`                           | Scene/camera setup, quality tiers, renderer recovery, and the shared interface to the dual WebGL/WebGPU pipeline.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `lights.js`                              | Ambient light, directional sun light, directional moon light; shadow map configuration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `scene-objects.js`                       | Factory functions for the `Sky` object, sundial, moon group, and weather effects.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `animation.js`                           | `AnimationController` class. Drives the `requestAnimationFrame` loop, advances `simulationTime`, handles time-warp, throttles UI updates.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `ui.js`, `ui/`                           | DOM-facing facade plus focused modules for time/date, weather panels, search, gauges, sparklines, toasts, shortcuts, and event listeners.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `weather-simulation.js`                  | Weather interpolation over the hourly timeline (`getWeatherAtTime`), plus `getActiveWeatherData` for past/current/forecast snapshots.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `weather.js`                             | `WeatherService` class. Fetches Open-Meteo forecast and archive data, builds hourly timelines, handles geolocation/search, unit conversion, and advanced analytics. Forecast accuracy (`getPredictionAccuracy`) compares Previous Runs API predictions against observed temperatures (cached once per day per location) using the shared math in `accuracy.js`.                                                                                                                                                                                                                                                                                                                                           |
+| `accuracy.js`                            | Shared forecast-accuracy math used by both `weather.js` (clock mode) and `timeline/TimelineData.js` (timeline mode): mean-absolute-error pairing/gating, MAE+RMSE+skill-vs-persistence scoring, and the once-per-day cache TTL/key suffix — kept in one place so the two modes never compute accuracy differently.                                                                                                                                                                                                                                                                                                                                                                                        |
+| `astronomy.js`                           | `AstronomyService` class. Wraps SunCalc to compute sun/moon positions and illumination, converting spherical coordinates to Three.js Cartesian. Also returns the `sunlight`/`moonlight` models from `celestialLighting.js` for the instant it was asked about.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `celestialLighting.js`                   | Pure physical models for the sun/moon light contrast: Earth–Sun distance from orbital elements (SunCalc has no such field) and its ~±3.4% irradiance swing, Allen's lunar brightness law (a half moon is ~1/11th of a full moon, not 1/2), the super/micromoon distance factor, and Kasten–Young atmospheric extinction + reddening. No Three.js, no DOM.                                                                                                                                                                                                                                                                                                                                                 |
+| `effects/weather-effects.js`, `effects/` | Weather-effect coordinator plus pooled rain, snow, dust, cloud, fog, star, and splash systems.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `weatherLighting.js`                     | `updateWeatherLighting()` — calculates day/night factor, weighted cloud cover, severity, fog density, sky shader uniforms, and smoothly interpolates sun/moon/ambient colors and intensities. Applies the `celestialLighting.js` models on top of the weather terms, so clock, forecast, and timeline modes all share one lighting formula.                                                                                                                                                                                                                                                                                                                                                               |
+| `shaders.js`                             | GLSL shader strings used by rain and cloud materials.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `sundial.js`                             | 3D sundial geometry (base, clock face, hour markers, gnomon, analog hands) with an `update(time)` method.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `moonPhase.js`                           | Moon phase math and the moon mesh/terminator shader. `updateMoonVisuals()` drives the disk's Lommel–Seeliger photometry, earthshine, horizon warmth, and apparent size from the current `MoonlightModel`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `atmosphereTheme.js`                     | Updates CSS custom properties (`--accent`, `--glow`, `--trend-glow`, etc.) based on time of day and weather severity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `debug.js`                               | Exposes `window.setDebugWeather(code)`, `window.setDebugTime(hour)`, and `window.aetherDebug` for runtime inspection.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `ModeController.js`, `modes/`            | Mode orchestration, adapters, camera transitions, UI visibility, and browser history for Clock, Timeline, and Forecast modes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `forecast/`                              | ForecastController + ForecastUI + DailyPreview (2D). New mode for immersive future-day vignettes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `capture/`                               | Photo mode + time-lapse export. `photo.js` renders one frame at 2× pixel ratio and captures it via same-task `canvas.toBlob()` (no `preserveDrawingBuffer`), composites a caption strip (`caption.js`), and shares/downloads (`share.js`). `timelapse.js` records a deterministic 00:00→24:00 sweep (720 fixed-timestep frames) via `MediaRecorder` on `canvas.captureStream()`. Shortcuts: `P` = photo, `L` = time-lapse (hidden under reduced motion). `ModeController.setLocked()` blocks mode switching while recording.                                                                                                                                                                              |
+| `webgpu/`                                | Renderer capability detection/factory, WebGL and WebGPU post-processing adapters, and TSL/WebGPU material adapters. WebGL remains the fallback. Rain/snow/splash are the exception: they are separate per-backend classes, not dual-material adapters — see `docs/WEBGPU_ARCHITECTURE.md`.                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `sky/`                                   | Night-sky astronomy, all pure math with no Three.js: `celestialCoordinates.js` (Julian dates, sidereal time, IAU 1976 precession, equatorial↔ecliptic with the obliquity of date, and the single rotation matrix that maps the whole equatorial catalog into the scene frame), `starCatalog.js` (~190 bright stars at J2000 plus 37 stylized constellation figures and B–V→RGB tinting), `planets.js` (JPL approximate Keplerian elements for Mercury–Neptune, geocentric RA/Dec and apparent magnitude, accurate to well under 1°), and `zodiac.js` (the twelve signs, a truncated ELP-2000 lunar longitude, the Lahiri ayanamsa, and tropical/sidereal sign assignment for the Sun, Moon, and planets). |
+| `effects/star-field.js`                  | The night-sky layer. Real stars in true positions, constellation lines, and the naked-eye planets, all parented to one group whose matrix carries observer latitude + local sidereal time — so per-star alt/az is never recomputed. Fades with twilight, cloud cover, and a light-pollution knob; constellations/labels toggle with `C`. Owns the zodiac overlay as a child of the same group.                                                                                                                                                                                                                                                                                                            |
+| `effects/zodiac-overlay.js`              | The optional zodiacal band: the ecliptic as a thin arc, a tick at each of the twelve sign cusps, and a glyph beside each slice, with the Sun's and Moon's signs lit brighter. Parents into the star field's `skyGroup`, so one rotation carries it and the planets land on its line for free. Off by default; `Z` cycles off → tropical → sidereal.                                                                                                                                                                                                                                                                                                                                                       |
+| `effects/text-sprite.js`                 | Shared canvas-texture label sprite used by the star field's planet/constellation names and the zodiac glyphs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `vendor/suncalc.js`                      | Vendored SunCalc library patched for ES module compatibility.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ### Timeline Subsystem (`src/timeline/`)
+
 - `TimelineController.js` — Manages 21-day 3D column visualization, raycasting, hover/selection states.
 - `TimelineUI.js` — DOM overlay for timeline details.
 - `DayColumn.js` — Individual 3D column representing one day, with custom GLSL temperature-gradient shaders.
@@ -89,15 +95,18 @@ The app has three viewing modes:
 - `timeline.css` — Style entry point; imports the split timeline core and overlay styles.
 
 ### Tests (`src/tests/`)
+
 - Unit tests cover astronomy, weather, forecast logic, rendering quality/recovery, weather effects, and lighting.
 - `zodiac.test.js` cross-checks the zodiac layer the same way: the Sun reaching λ=0/90/180/270 within arcminutes of the published 2024 equinox and solstice instants, the Moon against Meeus' worked example 47.a and against SunCalc's independent lunar series via the illuminated fraction, an equatorial↔ecliptic round trip, and the drawn band's cusps measuring exactly 30° apart once projected back off the sky sphere.
 - `nightSky.test.js` cross-checks the star/planet astronomy against independent references: the Sun's ecliptic longitude at known equinox/solstice instants (within ~1.5 arcminutes), SunCalc's own sun position, Polaris sitting at the observer's latitude, and the scene rotation matrix agreeing with the alt/az formula to 12 decimals.
 
 ### Shaders (`shaders/`)
+
 - Experimental WGSL compute shaders: `rain-compute.wgsl`, `snow-compute.wgsl`, `splash-compute.wgsl`, `cloud-post.wgsl`, `star-field.wgsl`.
 - They are not the active WebGPU path. Runtime WebGPU support lives under `src/webgpu/`; WebGL shader strings remain in `src/shaders.js`. Do not wire the standalone WGSL files into production unless explicitly working on issue #87.
 
 ### Visual & Functional E2E (`e2e/`)
+
 - Specs use the `.e2e.js` suffix (Playwright `testMatch`) so Vitest never picks them up.
 - `visual.e2e.js` covers the canonical weather/time screenshot matrix plus UI/debug readiness and forecast-mode smoke checks.
 - `functional.e2e.js` covers behavior flows (mode cycling, unit/search/quality persistence) with all external APIs mocked.
@@ -127,6 +136,7 @@ npm test
 ```
 
 ### Visual Regression & E2E Tests
+
 Requires a one-time browser install (`npx playwright install chromium`). Playwright starts the dev server automatically via the `webServer` config:
 
 ```bash
@@ -162,11 +172,11 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
 - **Add JSDoc types when you touch a function/method**, even if the surrounding file predates this convention and is loosely typed elsewhere. At minimum: `@param` types for anything non-obvious, and a `@returns` type for anything a caller will branch on. Public methods on shared classes (`WeatherService`, `TimelineData`, `ModeController`, `AstronomyService`, and friends) should have complete `@param`/`@returns` JSDoc — callers rely on it and `tsc` enforces it.
 - **Shared data shapes live in `src/types.d.ts`** as global ambient `interface`/`type` declarations (`WeatherSnapshot`, `WeatherData`, `AppState`, `TimelineDayData`, `DailyForecastDay`, etc.) — no import needed, just reference the type name in JSDoc. Add a new shape there when it's used across more than one or two files; keep genuinely file-local shapes as a local `@typedef` instead.
 - **Common `strictNullChecks` fixes, in priority order:**
-  1. A `let x = null;` or `const obj = { field: null, ... }` with no annotation infers the literal type `null` (not `T|null`) from that single assignment — this is the single most common cause of a cascading "possibly null" or "does not exist on type never" error far from the actual bug. Fix at the declaration: `/** @type {T|null} */ let x = null;`.
-  2. A value that's null-typed but provably non-null at a given point by program logic TS can't see (e.g. two variables gated by the same upstream `if`, narrowing lost across an `await`, or lost inside a hoisted `function` declaration nested in a narrowed block) — bind a local non-null `const` right after the guard and use that, rather than repeating casts at every use site.
-  3. A value that can never actually be null in practice (e.g. `canvas.getContext('2d')` on a freshly-created canvas) — cast once at that point: `/** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'))`.
-  4. Real optionality (DOM query results, optional numeric/string fields, optional callbacks) — use a guard clause, `?.`, or a `?? default`, matching whatever pattern is already used nearby in the same file.
-  5. Never use TypeScript's `!` non-null assertion operator here — it doesn't parse the same way in a `.js`+JSDoc file. Use the `/** @type {T} */ (expr)` cast form instead.
+    1. A `let x = null;` or `const obj = { field: null, ... }` with no annotation infers the literal type `null` (not `T|null`) from that single assignment — this is the single most common cause of a cascading "possibly null" or "does not exist on type never" error far from the actual bug. Fix at the declaration: `/** @type {T|null} */ let x = null;`.
+    2. A value that's null-typed but provably non-null at a given point by program logic TS can't see (e.g. two variables gated by the same upstream `if`, narrowing lost across an `await`, or lost inside a hoisted `function` declaration nested in a narrowed block) — bind a local non-null `const` right after the guard and use that, rather than repeating casts at every use site.
+    3. A value that can never actually be null in practice (e.g. `canvas.getContext('2d')` on a freshly-created canvas) — cast once at that point: `/** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'))`.
+    4. Real optionality (DOM query results, optional numeric/string fields, optional callbacks) — use a guard clause, `?.`, or a `?? default`, matching whatever pattern is already used nearby in the same file.
+    5. Never use TypeScript's `!` non-null assertion operator here — it doesn't parse the same way in a `.js`+JSDoc file. Use the `/** @type {T} */ (expr)` cast form instead.
 - **`.ts` files are allowed** for a module that would clearly benefit from real generics, discriminated unions, or other TS-only syntax JSDoc can't express cleanly — but none exist yet, and the bar is high given the project's vanilla-JS-runtime philosophy (see Technology Stack above). Prefer JSDoc unless you have a concrete reason.
 - **`src/vendor/` and generated native glue stay excluded** from typechecking (see `tsconfig.json`'s `exclude`); don't add types there.
 
@@ -175,39 +185,42 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
 ## Testing Instructions
 
 1. **Unit Tests**
-   - Run `npm test` before committing.
-   - Tests are in `src/tests/` and use Vitest with mocked `fetch` and `navigator.geolocation`.
+    - Run `npm test` before committing.
+    - Tests are in `src/tests/` and use Vitest with mocked `fetch` and `navigator.geolocation`.
 
 2. **Visual & Functional E2E**
-   - One-time setup: `npx playwright install chromium`
-   - Run `npm run test:e2e` (the dev server starts automatically).
-   - Inspect `test-results/` diffs and `playwright-report/` for regressions in sky color, weather effects, forecast mode, and UI layout.
+    - One-time setup: `npx playwright install chromium`
+    - Run `npm run test:e2e` (the dev server starts automatically).
+    - Inspect `test-results/` diffs and `playwright-report/` for regressions in sky color, weather effects, forecast mode, and UI layout.
 
 3. **PWA / Offline Verification**
-   - Run `npm run build && npm run preview` to exercise the production service worker.
-   - Open DevTools → Application → Service Workers and confirm `/sw.js` is registered.
-   - Enable offline in DevTools, reload, and confirm the app shell still renders and the `#offline-status` pill appears.
-   - The web app manifest (`/manifest.webmanifest`) uses `display: fullscreen` and the dusk palette theme color (`#2E1A47`).
+    - Run `npm run build && npm run preview` to exercise the production service worker.
+    - Open DevTools → Application → Service Workers and confirm `/sw.js` is registered.
+    - Enable offline in DevTools, reload, and confirm the app shell still renders and the `#offline-status` pill appears.
+    - The web app manifest (`/manifest.webmanifest`) uses `display: fullscreen` and the dusk palette theme color (`#2E1A47`).
 
 4. **Interactive Debug Mode**
-   - Open the browser console on `http://localhost:5173` and use:
-     ```javascript
-     window.setDebugWeather(65);   // Force Heavy Rain (0 = Clear, 71 = Snow, 95 = Thunderstorm)
-     window.setDebugTime(14.5);    // Jump to 2:30 PM
-     window.aetherDebug.getSimulationTime();
-     window.aetherDebug.getWeatherData();
-     window.aetherDebug.getSunPosition();
-     window.aetherDebug.getMoonPosition();
-     window.aetherDebug.getPlanetPositions();   // RA/Dec + apparent magnitude per planet
-     window.aetherDebug.getNightSkyState();     // observer, cloud cover, overlay toggles
-     window.aetherDebug.getZodiacState();       // Sun/Moon/planet signs under the active convention
- window.aetherDebug.setLightPollution(0.8); // wash the faint stars out
- window.aetherDebug.getSceneLayout(); // zone bounds, camera, sky, star sphere, depth
- window.aetherDebug.getRendererInfo(); // backend, adapter, limits, context attributes
- ```
+    - Open the browser console on `http://localhost:5173` and use:
+        ```javascript
+        window.setDebugWeather(65); // Force Heavy Rain (0 = Clear, 71 = Snow, 95 = Thunderstorm)
+        window.setDebugTime(14.5); // Jump to 2:30 PM
+        window.aetherDebug.getSimulationTime();
+        window.aetherDebug.getWeatherData();
+        window.aetherDebug.getSunPosition();
+        window.aetherDebug.getMoonPosition();
+        window.aetherDebug.getPlanetPositions(); // RA/Dec + apparent magnitude per planet
+        window.aetherDebug.getNightSkyState(); // observer, cloud cover, overlay toggles
+        window.aetherDebug.getZodiacState(); // Sun/Moon/planet signs under the active convention
+        ```
+
+window.aetherDebug.setLightPollution(0.8); // wash the faint stars out
+window.aetherDebug.getSceneLayout(); // zone bounds, camera, sky, star sphere, depth
+window.aetherDebug.getRendererInfo(); // backend, adapter, limits, context attributes
+
+```
 
 5. **CI must stay green**
-   - `npm run lint`, `npm run typecheck`, and `npm run format:check` are required CI gates in addition to `npm test`. Run all four locally before pushing — a change that adds a new export, parameter, or field (e.g. to `WeatherSnapshot` or a post-processing adapter) must update `src/types.d.ts` and remove/underscore-prefix any now-unused parameters in the same commit.
+  - `npm run lint`, `npm run typecheck`, and `npm run format:check` are required CI gates in addition to `npm test`. Run all four locally before pushing — a change that adds a new export, parameter, or field (e.g. to `WeatherSnapshot` or a post-processing adapter) must update `src/types.d.ts` and remove/underscore-prefix any now-unused parameters in the same commit.
 
 ---
 
@@ -216,13 +229,13 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
 - Deployment credentials must be supplied through environment variables or a gitignored `deploy.config.json`; never commit live tokens or server credentials.
 - The app fetches data from external APIs (Open-Meteo, Nominatim) over HTTPS. No API keys are required.
 - User location and unit preferences are stored in `localStorage` under the keys:
-  - `weatherclock_lat`
-  - `weatherclock_lon`
-  - `weatherclock_location`
-  - `weatherclock_unit`
-  - `weatherclock_wind_unit`
-  - `weatherclock_night_sky`
-  - `weatherclock_zodiac`
+ - `weatherclock_lat`
+ - `weatherclock_lon`
+ - `weatherclock_location`
+ - `weatherclock_unit`
+ - `weatherclock_wind_unit`
+ - `weatherclock_night_sky`
+ - `weatherclock_zodiac`
 
 ---
 
@@ -243,7 +256,7 @@ The scene is visually divided into three time-offset zones, defined as the singl
 - **Present (Center):** `x: -4 to 4` — current weather
 - **Future (Right):** `x: 4 to 12` — weather from ~3 hours ahead
 
-Particle systems (rain, snow, dust, fog) are constrained to zone boundaries. When modifying particle physics, ensure position wrapping uses the zone's `minX`/`maxX` bounds, not global bounds, or weather will "leak" between time periods. Lightning strikes only spawn in `SCENE_LAYOUT.lightning`, which matches the present zone. Fog wraps on `SCENE_LAYOUT.fog` (`minZ`/`maxZ` = ±8). Ground radius is `SCENE_LAYOUT.ground.radius` (3.6). Camera near/far/FOV, sky scale (450000), and star-sphere radius (2000) live on the same object. Depth strategy is logarithmic (`SCENE_LAYOUT.depth.mode`) so the sundial does not z-fight the star sphere against a 2e6 far plane. Shadow cameras stay at `SCENE_LAYOUT.shadows.cameraFar = 50` (sundial only). Import from `src/scene-layout.js` rather than hardcoding — call `aetherDebug.getSceneLayout()` and `aetherDebug.getRendererInfo()` live.
+Particle systems (rain, snow, dust, fog) are constrained to zone boundaries. When modifying particle physics, ensure position wrapping uses the zone's `minX`/`maxX` bounds, not global bounds, or weather will "leak" between time periods. Lightning strikes only spawn in `SCENE_LAYOUT.lightning`, which matches the present zone. Fog wraps on `SCENE_LAYOUT.fog` (`minZ`/`maxZ` = ±8). Ground radius is `SCENE_LAYOUT.ground.radius` (3.6). Camera near/far/FOV, sky scale (450000), and star-sphere radius (2000) live on the same object. Depth is linear (`SCENE_LAYOUT.depth.mode`) while the current Sky+bloom stack is in use — logarithmic depth is documented as the follow-on once that sky is replaced. Nested radii stay `far` > sky > stars so a 2000-unit star sphere cannot occupy the sundial's depth. Shadow cameras stay at `SCENE_LAYOUT.shadows.cameraFar = 50` (sundial only). Import from `src/scene-layout.js` rather than hardcoding — call `aetherDebug.getSceneLayout()` and `aetherDebug.getRendererInfo()` live.
 
 Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Forecast (30%). Do not set `sunLight.position` in `weatherLighting.js`; position is handled exclusively by `astronomy.js`.
 
@@ -308,3 +321,4 @@ Node dependencies are refreshed automatically on startup (`npm install`), so the
 - **E2E / visual regression is optional and NOT covered by the update script.** One-time setup: `npx playwright install chromium`. Then run `npm run test:e2e` (Playwright auto-starts the dev server). For a fast health check without screenshots, run only the functional specs: `npx playwright test e2e/functional.e2e.js`. Baselines are captured with SwiftShader (software WebGL) for cross-machine stability, but GPU/font-driven diffs can still occur on unusual hardware.
 - **Harmless headless-GL console noise:** in headless Chromium the app logs a `favicon.ico` 404 and `WebGL: INVALID_ENUM: readPixels` / GPU-stall warnings. These do not affect functionality — the 3D scene, weather effects, and mode switching all render correctly.
 - **Runtime data needs network:** the app fetches live weather from Open-Meteo and geocoding from Nominatim over HTTPS (no API key). If egress is blocked, live weather/search will fail; use the debug hooks (`window.setDebugWeather(code)`, `window.setDebugTime(hour)`) to exercise the scene offline.
+```
