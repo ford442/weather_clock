@@ -311,7 +311,6 @@ Only currently open issues belong here. The previous backlog (issues 86–117) i
 - **[#139](https://github.com/ford442/weather_clock/issues/139) — Scene layout / renderer depth** — `src/scene-layout.js` exists; leftover particle/fog/lightning literals and the WebGL/WebGPU context + far-plane contract remain. Block large celestial-scale work until this lands.
 - **[#140](https://github.com/ford442/weather_clock/issues/140) — JSDoc/`checkJs` contracts** — keep vanilla JS; finish domain types rather than reintroducing `@ts-nocheck`.
 - **[#141](https://github.com/ford442/weather_clock/issues/141) — WebGPU parity** — material/compute stubs and adapter-aware init. Playwright CI is SwiftShader WebGL only (`?forceWebGL=1` for local comparison). Three's WebGPU backend still renders `THREE.Points` as 1-pixel primitives and ignores `sizeNode`, so per-star size is folded into brightness; sized stars would need instanced `Sprite`s.
-- **[#142](https://github.com/ford442/weather_clock/issues/142) — Shared weather-domain accuracy** — clock MAE and `TimelineData.enrichWithAccuracy()` exist; the remaining risk is two code paths drifting.
 - **[#143](https://github.com/ford442/weather_clock/issues/143) — Celestial clock** — next content epic (JS first). Depends on #139.
 
 ---
