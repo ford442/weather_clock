@@ -49,20 +49,20 @@ test.describe('functional', () => {
     test('advanced tabs and drawer grip work without the classic index.html script', async ({ page }) => {
         await launchApp(page);
 
-        await expect
-            .poll(() => page.evaluate(() => typeof window.aetherDebug?.validateAll))
-            .toBe('function');
-        const stubGone = await page.evaluate(
-            () => typeof window.DOMBindingValidator === 'undefined' && typeof window.ZIndexManager === 'undefined'
-        );
-        expect(stubGone).toBe(true);
-
-        await page.locator('#panel-advanced .tab-btn[data-tab="accuracy"]').click();
-        await expect(page.locator('#tab-accuracy')).toHaveClass(/active/);
-        await expect(page.locator('#tab-history')).not.toHaveClass(/active/);
+        const api = await page.evaluate(() => ({
+            hasValidateAll: typeof window.aetherDebug?.validateAll,
+            stubGone:
+                typeof window.DOMBindingValidator === 'undefined' && typeof window.ZIndexManager === 'undefined'
+        }));
+        expect(api.hasValidateAll).toBe('function');
+        expect(api.stubGone).toBe(true);
 
         await page.locator('#panel-advanced .drawer-handle-grip').click();
         await expect(page.locator('#panel-advanced')).toHaveClass(/expanded/);
+
+        await page.locator('#panel-advanced .tab-btn[data-tab="health"]').click();
+        await expect(page.locator('#tab-health')).toHaveClass(/active/);
+        await expect(page.locator('#tab-history')).not.toHaveClass(/active/);
 
         await page.evaluate(() => window.aetherDebug.toggleDrawer('left'));
         await expect(page.locator('#panel-left')).toHaveClass(/expanded/);
