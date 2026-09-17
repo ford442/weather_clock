@@ -36,10 +36,4 @@
 
 ## Related Issues
 
-- [#113](https://github.com/ford442/weather_clock/issues/113) — Temporal weather narrative
-- [#114](https://github.com/ford442/weather_clock/issues/114) — Earth–Sun distance + moonlight/sunlight contrast
-- [#115](https://github.com/ford442/weather_clock/issues/115) — Constellations & planets
-- [#116](https://github.com/ford442/weather_clock/issues/116) — Graphical pressure & moisture
-- [#117](https://github.com/ford442/weather_clock/issues/117) — Optional zodiacal layer
-
-See also [ROADMAP.md](./ROADMAP.md) for the full ordered backlog.
+Remaining celestial work is [#143](https://github.com/ford442/weather_clock/issues/143). Foundation that must land first is listed in [ROADMAP.md](./ROADMAP.md).
