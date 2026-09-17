@@ -30,7 +30,7 @@ The app has three viewing modes:
 | **3D Engine** | Three.js | `^0.181.2` |
 | **Build Tool** | Vite | `^7.2.4` |
 | **Unit Tests** | Vitest | `^3.2.4` |
-| **Astronomy** | SunCalc | Vendored as ES module in `src/vendor/suncalc.js` |
+| **Astronomy** | SunCalc | npm `suncalc` (`^1.9.0`). A vendored ES copy remains at `src/vendor/suncalc.js` for two unit tests only. |
 | **Weather Data** | Open-Meteo API | Forecast + Archive endpoints |
 | **Geocoding** | Nominatim (OpenStreetMap) | Used for search & reverse geocoding |
 | **PWA / Offline** | `vite-plugin-pwa` + Workbox | Precached app shell; runtime caching for Open-Meteo and Nominatim |
@@ -77,7 +77,7 @@ The app has three viewing modes:
 | `effects/star-field.js` | The night-sky layer. Real stars in true positions, constellation lines, and the naked-eye planets, all parented to one group whose matrix carries observer latitude + local sidereal time — so per-star alt/az is never recomputed. Fades with twilight, cloud cover, and a light-pollution knob; constellations/labels toggle with `C`. Owns the zodiac overlay as a child of the same group. |
 | `effects/zodiac-overlay.js` | The optional zodiacal band: the ecliptic as a thin arc, a tick at each of the twelve sign cusps, and a glyph beside each slice, with the Sun's and Moon's signs lit brighter. Parents into the star field's `skyGroup`, so one rotation carries it and the planets land on its line for free. Off by default; `Z` cycles off → tropical → sidereal. |
 | `effects/text-sprite.js` | Shared canvas-texture label sprite used by the star field's planet/constellation names and the zodiac glyphs. |
-| `vendor/suncalc.js` | Vendored SunCalc library patched for ES module compatibility. |
+| `vendor/suncalc.js` | Vendored SunCalc used only by `nightSky.test.js` and `zodiac.test.js`. Runtime (`astronomy.js`, `weather.js`, `dailyForecast.js`, `TimelineData.js`) imports the `suncalc` npm package. |
 
 ### Timeline Subsystem (`src/timeline/`)
 - `TimelineController.js` — Manages 21-day 3D column visualization, raycasting, hover/selection states.
@@ -95,7 +95,7 @@ The app has three viewing modes:
 
 ### Shaders (`shaders/`)
 - Experimental WGSL compute shaders: `rain-compute.wgsl`, `snow-compute.wgsl`, `splash-compute.wgsl`, `cloud-post.wgsl`, `star-field.wgsl`.
-- They are not the active WebGPU path. Runtime WebGPU support lives under `src/webgpu/`; WebGL shader strings remain in `src/shaders.js`. Do not wire the standalone WGSL files into production unless explicitly working on issue #87.
+- They are not the active WebGPU path. Runtime WebGPU support lives under `src/webgpu/`; WebGL shader strings remain in `src/shaders.js`. Do not wire the standalone WGSL files into production (TSL compute is the canonical WebGPU particle path; see `docs/WEBGPU_ARCHITECTURE.md`). Remaining WebGPU parity is tracked in [#141](https://github.com/ford442/weather_clock/issues/141).
 
 ### Visual & Functional E2E (`e2e/`)
 - Specs use the `.e2e.js` suffix (Playwright `testMatch`) so Vitest never picks them up.
@@ -289,11 +289,15 @@ _WebGL path. Under WebGPU these are simulated by TSL compute nodes in `src/effec
 `ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `C` to cycle the constellation overlay, `Z` to cycle the zodiacal band (off → tropical → sidereal). Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
 
 ### Known Issues / Blockers
-_Last verified 2026-09-11 by running `lint`, `typecheck`, `format:check`, `test`, and `build` directly._
+_Last verified 2026-09-17 by running `lint`, `typecheck`, `format:check`, `test`, and `build` directly. Those commands plus `vite build` are green on this tree._
 
-- **`npm run lint` → 2 errors in `src/ground.js:16`** (`isWebGPU` and `snowMaskTexture` assigned but never used) — [#108](https://github.com/ford442/weather_clock/issues/108) tracks this. `typecheck`, `format:check`, `test`, and `build` are all green.
-- **WebGPU star point size** — Three's WebGPU backend renders `THREE.Points` as 1-pixel primitives and ignores `sizeNode`, so per-star size is folded into brightness instead. Sized stars would require switching the star field to instanced `Sprite`s.
-- **WebGPU is not covered by CI** — Playwright baselines run under SwiftShader (WebGL only). `?forceWebGL=1` pins the fallback path for side-by-side comparison on WebGPU-capable hardware; WebGPU-specific regressions still need a manual pass.
+Only currently open issues belong here. The previous backlog (issues 86–117) is closed and is not living work.
+
+- **[#139](https://github.com/ford442/weather_clock/issues/139) — Scene layout / renderer depth** — `src/scene-layout.js` exists; leftover particle/fog/lightning literals and the WebGL/WebGPU context + far-plane contract remain. Block large celestial-scale work until this lands.
+- **[#140](https://github.com/ford442/weather_clock/issues/140) — JSDoc/`checkJs` contracts** — keep vanilla JS; finish domain types rather than reintroducing `@ts-nocheck`.
+- **[#141](https://github.com/ford442/weather_clock/issues/141) — WebGPU parity** — material/compute stubs and adapter-aware init. Playwright CI is SwiftShader WebGL only (`?forceWebGL=1` for local comparison). Three's WebGPU backend still renders `THREE.Points` as 1-pixel primitives and ignores `sizeNode`, so per-star size is folded into brightness; sized stars would need instanced `Sprite`s.
+- **[#142](https://github.com/ford442/weather_clock/issues/142) — Shared weather-domain accuracy** — clock MAE and `TimelineData.enrichWithAccuracy()` exist; the remaining risk is two code paths drifting.
+- **[#143](https://github.com/ford442/weather_clock/issues/143) — Celestial clock** — next content epic (JS first). Depends on #139.
 
 ---
 
