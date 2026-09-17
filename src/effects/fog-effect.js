@@ -28,10 +28,11 @@ export class FogEffect {
                 side: THREE.DoubleSide
             });
             const mesh = new THREE.Mesh(geo, mat);
+            const fogSpanZ = SCENE_LAYOUT.fog.maxZ - SCENE_LAYOUT.fog.minZ;
             mesh.position.set(
                 zone.minX + Math.random() * zoneWidth,
                 -0.3 + Math.random() * 2.2,
-                (Math.random() - 0.5) * 14
+                SCENE_LAYOUT.fog.minZ + Math.random() * fogSpanZ
             );
             mesh.rotation.x = -Math.PI / 2 + (Math.random() - 0.5) * 0.35;
             mesh.rotation.z = Math.random() * Math.PI * 2;

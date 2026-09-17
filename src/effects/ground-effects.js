@@ -8,6 +8,7 @@ import { GroundReflectionController } from './ground-reflection.js';
 import { SeasonalFoliageSystem } from './seasonal-foliage-system.js';
 import { applyGroundPatch, applySnowPatch, applyFrostPatch } from './material-patches.js';
 import { ResourceManager } from './cloud-resources.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 function clamp01(v) {
     return Math.max(0, Math.min(1, v));
@@ -32,7 +33,7 @@ export class GroundEffects {
 
         this.accumulator = createAccumulatorState();
         this.reflection = new GroundReflectionController(scene, ground.mesh.position.y);
-        this.foliage = new SeasonalFoliageSystem(scene, 3.6);
+        this.foliage = new SeasonalFoliageSystem(scene, SCENE_LAYOUT.ground.radius);
 
         this.reflectionEnabled = true;
         this.latitude = 0;

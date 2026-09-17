@@ -4,8 +4,19 @@ How the dual WebGL / WebGPU rendering path is organised, which files own which
 backend, and which visual features differ between the two.
 
 Backend selection happens once, at startup, in `src/webgpu/RendererFactory.js`
-(capability probing in `WebGPUCapabilities.js`). Everything downstream receives an
-`isWebGPU` flag; there is no per-frame branching on backend.
+(capability probing in `WebGPUCapabilities.js`). `inspectWebGPUAdapter()` logs
+adapter `info` / `features` / selected limits and rejects adapters that cannot
+host the GPU particle path (storage-buffer / compute / 2K texture floors in
+`GPU_PARTICLE_REQUIRED_LIMITS`) before `WebGPURenderer.init()`. Everything
+downstream receives an `isWebGPU` flag; there is no per-frame branching on backend.
+
+Context flags live on `DEFAULT_OPTIONS` in the factory: `preserveDrawingBuffer`
+is false (photo capture is same-task `toBlob()`), `premultipliedAlpha`/`depth`
+match across backends, and `logarithmicDepthBuffer` is on so the 2000-unit star
+sphere does not z-fight the sundial. The first native WebGL attempt sets
+`failIfMajorPerformanceCaveat: true`; a software fallback forces the low quality
+tier for that session. `?test=1` skips the caveat so SwiftShader visual baselines
+keep their captured quality.
 
 ---
 

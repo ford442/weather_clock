@@ -201,8 +201,10 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
      window.aetherDebug.getPlanetPositions();   // RA/Dec + apparent magnitude per planet
      window.aetherDebug.getNightSkyState();     // observer, cloud cover, overlay toggles
      window.aetherDebug.getZodiacState();       // Sun/Moon/planet signs under the active convention
-     window.aetherDebug.setLightPollution(0.8); // wash the faint stars out
-     ```
+ window.aetherDebug.setLightPollution(0.8); // wash the faint stars out
+ window.aetherDebug.getSceneLayout(); // zone bounds, camera, sky, star sphere, depth
+ window.aetherDebug.getRendererInfo(); // backend, adapter, limits, context attributes
+ ```
 
 5. **CI must stay green**
    - `npm run lint`, `npm run typecheck`, and `npm run format:check` are required CI gates in addition to `npm test`. Run all four locally before pushing — a change that adds a new export, parameter, or field (e.g. to `WeatherSnapshot` or a post-processing adapter) must update `src/types.d.ts` and remove/underscore-prefix any now-unused parameters in the same commit.
@@ -241,7 +243,7 @@ The scene is visually divided into three time-offset zones, defined as the singl
 - **Present (Center):** `x: -4 to 4` — current weather
 - **Future (Right):** `x: 4 to 12` — weather from ~3 hours ahead
 
-Particle systems (rain, snow, dust, fog) are constrained to zone boundaries. When modifying particle physics, ensure position wrapping uses the zone's `minX`/`maxX` bounds, not global bounds, or weather will "leak" between time periods. Lightning strikes only spawn in `SCENE_LAYOUT.lightning`, which matches the present zone. Every spatial constant in `SCENE_LAYOUT` (zones, fog Z-wrap, lightning bounds, ground radius, camera setup) should be imported from `src/scene-layout.js` rather than hardcoded — call `aetherDebug.getSceneLayout()` in the browser console to inspect it live.
+Particle systems (rain, snow, dust, fog) are constrained to zone boundaries. When modifying particle physics, ensure position wrapping uses the zone's `minX`/`maxX` bounds, not global bounds, or weather will "leak" between time periods. Lightning strikes only spawn in `SCENE_LAYOUT.lightning`, which matches the present zone. Fog wraps on `SCENE_LAYOUT.fog` (`minZ`/`maxZ` = ±8). Ground radius is `SCENE_LAYOUT.ground.radius` (3.6). Camera near/far/FOV, sky scale (450000), and star-sphere radius (2000) live on the same object. Depth strategy is logarithmic (`SCENE_LAYOUT.depth.mode`) so the sundial does not z-fight the star sphere against a 2e6 far plane. Shadow cameras stay at `SCENE_LAYOUT.shadows.cameraFar = 50` (sundial only). Import from `src/scene-layout.js` rather than hardcoding — call `aetherDebug.getSceneLayout()` and `aetherDebug.getRendererInfo()` live.
 
 Lighting is a weighted blend of all three zones: Past (20%), Current (50%), Forecast (30%). Do not set `sunLight.position` in `weatherLighting.js`; position is handled exclusively by `astronomy.js`.
 

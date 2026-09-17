@@ -298,6 +298,22 @@ interface AppState {
     reducedMotion: boolean;
 }
 
+interface RendererInfo {
+    backend: 'webgpu' | 'webgl';
+    softwareRenderer: boolean;
+    logarithmicDepthBuffer: boolean;
+    preserveDrawingBuffer: boolean;
+    failIfMajorPerformanceCaveat: boolean;
+    premultipliedAlpha: boolean;
+    depth: boolean;
+    stencil: boolean;
+    alpha: boolean;
+    adapterName: string | null;
+    features: string[] | null;
+    limits: Record<string, number> | null;
+    contextAttributes: Record<string, boolean | number | string> | null;
+}
+
 interface Window {
     webkitAudioContext?: typeof AudioContext;
     __IS_WEBGPU__?: boolean;

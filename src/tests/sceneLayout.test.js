@@ -50,6 +50,28 @@ describe('SCENE_LAYOUT', () => {
         expect(Object.isFrozen(SCENE_LAYOUT.lightning)).toBe(true);
         expect(Object.isFrozen(SCENE_LAYOUT.ground)).toBe(true);
         expect(Object.isFrozen(SCENE_LAYOUT.camera)).toBe(true);
+        expect(Object.isFrozen(SCENE_LAYOUT.sky)).toBe(true);
+        expect(Object.isFrozen(SCENE_LAYOUT.starSphere)).toBe(true);
+        expect(Object.isFrozen(SCENE_LAYOUT.depth)).toBe(true);
+        expect(Object.isFrozen(SCENE_LAYOUT.sceneSpan)).toBe(true);
+    });
+
+    it('keeps camera far beyond the sky disc and the star sphere inside both', () => {
+        expect(SCENE_LAYOUT.camera.far).toBeGreaterThan(SCENE_LAYOUT.sky.scale);
+        expect(SCENE_LAYOUT.sky.scale).toBeGreaterThan(SCENE_LAYOUT.starSphere.radius);
+        expect(SCENE_LAYOUT.starSphere.radius).toBeGreaterThan(SCENE_LAYOUT.ground.radius);
+        expect(SCENE_LAYOUT.depth.mode).toBe('logarithmic');
+        expect(SCENE_LAYOUT.camera.near).toBeLessThan(1);
+    });
+
+    it('matches lightning spawn to the present zone and fog Z wrap to ±8', () => {
+        expect(SCENE_LAYOUT.lightning).toEqual(SCENE_LAYOUT.zones.current);
+        expect(SCENE_LAYOUT.fog.minZ).toBe(-8);
+        expect(SCENE_LAYOUT.fog.maxZ).toBe(8);
+        expect(SCENE_LAYOUT.sceneSpan).toEqual({
+            minX: SCENE_LAYOUT.zones.past.minX,
+            maxX: SCENE_LAYOUT.zones.future.maxX
+        });
     });
 
     it('lays the three temporal zones edge-to-edge with no gap or overlap', () => {
@@ -94,7 +116,10 @@ describe('WeatherEffects coordinator zone wiring', () => {
                 [weatherEffects.futureRain, 'future'],
                 [weatherEffects.futureSnow, 'future'],
                 [weatherEffects.futureDust, 'future'],
-                [weatherEffects.futureFog, 'future']
+                [weatherEffects.futureFog, 'future'],
+                [weatherEffects.pastCumulus, 'past'],
+                [weatherEffects.currCumulus, 'current'],
+                [weatherEffects.futureCumulus, 'future']
             ];
 
             for (const [system, zoneName] of expectations) {
@@ -125,6 +150,37 @@ describe('WeatherEffects coordinator zone wiring', () => {
             expect(x).toBeLessThanOrEqual(SCENE_LAYOUT.lightning.maxX);
         } finally {
             weatherEffects.dispose();
+        }
+    });
+
+    it('uses SCENE_LAYOUT for particle ctor fallbacks instead of a leaked [-8, 8] span', async () => {
+        const { RainSystem } = await import('../effects/rain-system.js');
+        const { SnowSystem } = await import('../effects/snow-system.js');
+        const { WindDustSystem } = await import('../effects/wind-dust-system.js');
+        const { CloudSystem } = await import('../effects/cloud-system.js');
+        const { FogEffect } = await import('../effects/fog-effect.js');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera();
+        const rain = new RainSystem(scene, undefined, 4);
+        const snow = new SnowSystem(scene, undefined, 4);
+        const dust = new WindDustSystem(scene, undefined, 4);
+        const clouds = new CloudSystem(scene, camera, undefined, 1, 'cirrus');
+        const fog = new FogEffect(scene, SCENE_LAYOUT.zones.current);
+        try {
+            expect(rain.zone).toBe(SCENE_LAYOUT.zones.current);
+            expect(snow.zone).toBe(SCENE_LAYOUT.zones.current);
+            expect(dust.zone).toBe(SCENE_LAYOUT.zones.current);
+            expect(clouds.zone).toBe(SCENE_LAYOUT.sceneSpan);
+            for (const { mesh } of fog.planes) {
+                expect(mesh.position.z).toBeGreaterThanOrEqual(SCENE_LAYOUT.fog.minZ);
+                expect(mesh.position.z).toBeLessThanOrEqual(SCENE_LAYOUT.fog.maxZ);
+            }
+        } finally {
+            rain.dispose();
+            snow.dispose();
+            dust.dispose();
+            clouds.dispose();
+            fog.dispose();
         }
     });
 });

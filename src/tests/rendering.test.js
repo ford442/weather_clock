@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyQualityTier, getQualityTier, QUALITY_CONFIG, setQualityTier } from '../rendering.js';
+import {
+    applyQualityTier,
+    getQualityTier,
+    QUALITY_CONFIG,
+    setQualityTier,
+    setSessionQualityOverride
+} from '../rendering.js';
 
 function makeShadowLight(initialSize) {
     const mapSize = {
@@ -22,6 +28,7 @@ function makeShadowLight(initialSize) {
 describe('live rendering quality', () => {
     afterEach(() => {
         vi.unstubAllGlobals();
+        setSessionQualityOverride(null);
     });
 
     it('applies the low tier without reloading the page', async () => {
@@ -83,13 +90,20 @@ describe('live rendering quality', () => {
 describe('getQualityTier device heuristics', () => {
     afterEach(() => {
         vi.unstubAllGlobals();
+        setSessionQualityOverride(null);
     });
 
     function stubEnvironment({ saved = null, cores = 8, memory = 8, maxTouchPoints = 0 } = {}) {
+        const store = /** @type {Record<string, string>} */ ({});
+        if (saved != null) store.weatherclock_quality = saved;
         vi.stubGlobal('localStorage', {
-            getItem: vi.fn((key) => (key === 'weatherclock_quality' ? saved : null)),
-            setItem: vi.fn(),
-            removeItem: vi.fn()
+            getItem: vi.fn((key) => store[key] ?? null),
+            setItem: vi.fn((key, value) => {
+                store[key] = String(value);
+            }),
+            removeItem: vi.fn((key) => {
+                delete store[key];
+            })
         });
         vi.stubGlobal('navigator', { hardwareConcurrency: cores, deviceMemory: memory, maxTouchPoints });
         vi.stubGlobal('window', {}); // no 'ontouchstart'
@@ -140,5 +154,13 @@ describe('getQualityTier device heuristics', () => {
         vi.stubGlobal('navigator', {}); // no hardwareConcurrency/deviceMemory ⇒ defaults 4/4
         vi.stubGlobal('window', {});
         expect(getQualityTier()).toBe('high');
+    });
+
+    it('lets a software-renderer session override beat a saved high tier until the user picks one', () => {
+        stubEnvironment({ saved: 'high', cores: 8, memory: 8 });
+        setSessionQualityOverride('low');
+        expect(getQualityTier()).toBe('low');
+        setQualityTier('medium');
+        expect(getQualityTier()).toBe('medium');
     });
 });
