@@ -94,7 +94,7 @@ export class WeatherEffects {
     ) {
         this.scene = scene;
         this.sundialGroup = sundialGroup;
-        this.starField = new StarField(scene);
+        this.starField = new StarField(scene, { quality });
         this.camera = camera;
         this._webgpuInitialized = false;
         this.isWebGPU = isWebGPU;
@@ -236,6 +236,7 @@ export class WeatherEffects {
 
         for (const system of this._qualitySystems) system?.dispose?.();
         this.quality = quality;
+        this.starField?.setQuality?.(quality);
         this._createQualitySystems(particleDivisor);
 
         if (this._webgpuInitialized) {

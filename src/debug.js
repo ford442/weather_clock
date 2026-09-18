@@ -5,6 +5,7 @@ import { buildHourlyTimelineFromDay } from './dailyForecast.js';
 import { SCENE_LAYOUT } from './scene-layout.js';
 import { toggleDrawer, validateDomBindings, verifyZIndexStack } from './ui/chrome.js';
 import { getRendererInfo } from './webgpu/RendererFactory.js';
+import { describeSkyBodies } from './sky/skyBodies.js';
 
 /**
  * Generate debug weather timeline
@@ -166,6 +167,27 @@ export function setupDebugAPI(state, services, scene3d) {
         getRendererInfo: () => getRendererInfo(),
         /** Geocentric RA/Dec and apparent magnitude for each rendered planet. */
         getPlanetPositions: () => weatherEffects.starField?.getPlanetPositions?.() ?? [],
+        /**
+         * Everything the sky is drawing right now — Sun, Moon, and each planet
+         * in horizontal coordinates for the active simulation time and
+         * location, plus the catalog budget and the compute backend. One call
+         * to check the whole sky against a planetarium.
+         */
+        getSkyBodies: () => {
+            const starField = weatherEffects.starField;
+            const date = starField?.observerDate ?? state.simulationTime;
+            const latitude = starField?.latitude ?? weatherService.latitude ?? 0;
+            const longitude = starField?.longitude ?? weatherService.longitude ?? 0;
+            return describeSkyBodies({
+                date,
+                latitude,
+                longitude,
+                astro: astronomyService.getPositionsForDate(date, latitude, longitude),
+                planets: starField?.getPlanetPositions?.() ?? [],
+                catalog: starField?.getCatalogSummary?.(),
+                backend: window.__NATIVE_BACKEND__ || 'js'
+            });
+        },
         /** Current night-sky overlay state (constellations, planets, labels, skyglow). */
         getNightSkyState: () => {
             const starField = weatherEffects.starField;

@@ -22,4 +22,4 @@ The previous index (issues 86–117) is closed. Do not treat those tickets as li
 
 ## P2 — Next content bet
 
-- [#143 — Celestial clock: real stars, planets, Earth–Sun distance](https://github.com/ford442/weather_clock/issues/143): JS-first astronomy (WASM only if measured). Depends on [#139](https://github.com/ford442/weather_clock/issues/139) depth/scale and should not fight [#141](https://github.com/ford442/weather_clock/issues/141)’s WebGPU star-point limits. Intent still lives in [VISION.md](./VISION.md).
+- [#143 — Celestial clock: real stars, planets, Earth–Sun distance](https://github.com/ford442/weather_clock/issues/143): JS-first astronomy (WASM only if measured, and nothing has yet earned the 2× gate). The catalog, the constellation figures, the naked-eye planet ephemeris, the Earth–Sun irradiance term, and the per-tier sky budget are in `src/sky/` and `src/effects/star-field.js`; `aetherDebug.getSkyBodies()` reports the whole sky in one call. Remaining: the optional satellite layer, and whatever [#141](https://github.com/ford442/weather_clock/issues/141) still owes WebGPU star points. Intent still lives in [VISION.md](./VISION.md).
