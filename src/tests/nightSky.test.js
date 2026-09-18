@@ -16,7 +16,16 @@ import {
 } from '../sky/celestialCoordinates.js';
 import { CONSTELLATIONS, STARS, STAR_INDEX, colorFromBV, getConstellationLineIndices } from '../sky/starCatalog.js';
 import { ALL_PLANETS, getPlanetPosition, getPlanetPositions, getSunEquatorial } from '../sky/planets.js';
-import { magnitudeToBrightness, magnitudeToPointSize, StarField, STAR_FIELD_CONFIG } from '../effects/star-field.js';
+import {
+    getSkyQualityTier,
+    magnitudeToBrightness,
+    magnitudeToPointSize,
+    SKY_QUALITY_TIERS,
+    StarField,
+    STAR_FIELD_CONFIG
+} from '../effects/star-field.js';
+import { describeSkyBodies, equatorialToHorizontalDeg, positionToHorizontalDeg } from '../sky/skyBodies.js';
+import { AstronomyService } from '../astronomy.js';
 
 const NYC = { lat: 40.7128, lon: -74.006 };
 const RAD_TO_DEG = 180 / Math.PI;
@@ -464,5 +473,164 @@ describe('StarField scene layer', () => {
         expect(scene.children).toContain(field.skyGroup);
         field.dispose();
         expect(scene.children).not.toContain(field.skyGroup);
+    });
+});
+
+describe('night sky quality tiers', () => {
+    const makeField = (quality) => {
+        const scene = new THREE.Scene();
+        return new StarField(scene, { quality });
+    };
+
+    it('falls back to the full sky for an unknown tier', () => {
+        expect(getSkyQualityTier('nonsense')).toBe(SKY_QUALITY_TIERS.high);
+        expect(getSkyQualityTier(undefined)).toBe(SKY_QUALITY_TIERS.high);
+    });
+
+    it('thins the filler field on the cheaper tiers but keeps the whole catalog', () => {
+        const high = makeField('high');
+        const low = makeField('low');
+
+        // The real stars are what make the sky true, so they are never trimmed.
+        expect(low.catalogStars.geometry.getAttribute('position').count).toBe(STARS.length);
+        expect(high.catalogStars.geometry.getAttribute('position').count).toBe(STARS.length);
+
+        expect(low.getRenderedFaintStarCount()).toBeLessThan(high.getRenderedFaintStarCount());
+        expect(low.getRenderedFaintStarCount()).toBeGreaterThan(0);
+        expect(low.faintStars.geometry.drawRange.count).toBe(low.getRenderedFaintStarCount());
+
+        high.dispose();
+        low.dispose();
+    });
+
+    it('drops the constellation scaffolding below medium, whatever the toggle says', () => {
+        const night = new THREE.Vector3(0, -15, 0);
+
+        const medium = makeField('medium');
+        medium.setConstellationsVisible(true);
+        medium.update(night);
+        expect(medium.constellationLines.visible).toBe(true);
+        medium.dispose();
+
+        const low = makeField('low');
+        low.setConstellationsVisible(true);
+        low.setLabelsVisible(true);
+        low.update(night);
+        expect(low.constellationLines.visible).toBe(false);
+        // Labels are not even built on a tier that cannot afford them.
+        expect(low._constellationLabels).toHaveLength(0);
+        expect(low._planetLabels).toHaveLength(0);
+        low.dispose();
+    });
+
+    it('re-budgets in place when the tier changes, without rebuilding geometry', () => {
+        const field = makeField('high');
+        const geometry = field.faintStars.geometry;
+        const full = field.getRenderedFaintStarCount();
+
+        field.setQuality('thumbnail');
+        expect(field.faintStars.geometry).toBe(geometry);
+        expect(field.getRenderedFaintStarCount()).toBeLessThan(full);
+
+        field.setQuality('high');
+        expect(field.getRenderedFaintStarCount()).toBe(full);
+        field.dispose();
+    });
+
+    it('reports the catalog budget for the active tier', () => {
+        const field = makeField('low');
+        const summary = field.getCatalogSummary();
+        expect(summary.stars).toBe(STARS.length);
+        expect(summary.quality).toBe('low');
+        expect(summary.constellations).toBe(0);
+        expect(summary.renderedFaintStars).toBe(field.getRenderedFaintStarCount());
+        field.dispose();
+    });
+});
+
+describe('sky bodies debug report', () => {
+    const date = new Date('2026-01-15T02:00:00Z');
+
+    it('reads compass azimuth off a scene-space position', () => {
+        expect(positionToHorizontalDeg({ x: 0, y: 0, z: 20 }).azimuthDeg).toBeCloseTo(0, 6);
+        expect(positionToHorizontalDeg({ x: 20, y: 0, z: 0 }).azimuthDeg).toBeCloseTo(90, 6);
+        expect(positionToHorizontalDeg({ x: 0, y: 0, z: -20 }).azimuthDeg).toBeCloseTo(180, 6);
+        expect(positionToHorizontalDeg({ x: 0, y: 20, z: 0 }).altitudeDeg).toBeCloseTo(90, 6);
+        expect(positionToHorizontalDeg(null)).toEqual({ altitudeDeg: 0, azimuthDeg: 0 });
+    });
+
+    it('agrees with SunCalc on the Sun, through two independent paths', () => {
+        const astro = new AstronomyService().getPositionsForDate(date, NYC.lat, NYC.lon);
+        const report = describeSkyBodies({ date, latitude: NYC.lat, longitude: NYC.lon, astro });
+        const suncalc = SunCalc.getPosition(date, NYC.lat, NYC.lon);
+
+        expect(report.sun.altitudeDeg).toBeCloseTo(suncalc.altitude * RAD_TO_DEG, 4);
+        // SunCalc's azimuth is south-based; the report's is a compass bearing.
+        expect(report.sun.azimuthDeg).toBeCloseTo((suncalc.azimuth * RAD_TO_DEG + 540) % 360, 4);
+
+        // The planets reach the same horizontal frame through RA/Dec instead of
+        // a scene vector, so run the Sun down that path too: within the 0.3°
+        // SunCalc itself is worth.
+        const ours = getSunEquatorial(date);
+        const ofDate = precessFromJ2000(ours.ra, ours.dec, julianCenturies(date));
+        const viaEphemeris = equatorialToHorizontalDeg(ofDate.ra, ofDate.dec, date, NYC.lat, NYC.lon);
+        expect(Math.abs(viaEphemeris.altitudeDeg - report.sun.altitudeDeg)).toBeLessThan(0.3);
+        expect(Math.abs(viaEphemeris.azimuthDeg - report.sun.azimuthDeg)).toBeLessThan(0.4);
+    });
+
+    it('describes the Sun, the Moon, and every rendered planet at once', () => {
+        const astro = new AstronomyService().getPositionsForDate(date, NYC.lat, NYC.lon);
+        const scene = new THREE.Scene();
+        const field = new StarField(scene, { quality: 'high' });
+        field.setObserver({ date, latitude: NYC.lat, longitude: NYC.lon });
+
+        const report = describeSkyBodies({
+            date,
+            latitude: NYC.lat,
+            longitude: NYC.lon,
+            astro,
+            planets: field.getPlanetPositions(),
+            catalog: field.getCatalogSummary(),
+            backend: 'js'
+        });
+
+        expect(report.date).toBe(date.toISOString());
+        expect(report.observer).toEqual({ latitude: NYC.lat, longitude: NYC.lon });
+        expect(report.backend).toBe('js');
+        expect(report.catalog.stars).toBe(STARS.length);
+        expect(report.catalog.constellations).toBe(CONSTELLATIONS.length);
+
+        expect(report.sun.distanceAu).toBeGreaterThan(0.98);
+        expect(report.sun.distanceAu).toBeLessThan(1.02);
+        // Mid-January is close to perihelion, so the Earth is receiving more
+        // than its annual mean.
+        expect(report.sun.irradianceFactor).toBeGreaterThan(1);
+        expect(report.moon.illuminatedFraction).toBeGreaterThanOrEqual(0);
+        expect(report.moon.illuminatedFraction).toBeLessThanOrEqual(1);
+
+        expect(report.planets.map((planet) => planet.id)).toEqual(field.getPlanetPositions().map((p) => p.id));
+        for (const planet of report.planets) {
+            expect(planet.altitudeDeg).toBeGreaterThanOrEqual(-90);
+            expect(planet.altitudeDeg).toBeLessThanOrEqual(90);
+            expect(planet.azimuthDeg).toBeGreaterThanOrEqual(0);
+            expect(planet.azimuthDeg).toBeLessThan(360);
+            expect(planet.aboveHorizon).toBe(planet.altitudeDeg > 0);
+            expect(Number.isFinite(planet.magnitude)).toBe(true);
+        }
+
+        field.dispose();
+    });
+
+    it('survives a missing astro snapshot rather than throwing at the console', () => {
+        const report = describeSkyBodies({
+            date,
+            latitude: 0,
+            longitude: 0,
+            astro: /** @type {any} */ ({})
+        });
+        expect(report.sun.distanceAu).toBe(1);
+        expect(report.moon.distanceKm).toBeNull();
+        expect(report.planets).toEqual([]);
+        expect(report.catalog.quality).toBe('unknown');
     });
 });

@@ -55,6 +55,8 @@ The goal: make time *visible* and *tactile*—a living, breathing environment in
 - **Constellation figures** — 37 stylized stick figures with optional names. Press `C` to cycle off → lines → lines + labels; the choice persists to `localStorage`.
 - **Naked-eye planets** — Mercury through Saturn (Uranus and Neptune available) are solved from JPL's approximate Keplerian elements with apparent-magnitude and phase-angle terms, accurate to well under a degree — a few hundred bytes of constants instead of a VSOP87 series.
 - **Physically motivated fading** — Stars fade out between nautical and civil twilight, dim under cloud cover, and wash out under a light-pollution knob that erases the faint field long before the named stars.
+- **A sun that breathes with the orbit** — solar intensity is scaled by the current Earth–Sun distance (±1.7% of distance → ±3.4% of irradiance, peaking at January perihelion). It is deliberately below the threshold of a glance and only reads across a year of time-warp; there is no HUD number for it.
+- **Budgeted per quality tier** — the real catalog and the planets are drawn on every tier, because they are what makes the sky true. What scales is the procedural filler field (2200 → 450 stars) and the constellation scaffolding, which low-end machines skip entirely.
 - **Everywhere it's night** — Clock, Timeline, and Forecast modes all drive the same layer; forecast vignettes get the sky for the day and hour being scrubbed.
 
 ### ♈ Zodiacal Overlay (optional)
@@ -168,8 +170,7 @@ window.setDebugTime(14.5);  // 2:30 PM
 ```javascript
 window.aetherDebug.getSimulationTime();    // Current simulation time
 window.aetherDebug.getWeatherData();       // Fetched weather payload
-window.aetherDebug.getSunPosition();       // Sun azimuth/elevation
-window.aetherDebug.getMoonPosition();      // Moon azimuth/elevation
+window.aetherDebug.getSkyBodies();         // Sun, Moon, and planets in altitude/compass azimuth
 window.aetherDebug.getPerformanceMetrics();      // FPS, quality tier, active mode
 window.aetherDebug.getForecastPreviewMetrics();  // 10-day canvas preview budget
 ```
@@ -178,6 +179,7 @@ window.aetherDebug.getForecastPreviewMetrics();  // 10-day canvas preview budget
 ```javascript
 window.aetherDebug.getPlanetPositions();     // geocentric RA/Dec + apparent magnitude per planet
 window.aetherDebug.getNightSkyState();       // observer, cloud cover, overlay toggles
+window.aetherDebug.getSkyBodies();           // whole sky at once: Sun/Moon/planets alt+az, catalog budget, backend
 window.aetherDebug.setLightPollution(0.8);   // wash the faint stars out
 window.aetherDebug.getAudioState();          // { started, muted, volume, reducedMotion, rainGain, windGain, ... }
 window.aetherDebug.forceAudioMute(false);    // starts the AudioContext (gesture-equivalent) and unmutes

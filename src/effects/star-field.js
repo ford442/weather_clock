@@ -28,6 +28,35 @@ export const STAR_FIELD_CONFIG = Object.freeze({
     defaultLongitude: -74.006
 });
 
+/**
+ * How much sky each quality tier can afford.
+ *
+ * The ~190-star catalog is never trimmed: it is what makes the sky *true*, and
+ * 190 points cost nothing. What scales is the procedural filler field — the
+ * expensive part — and the constellation scaffolding, which is a second draw
+ * call plus a per-frame line rebuild for something that is deliberately drawn
+ * at very low opacity anyway. A low-tier machine therefore still gets real
+ * stars and real planets in real places, just a thinner sky behind them.
+ *
+ * @typedef {{faintStars: number, constellations: boolean, labels: boolean}} SkyQualityTier
+ * @type {Readonly<Record<string, SkyQualityTier>>}
+ */
+export const SKY_QUALITY_TIERS = Object.freeze({
+    high: { faintStars: STAR_FIELD_CONFIG.faintStarCount, constellations: true, labels: true },
+    focused: { faintStars: STAR_FIELD_CONFIG.faintStarCount, constellations: true, labels: true },
+    medium: { faintStars: 1100, constellations: true, labels: true },
+    low: { faintStars: 450, constellations: false, labels: false },
+    thumbnail: { faintStars: 200, constellations: false, labels: false }
+});
+
+/**
+ * @param {string|null|undefined} quality
+ * @returns {SkyQualityTier}
+ */
+export function getSkyQualityTier(quality) {
+    return SKY_QUALITY_TIERS[String(quality)] ?? SKY_QUALITY_TIERS.high;
+}
+
 const PLANET_COLORS = {
     mercury: [0.92, 0.9, 0.82],
     venus: [1.0, 0.98, 0.9],
@@ -81,12 +110,15 @@ function mulberry32(seed) {
 export class StarField {
     /**
      * @param {THREE.Scene} scene
-     * @param {{radius?: number, faintStarCount?: number}} [options]
+     * @param {{radius?: number, faintStarCount?: number, quality?: EffectQuality}} [options]
      */
     constructor(scene, options = {}) {
         this.scene = scene;
         this.radius = options.radius ?? STAR_FIELD_CONFIG.radius;
         this._faintStarCount = options.faintStarCount ?? STAR_FIELD_CONFIG.faintStarCount;
+        /** @type {EffectQuality} */
+        this.quality = options.quality ?? 'high';
+        this._tier = getSkyQualityTier(this.quality);
 
         this.observerDate = new Date();
         /** @type {number} */
@@ -141,6 +173,7 @@ export class StarField {
         this.mesh = this.catalogStars;
         this.uniforms = this.catalogMaterial.uniforms;
 
+        this._applyQualityTier();
         this._refreshCatalogPositions(this.observerDate);
         this._refreshPlanets(this.observerDate, true);
         this.zodiac.setDate(this.observerDate);
@@ -325,6 +358,29 @@ export class StarField {
     }
 
     /**
+     * Re-budget the sky for a quality tier. The filler field is allocated once
+     * at full size and then drawn partially, so switching tiers costs a draw
+     * range rather than a geometry rebuild — which also means the WebGPU
+     * materials swapped in by {@link initWebGPU} survive the change.
+     * @param {EffectQuality} quality
+     */
+    setQuality(quality) {
+        this.quality = quality;
+        this._tier = getSkyQualityTier(quality);
+        this._applyQualityTier();
+    }
+
+    _applyQualityTier() {
+        const drawn = Math.max(0, Math.min(this._faintStarCount, this._tier.faintStars));
+        this.faintStars.geometry.setDrawRange(0, drawn);
+    }
+
+    /** How many filler stars the active tier actually draws. */
+    getRenderedFaintStarCount() {
+        return Math.max(0, Math.min(this._faintStarCount, this._tier.faintStars));
+    }
+
+    /**
      * How much the sky is washed out by artificial light, 0 (dark site) to 1
      * (inner city). Dims the faint filler field far harder than the named
      * stars, which is how light pollution actually erases a sky.
@@ -367,7 +423,7 @@ export class StarField {
     /** @param {boolean} visible */
     setLabelsVisible(visible) {
         this.showLabels = !!visible;
-        if (this.showLabels) this._ensureLabels();
+        if (this.showLabels && this._tier.labels) this._ensureLabels();
     }
 
     /**
@@ -386,7 +442,7 @@ export class StarField {
         this._refreshPlanets(this.observerDate, true);
         // Labels were torn down along with the old planet set; rebuild them if
         // they were on, so the toggle state survives the swap.
-        if (this.showLabels) this._ensureLabels();
+        if (this.showLabels && this._tier.labels) this._ensureLabels();
     }
 
     _refreshCatalogPositions(date) {
@@ -523,10 +579,10 @@ export class StarField {
         this._setStarUniforms(this.faintMaterial, time, faintOpacity);
         this._setStarUniforms(this.planetMaterial, time, this.showPlanets ? brightOpacity : 0);
 
-        this.faintStars.visible = faintOpacity > 0.01;
+        this.faintStars.visible = faintOpacity > 0.01 && this.getRenderedFaintStarCount() > 0;
         this.planetPoints.visible = this.showPlanets;
 
-        this.constellationLines.visible = this.showConstellations && brightOpacity > 0.05;
+        this.constellationLines.visible = this._tier.constellations && this.showConstellations && brightOpacity > 0.05;
         this.constellationMaterial.opacity = brightOpacity * 0.28;
 
         this._updateLabelOpacity(brightOpacity);
@@ -550,16 +606,28 @@ export class StarField {
 
     _updateLabelOpacity(baseOpacity) {
         if (!this._labelsBuilt) return;
-        const planetOpacity = this.showLabels && this.showPlanets ? Math.min(1, baseOpacity * 1.2) : 0;
+        const labelsAllowed = this.showLabels && this._tier.labels;
+        const planetOpacity = labelsAllowed && this.showPlanets ? Math.min(1, baseOpacity * 1.2) : 0;
         for (const sprite of this._planetLabels) {
             sprite.visible = planetOpacity > 0.02;
             sprite.material.opacity = planetOpacity;
         }
-        const constellationOpacity = this.showLabels && this.showConstellations ? baseOpacity * 0.7 : 0;
+        const constellationOpacity =
+            labelsAllowed && this.showConstellations && this._tier.constellations ? baseOpacity * 0.7 : 0;
         for (const sprite of this._constellationLabels) {
             sprite.visible = constellationOpacity > 0.02;
             sprite.material.opacity = constellationOpacity;
         }
+    }
+
+    /** Catalog sizes behind the current sky, for the debug API and tests. */
+    getCatalogSummary() {
+        return {
+            stars: STARS.length,
+            renderedFaintStars: this.getRenderedFaintStarCount(),
+            constellations: this._tier.constellations ? CONSTELLATIONS.length : 0,
+            quality: this.quality
+        };
     }
 
     /** Current planet solutions, for the debug API and tests. */
