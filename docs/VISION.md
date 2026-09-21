@@ -36,4 +36,4 @@
 
 ## Related Issues
 
-Remaining celestial work is [#143](https://github.com/ford442/weather_clock/issues/143). Foundation that must land first is listed in [ROADMAP.md](./ROADMAP.md).
+The previous celestial epic ([#143](https://github.com/ford442/weather_clock/issues/143)) is closed (catalog, planets, Earth–Sun irradiance, sky budget). Living work is listed in [ROADMAP.md](./ROADMAP.md): atmosphere/depth ([#150](https://github.com/ford442/weather_clock/issues/150)), precipitation volume ([#151](https://github.com/ford442/weather_clock/issues/151)), native toolchain ([#152](https://github.com/ford442/weather_clock/issues/152)), WebGPU star sprites ([#153](https://github.com/ford442/weather_clock/issues/153)), a true sundial ([#154](https://github.com/ford442/weather_clock/issues/154)), and an optional orbital layer ([#155](https://github.com/ford442/weather_clock/issues/155)).

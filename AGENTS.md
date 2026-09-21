@@ -101,8 +101,7 @@ The app has three viewing modes:
 
 ### Shaders (`shaders/`)
 
-- Experimental WGSL compute shaders: `rain-compute.wgsl`, `snow-compute.wgsl`, `splash-compute.wgsl`, `cloud-post.wgsl`, `star-field.wgsl`.
-- They are not the active WebGPU path. Runtime WebGPU support lives under `src/webgpu/`; WebGL shader strings remain in `src/shaders.js`. Do not wire the standalone WGSL files into production (TSL compute is the canonical WebGPU particle path; see `docs/WEBGPU_ARCHITECTURE.md`). Remaining WebGPU parity is tracked in [#141](https://github.com/ford442/weather_clock/issues/141).
+- The obsolete standalone WGSL files were removed. Runtime WebGPU support lives under `src/webgpu/`; WebGL shader strings remain in `src/shaders.js`. Do not add raw WGSL here unless a feature cannot be expressed through Three.js TSL compute (see `docs/WEBGPU_ARCHITECTURE.md` and `shaders/README.md`). Remaining WebGPU star-size parity is tracked in [#153](https://github.com/ford442/weather_clock/issues/153).
 
 ### Visual & Functional E2E (`e2e/`)
 
@@ -305,14 +304,14 @@ _WebGL path. Under WebGPU these are simulated by TSL compute nodes in `src/effec
 `ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `C` to cycle the constellation overlay, `Z` to cycle the zodiacal band (off → tropical → sidereal). Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
 
 ### Known Issues / Blockers
-_Last verified 2026-09-17 by running `lint`, `typecheck`, `format:check`, `test`, and `build` directly. Those commands plus `vite build` are green on this tree._
+_Last verified 2026-09-21. The 138–143 batch is closed; only currently open issues belong here._
 
-Only currently open issues belong here. The previous backlog (issues 86–117) is closed and is not living work.
-
-- **[#139](https://github.com/ford442/weather_clock/issues/139) — Scene layout / renderer depth** — `src/scene-layout.js` exists; leftover particle/fog/lightning literals and the WebGL/WebGPU context + far-plane contract remain. Block large celestial-scale work until this lands.
-- **[#140](https://github.com/ford442/weather_clock/issues/140) — JSDoc/`checkJs` contracts** — keep vanilla JS; finish domain types rather than reintroducing `@ts-nocheck`.
-- **[#141](https://github.com/ford442/weather_clock/issues/141) — WebGPU parity** — material/compute stubs and adapter-aware init. Playwright CI is SwiftShader WebGL only (`?forceWebGL=1` for local comparison). Three's WebGPU backend still renders `THREE.Points` as 1-pixel primitives and ignores `sizeNode`, so per-star size is folded into brightness; sized stars would need instanced `Sprite`s.
-- **[#143](https://github.com/ford442/weather_clock/issues/143) — Celestial clock** — next content epic (JS first). Depends on #139.
+- **[#150](https://github.com/ford442/weather_clock/issues/150) — Sky replacement / depth contract** — linear depth is still required while the Three.js `Sky` addon + bloom stack is in use. Block Milky Way, aurora, and a larger celestial sphere until a dual-backend atmosphere material can share log or reverse-Z depth.
+- **[#151](https://github.com/ford442/weather_clock/issues/151) — Precipitation volume** — rain/snow/dust wrap X only; Z spawn is still a literal. Wind plus time-warp leaks particles. JS/C++ kernels and committed WASM must stay in lockstep.
+- **[#152](https://github.com/ford442/weather_clock/issues/152) — Native toolchain** — WASM is off by default (nothing earned the 2× gate). No compile database, no `-Wall`, `-msimd128` without SIMD source. JS + JSDoc stays the runtime; no TypeScript scene rewrite; no new C++ kernel until this lands.
+- **[#153](https://github.com/ford442/weather_clock/issues/153) — WebGPU sized stars** — `THREE.Points` are 1-pixel primitives on WebGPU; magnitude is folded into brightness. Instanced sprites are the documented fix. Playwright CI is SwiftShader WebGL only (`?forceWebGL=1` for local comparison).
+- **[#154](https://github.com/ford442/weather_clock/issues/154) — True celestial sundial** — next identity feature (latitude gnomon, solar hour lines, shadow as the clock). Independent of #150.
+- **[#155](https://github.com/ford442/weather_clock/issues/155) — Optional orbital layer** — ISS / bright sats via TLE + SGP4 on the existing star sphere. Distinct orbital radius waits on #150.
 
 ---
 
