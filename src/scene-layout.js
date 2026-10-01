@@ -17,8 +17,8 @@ const FUTURE = Object.freeze(/** @type {SceneZoneBounds} */ ({ minX: 4, maxX: 12
  * Camera near/far vs sky vs star sphere:
  * `camera.far` (2e6) > `sky.scale` (450000) > `starSphere.radius` (2000) so
  * the star sphere sits inside the sky disc and well away from the sundial.
- * Depth is linear while the Three.js Sky + bloom stack is in use; logarithmic
- * depth belongs with the celestial-sky replacement (it over-blooms this Sky).
+ * Depth is logarithmic: the in-repo sky material (`webgpu/materials/SkyMaterial.js`)
+ * neither tests nor writes depth, so it no longer fights log depth or bloom.
  *
  * Shadow cameras stay tight around the sundial on purpose — weather volumes
  * and the sky disc live far outside `shadows.cameraFar`.
@@ -47,14 +47,14 @@ export const SCENE_LAYOUT = Object.freeze({
     starSphere: Object.freeze({ radius: 2000 }),
     depth: Object.freeze({
         /**
-         * Linear depth with the current Three.js `Sky` + bloom stack.
-         * Logarithmic depth is the right fix for a 2e6 far plane, but it
-         * rewrites `gl_FragDepth` and over-blooms the sky disc; turn it on
-         * only when the sky material is replaced (celestial-sky work).
-         * Until then: `camera.far` > `sky.scale` > `starSphere.radius` so a
-         * 2000-unit star sphere stays inside the frustum and clear of the sundial.
+         * Logarithmic depth on both backends — the right fix for a 2e6 far
+         * plane. The sky dome is depth-agnostic (no `gl_FragDepth`, no z = w),
+         * and every hand-written GLSL shader includes the `LOG_DEPTH_*` chunks
+         * from `shaders.js` so it sorts against built-in materials. WebGPU
+         * would prefer reverse-Z, but Three r181's `WebGPURenderer` does not
+         * expose it; see `RendererFactory.DEFAULT_OPTIONS`.
          */
-        mode: /** @type {'linear'} */ ('linear')
+        mode: /** @type {'linear'|'logarithmic'} */ ('logarithmic')
     }),
     shadows: Object.freeze({
         cameraNear: 0.5,

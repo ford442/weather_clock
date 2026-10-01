@@ -1,5 +1,5 @@
 // Scene objects: sky, sundial, moon, weather effects
-import { Sky } from 'three/addons/objects/Sky.js';
+import * as THREE from 'three';
 import { createSundial } from './sundial.js';
 import { calculateMoonPhase, createMoon } from './moonPhase.js';
 import { WeatherEffects } from './effects/weather-effects.js';
@@ -8,30 +8,27 @@ import { createGround } from './ground.js';
 import { getQualityTier } from './rendering.js';
 import { SCENE_LAYOUT } from './scene-layout.js';
 
-const SKY_CONFIG = {
-    scale: SCENE_LAYOUT.sky.scale,
-    turbidity: 10,
-    rayleigh: 3,
-    mieCoefficient: 0.005,
-    mieDirectionalG: 0.7
-};
+import { createSkyMaterial, createSkyMaterialWebGPU } from './webgpu/materials/SkyMaterial.js';
 
-export function setupSky() {
-    const sky = new Sky();
-    sky.scale.setScalar(SKY_CONFIG.scale);
+/**
+ * Build the atmosphere dome: an inside-out unit box scaled to
+ * `SCENE_LAYOUT.sky.scale`, carrying the in-repo dual-backend Preetham
+ * material (see `webgpu/materials/SkyMaterial.js`). The material never touches
+ * depth, so the sky can sit under a logarithmic depth buffer and bloom.
+ *
+ * @param {boolean} [isWebGPU]
+ * @returns {Promise<THREE.Mesh & {material: THREE.Material & {uniforms: Record<string, {value: any}>}}>}
+ */
+export async function setupSky(isWebGPU = false) {
+    const material = isWebGPU ? await createSkyMaterialWebGPU() : createSkyMaterial();
+    const sky = /** @type {THREE.Mesh & {material: THREE.Material & {uniforms: Record<string, {value: any}>}}} */ (
+        new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material)
+    );
+    sky.name = 'AetherSky';
+    sky.scale.setScalar(SCENE_LAYOUT.sky.scale);
+    // Drawn before everything else; depth test/write are off on the material.
     sky.renderOrder = -1;
-
-    const skyUniforms = sky.material.uniforms;
-    skyUniforms['turbidity'].value = SKY_CONFIG.turbidity;
-    skyUniforms['rayleigh'].value = SKY_CONFIG.rayleigh;
-    skyUniforms['mieCoefficient'].value = SKY_CONFIG.mieCoefficient;
-    skyUniforms['mieDirectionalG'].value = SKY_CONFIG.mieDirectionalG;
-
-    // Disable fog on sky material
-    sky.material.depthWrite = false;
-    sky.material.fog = false;
     sky.frustumCulled = false;
-
     return sky;
 }
 
@@ -103,4 +100,4 @@ export function addToScene(scene, { sky, sundial, moonGroup, ground }) {
     if (ground) scene.add(ground.mesh);
 }
 
-export { SKY_CONFIG };
+export { SKY_MATERIAL_CONFIG as SKY_CONFIG } from './webgpu/materials/SkyMaterial.js';

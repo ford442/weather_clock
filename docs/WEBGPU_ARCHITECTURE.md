@@ -13,8 +13,17 @@ downstream receives an `isWebGPU` flag; there is no per-frame branching on backe
 Context flags live on `DEFAULT_OPTIONS` in the factory: `preserveDrawingBuffer`
 is false (photo capture is same-task `toBlob()`), `premultipliedAlpha`/`depth`
 match across backends, and `logarithmicDepthBuffer` follows
-`SCENE_LAYOUT.depth.mode` (currently linear: the Three.js Sky disc + bloom
-over-brighten under log depth). Camera far > sky scale > star-sphere radius
+`SCENE_LAYOUT.depth.mode`, which is now `'logarithmic'` on both backends.
+The Three.js `Sky` addon was replaced by `src/webgpu/materials/SkyMaterial.js`
+(Preetham, GLSL + TSL side by side): it neither tests nor writes depth (no
+`gl_Position.z = w` trick, no `gl_FragDepth`), is drawn first via `renderOrder`,
+and caps its radiance at `SKY_MATERIAL_CONFIG.maxRadiance` so the solar disc no
+longer floods bloom. Hand-written GLSL shaders include the `LOG_DEPTH_*` chunks
+from `src/shaders.js` so they sort correctly against built-in materials.
+Reverse-Z is not used: Three r181's `WebGPURenderer` has no
+`reversedDepthBuffer` option, so WebGPU runs log depth as well;
+`aetherDebug.getRendererInfo()` reports `depthMode`, `logarithmicDepthBuffer`,
+and `reversedDepthBuffer`. Camera far > sky scale > star-sphere radius
 keeps a 2000-unit star sphere inside the frustum without colliding with the
 sundial. The first native WebGL attempt sets `failIfMajorPerformanceCaveat: true`;
 a software fallback forces the low quality tier for that session. `?test=1`

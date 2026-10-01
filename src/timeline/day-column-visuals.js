@@ -1,3 +1,4 @@
+import { LOG_DEPTH_FRAGMENT, LOG_DEPTH_FRAGMENT_PARS, LOG_DEPTH_VERTEX, LOG_DEPTH_VERTEX_PARS } from '../shaders.js';
 // DayColumn.js - 3D Weather Timeline Visualization Component
 // Represents a single day as a vertical column with temperature gradient and weather particles
 
@@ -18,7 +19,8 @@ export const dayColumnVertexShader = `
   varying vec3 vWorldPosition;
   varying float vTempRatio;
   
-  void main() {
+  ${LOG_DEPTH_VERTEX_PARS}
+void main() {
     vUv = uv;
     vHeight = position.y;
     
@@ -31,7 +33,7 @@ export const dayColumnVertexShader = `
     vWorldPosition = worldPosition.xyz;
     
     gl_Position = projectionMatrix * viewMatrix * worldPosition;
-  }
+${LOG_DEPTH_VERTEX}  }
 `;
 
 export const dayColumnFragmentShader = `
@@ -79,7 +81,9 @@ export const dayColumnFragmentShader = `
     }
   }
   
-  void main() {
+  ${LOG_DEPTH_FRAGMENT_PARS}
+void main() {
+${LOG_DEPTH_FRAGMENT}
     // Get base temperature color from z-score
     vec3 tempColor = getTemperatureColor(uZScore);
 

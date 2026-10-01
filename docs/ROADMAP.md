@@ -11,7 +11,7 @@ The previous index (issues 138–143) is closed. Do not treat those tickets as l
 
 ## P0 — Land this first
 
-- [#150 — Replace Three.js Sky and unlock a real depth contract](https://github.com/ford442/weather_clock/issues/150): the Preetham `Sky` addon plus bloom still forces `SCENE_LAYOUT.depth.mode = 'linear'`. A dual-backend atmosphere material has to land before logarithmic / reverse-Z depth, and before any sky that lives farther out than today's 2000-unit star sphere (Milky Way, aurora, a distinct orbital radius).
+- [#150 — Replace Three.js Sky and unlock a real depth contract](https://github.com/ford442/weather_clock/issues/150): the `Sky` addon is replaced by the in-repo dual-backend `SkyMaterial` and `SCENE_LAYOUT.depth.mode` is now `'logarithmic'` (reverse-Z waits on Three exposing it for `WebGPURenderer`). Remaining: recapture the sky-colour visual baselines, then distant-sky content (Milky Way, aurora, a distinct orbital radius) can build on the deep depth buffer.
 - [#151 — Precipitation volume: wrap Z, kill leftover spawn literals](https://github.com/ford442/weather_clock/issues/151): `SCENE_LAYOUT` owns zone X and fog Z; rain/snow/dust/lightning still spawn and drift on magic Z numbers and wrap **X only**. Wind plus time-warp walks precipitation out of the scene. JS kernel, C++ kernel, and committed WASM stay in lockstep.
 
 ## P1 — Platform and correctness
