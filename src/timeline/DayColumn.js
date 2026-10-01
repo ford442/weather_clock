@@ -1,3 +1,4 @@
+import { LOG_DEPTH_FRAGMENT, LOG_DEPTH_FRAGMENT_PARS, LOG_DEPTH_VERTEX, LOG_DEPTH_VERTEX_PARS } from '../shaders.js';
 // DayColumn.js - 3D Weather Timeline Visualization Component
 // Represents a single day as a vertical column with temperature gradient and weather particles
 
@@ -166,12 +167,13 @@ export class DayColumn {
             vertexShader: `
         varying vec2 vUv;
         varying vec3 vWorldPosition;
-        void main() {
+        ${LOG_DEPTH_VERTEX_PARS}
+void main() {
           vUv = uv;
           vec4 wp = modelMatrix * vec4(position, 1.0);
           vWorldPosition = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
-        }
+${LOG_DEPTH_VERTEX}        }
       `,
             fragmentShader: `
         uniform float uTime;
@@ -180,7 +182,9 @@ export class DayColumn {
         uniform float uIsHot;
         varying vec2 vUv;
         varying vec3 vWorldPosition;
-        void main() {
+        ${LOG_DEPTH_FRAGMENT_PARS}
+void main() {
+${LOG_DEPTH_FRAGMENT}
           // Hot: shimmer rising upward; Cold: drifting downward
           float dir = mix(-1.0, 1.0, uIsHot);
           float ripple = sin((vUv.y * 8.0) - uTime * dir * 1.5 + vUv.x * 6.2831) * 0.5 + 0.5;

@@ -155,7 +155,7 @@ async function bootstrap() {
     const { ambientLight, sunLight, moonLight } = setupLights(scene, quality);
 
     // Scene Objects
-    const sky = setupSky();
+    const sky = await setupSky(isWebGPU);
     const sundial = setupSundial();
     const { moonGroup } = setupMoon();
     const weatherEffects = await setupWeatherEffects(scene, sundial, camera, isWebGPU, renderer);

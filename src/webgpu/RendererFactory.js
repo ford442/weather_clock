@@ -27,10 +27,13 @@ import { SCENE_LAYOUT } from '../scene-layout.js';
  *   `?test=1` skips the caveat so Playwright's SwiftShader baselines stay on
  *   the quality tier they were captured with.
  * - `premultipliedAlpha` / `depth` are explicit so WebGPU matches WebGL.
- * - `logarithmicDepthBuffer` follows `SCENE_LAYOUT.depth.mode`. It stays false
- *   while the Three.js `Sky` addon + bloom path is active (log depth over-blooms
- *   the disc). Camera far > sky scale > star sphere still keeps a 2000-unit
- *   star sphere from colliding with the sundial in clip space.
+ * - `logarithmicDepthBuffer` follows `SCENE_LAYOUT.depth.mode` ('logarithmic'
+ *   on both backends since the in-repo sky material replaced the Three.js `Sky`
+ *   addon; that material never touches depth). Reverse-Z is not used: Three
+ *   r181's `WebGPURenderer` has no `reversedDepthBuffer` option (only
+ *   `WebGLRenderer` does, behind `EXT_clip_control`), so WebGPU runs log depth
+ *   too. `reversedDepthBuffer` is reported as false for that reason. Camera
+ *   far > sky scale > star sphere still holds.
  * - `outputColorSpace` is sRGB; Three r181 configures the WebGL drawing-buffer
  *   color space and the WebGPU `GPUCanvasContext` from this property.
  */
@@ -76,6 +79,8 @@ export const DEFAULT_OPTIONS = Object.freeze(
  * @property {'webgpu'|'webgl'} backend
  * @property {boolean} softwareRenderer
  * @property {boolean} logarithmicDepthBuffer
+ * @property {boolean} reversedDepthBuffer
+ * @property {'linear'|'logarithmic'} depthMode
  * @property {boolean} preserveDrawingBuffer
  * @property {boolean} failIfMajorPerformanceCaveat
  * @property {boolean} premultipliedAlpha
@@ -212,7 +217,9 @@ export async function createRenderer(canvasContainer, userOptions = {}) {
             lastRendererInfo = {
                 backend: 'webgpu',
                 softwareRenderer: false,
-                logarithmicDepthBuffer: !!options.logarithmicDepthBuffer,
+                logarithmicDepthBuffer: !!(renderer.logarithmicDepthBuffer ?? options.logarithmicDepthBuffer),
+                reversedDepthBuffer: false,
+                depthMode: SCENE_LAYOUT.depth.mode,
                 preserveDrawingBuffer: false,
                 failIfMajorPerformanceCaveat: false,
                 premultipliedAlpha: !!options.premultipliedAlpha,
@@ -270,7 +277,9 @@ export async function createRenderer(canvasContainer, userOptions = {}) {
     lastRendererInfo = {
         backend: 'webgl',
         softwareRenderer,
-        logarithmicDepthBuffer: !!options.logarithmicDepthBuffer,
+        logarithmicDepthBuffer: !!(renderer.capabilities?.logarithmicDepthBuffer ?? options.logarithmicDepthBuffer),
+        reversedDepthBuffer: !!renderer.capabilities?.reversedDepthBuffer,
+        depthMode: SCENE_LAYOUT.depth.mode,
         preserveDrawingBuffer: false,
         failIfMajorPerformanceCaveat: usedCaveat,
         premultipliedAlpha: !!options.premultipliedAlpha,

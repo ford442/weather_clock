@@ -3,14 +3,41 @@ import * as THREE from 'three';
 // src/shaders.js
 // Aether Architect: Verified
 
+/**
+ * Logarithmic-depth glue for hand-written `ShaderMaterial`s. Built-in
+ * materials get these chunks automatically; custom shaders have to opt in, or
+ * they write linear depth while everything else writes log depth and the two
+ * sort against each other wrongly (see `SCENE_LAYOUT.depth`). Every chunk is
+ * guarded by `USE_LOGARITHMIC_DEPTH_BUFFER`, so it compiles to nothing when
+ * the renderer runs linear depth.
+ *
+ * The vertex side avoids `#include <common>` (which `logdepthbuf_vertex`
+ * needs for `isPerspectiveMatrix`) so it cannot clash with local helpers.
+ */
+export const LOG_DEPTH_VERTEX_PARS = `
+#ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+varying float vFragDepth;
+varying float vIsPerspective;
+#endif
+`;
+export const LOG_DEPTH_VERTEX = `
+#ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+    vFragDepth = 1.0 + gl_Position.w;
+    vIsPerspective = projectionMatrix[2][3] == -1.0 ? 1.0 : 0.0;
+#endif
+`;
+export const LOG_DEPTH_FRAGMENT_PARS = '#include <logdepthbuf_pars_fragment>\n';
+export const LOG_DEPTH_FRAGMENT = '#include <logdepthbuf_fragment>\n';
+
 export const rainVertexShader = `
 uniform float uOpacity;
 varying float vOpacity;
 
+${LOG_DEPTH_VERTEX_PARS}
 void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-    float dist = length(mvPosition.xyz);
+${LOG_DEPTH_VERTEX}    float dist = length(mvPosition.xyz);
     // Fade out if too close (< 1.0) or too far (> 30.0)
     // "Fade out close particles" - prompt requirement
     // Tuned for immersion: allow rain closer (1.0-4.0 fade)
@@ -23,7 +50,9 @@ export const rainFragmentShader = `
 uniform vec3 uColor;
 varying float vOpacity;
 
+${LOG_DEPTH_FRAGMENT_PARS}
 void main() {
+${LOG_DEPTH_FRAGMENT}
     gl_FragColor = vec4(uColor, vOpacity);
 }
 `;
@@ -32,11 +61,12 @@ export const splashVertexShader = `
 attribute float life;
 varying float vLife;
 
+${LOG_DEPTH_VERTEX_PARS}
 void main() {
     vLife = life;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-
+${LOG_DEPTH_VERTEX}
     // Attenuate size based on distance
     float dist = length(mvPosition.xyz);
     float size = 6.0 * (1.0 + (1.0 - life) * 1.0);
@@ -48,7 +78,9 @@ export const splashFragmentShader = `
 uniform vec3 uColor;
 varying float vLife;
 
+${LOG_DEPTH_FRAGMENT_PARS}
 void main() {
+${LOG_DEPTH_FRAGMENT}
     float alpha = vLife;
     if (alpha <= 0.0) discard;
 
@@ -181,10 +213,11 @@ attribute vec3 aColor;
 varying float vOpacity;
 varying vec3 vColor;
 
+${LOG_DEPTH_VERTEX_PARS}
 void main() {
     vec4 worldPosition = modelMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * viewMatrix * worldPosition;
-
+${LOG_DEPTH_VERTEX}
     // Twinkle logic: Random offset based on position
     float random = sin(position.x * 12.9898 + position.y * 78.233 + position.z * 45.164);
 
@@ -205,7 +238,9 @@ void main() {
 export const starFieldFragmentShader = `
 varying float vOpacity;
 varying vec3 vColor;
+${LOG_DEPTH_FRAGMENT_PARS}
 void main() {
+${LOG_DEPTH_FRAGMENT}
     if (vOpacity <= 0.01) discard;
 
     // Circular soft point

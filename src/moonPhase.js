@@ -1,3 +1,4 @@
+import { LOG_DEPTH_FRAGMENT, LOG_DEPTH_FRAGMENT_PARS, LOG_DEPTH_VERTEX, LOG_DEPTH_VERTEX_PARS } from './shaders.js';
 import * as THREE from 'three';
 import { createMoonMaterial, createMoonMaterialWebGPU } from './webgpu/materials/MoonMaterial.js';
 
@@ -57,6 +58,7 @@ export const moonVertexShader = `
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
 
+${LOG_DEPTH_VERTEX_PARS}
 void main() {
     // Transform normal to world space
     // Note: This assumes uniform scaling. For non-uniform, use normalMatrix (view space) or inverse transpose of model matrix.
@@ -67,7 +69,7 @@ void main() {
     vWorldPosition = worldPos.xyz;
 
     gl_Position = projectionMatrix * viewMatrix * worldPos;
-}
+${LOG_DEPTH_VERTEX}}
 `;
 
 export const moonFragmentShader = `
@@ -89,7 +91,9 @@ float rand(vec2 co){
     return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
 }
 
+${LOG_DEPTH_FRAGMENT_PARS}
 void main() {
+${LOG_DEPTH_FRAGMENT}
     vec3 normal = normalize(vNormal);
     vec3 sunDir = normalize(uSunPosition - vWorldPosition);
     vec3 viewDir = normalize(cameraPosition - vWorldPosition);
