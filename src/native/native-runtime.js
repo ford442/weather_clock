@@ -150,6 +150,8 @@ function createWasmRuntime(module, enabledKernels) {
                 options.mode || 0,
                 options.minX ?? SCENE_LAYOUT.zones.current.minX,
                 options.maxX ?? SCENE_LAYOUT.zones.current.maxX,
+                options.minZ ?? SCENE_LAYOUT.volume.minZ,
+                options.maxZ ?? SCENE_LAYOUT.volume.maxZ,
                 options.time || 0
             );
         },

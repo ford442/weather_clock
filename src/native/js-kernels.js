@@ -82,12 +82,35 @@ function curlComponents(x, y, z, time) {
     };
 }
 
-// mode: 0 = snow points, 1 = rain line-segment pairs, 2 = dust points.
+/**
+ * @typedef {Object} StepParticlesOptions
+ * @property {number} [mode] 0 = snow points, 1 = rain line-segment pairs, 2 = dust points.
+ * @property {number} [minX] Zone X wrap bounds (defaults to the present zone).
+ * @property {number} [maxX]
+ * @property {number} [minZ] Z wrap bounds (defaults to `SCENE_LAYOUT.volume`).
+ * @property {number} [maxZ]
+ * @property {number} [time] Seconds, phases the curl noise.
+ */
+
+/**
+ * Steps particles in place, wrapping X on the zone and Z on the weather volume.
+ * Must stay in lockstep with `step_particles` in `native/weather_native.cpp`.
+ * @param {Float32Array} positions
+ * @param {Float32Array} velocities
+ * @param {Float32Array|null} offsets
+ * @param {number} count
+ * @param {number} windX
+ * @param {number} windZ
+ * @param {number} dt seconds
+ * @param {StepParticlesOptions} [options]
+ */
 export function stepParticlesJS(positions, velocities, offsets, count, windX, windZ, dt, options = {}) {
     const {
         mode = 0,
         minX = SCENE_LAYOUT.zones.current.minX,
         maxX = SCENE_LAYOUT.zones.current.maxX,
+        minZ = SCENE_LAYOUT.volume.minZ,
+        maxZ = SCENE_LAYOUT.volume.maxZ,
         time = 0
     } = options;
     const frameScale = Math.max(0, Math.min(3, dt * 60));
@@ -102,7 +125,7 @@ export function stepParticlesJS(positions, velocities, offsets, count, windX, wi
             const vz = velocities[velocityIndex + 2];
             positions[positionIndex + 3] = wrap(positions[positionIndex + 3] + vx * frameScale, minX, maxX);
             positions[positionIndex + 4] += vy * frameScale;
-            positions[positionIndex + 5] += vz * frameScale;
+            positions[positionIndex + 5] = wrap(positions[positionIndex + 5] + vz * frameScale, minZ, maxZ);
             positions[positionIndex] = positions[positionIndex + 3] - vx * 4;
             positions[positionIndex + 1] = positions[positionIndex + 4] - vy * 4;
             positions[positionIndex + 2] = positions[positionIndex + 5] - vz * 4;
@@ -120,7 +143,7 @@ export function stepParticlesJS(positions, velocities, offsets, count, windX, wi
         if (mode === 2) {
             positions[positionIndex] = wrap(px + (windX + curl.x * 0.02) * frameScale, minX, maxX);
             positions[positionIndex + 1] = py + Math.sin(phase * 1.7) * 0.005 * frameScale;
-            positions[positionIndex + 2] = pz + (windZ + curl.z * 0.02) * frameScale;
+            positions[positionIndex + 2] = wrap(pz + (windZ + curl.z * 0.02) * frameScale, minZ, maxZ);
         } else {
             positions[positionIndex] = wrap(
                 px + (velocities[velocityIndex] + windX + curl.x * 0.05) * frameScale,
@@ -128,7 +151,11 @@ export function stepParticlesJS(positions, velocities, offsets, count, windX, wi
                 maxX
             );
             positions[positionIndex + 1] = py + velocities[velocityIndex + 1] * frameScale;
-            positions[positionIndex + 2] = pz + (velocities[velocityIndex + 2] + windZ + curl.z * 0.05) * frameScale;
+            positions[positionIndex + 2] = wrap(
+                pz + (velocities[velocityIndex + 2] + windZ + curl.z * 0.05) * frameScale,
+                minZ,
+                maxZ
+            );
         }
     }
 }

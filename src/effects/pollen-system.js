@@ -15,6 +15,7 @@ export class PollenSystem extends ParticleSystemBase {
         this.currentIntensity = 0;
         this.maxParticles = maxParticles;
         this.zone = zone || SCENE_LAYOUT.zones.current;
+        this.volume = SCENE_LAYOUT.volume;
         this.fadeSpeed = 0.35;
 
         const positions = new Float32Array(maxParticles * 3);
@@ -45,7 +46,7 @@ export class PollenSystem extends ParticleSystemBase {
     resetParticle(i, positions) {
         positions[i * 3] = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
         positions[i * 3 + 1] = Math.random() * 9;
-        positions[i * 3 + 2] = Math.random() * 20 - 10;
+        positions[i * 3 + 2] = this.volume.minZ + Math.random() * (this.volume.maxZ - this.volume.minZ);
     }
 
     /**
@@ -84,6 +85,7 @@ export class PollenSystem extends ParticleSystemBase {
         const wZ = -Math.sin(rad) * windSpeed * speedScale;
         const time = Date.now() * 0.001;
         const span = this.zone.maxX - this.zone.minX;
+        const spanZ = this.volume.maxZ - this.volume.minZ;
 
         for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
@@ -96,8 +98,8 @@ export class PollenSystem extends ParticleSystemBase {
             if (positions[i3] < this.zone.minX) positions[i3] += span;
             if (positions[i3 + 1] > 10) positions[i3 + 1] = 0.2;
             if (positions[i3 + 1] < 0) positions[i3 + 1] = 9.5;
-            if (positions[i3 + 2] > 10) positions[i3 + 2] = -10;
-            if (positions[i3 + 2] < -10) positions[i3 + 2] = 10;
+            if (positions[i3 + 2] > this.volume.maxZ) positions[i3 + 2] -= spanZ;
+            if (positions[i3 + 2] < this.volume.minZ) positions[i3 + 2] += spanZ;
         }
         this.mesh.geometry.attributes.position.needsUpdate = true;
     }

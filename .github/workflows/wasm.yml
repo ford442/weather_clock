@@ -24,7 +24,10 @@ jobs:
                   version: '6.0.2'
                   actions-cache-folder: 'emsdk-cache'
 
-            - name: Rebuild SIMD module
+            - name: Check native source warnings
+              run: clang++ -fsyntax-only -Werror $(cat native/compile_flags.txt) native/weather_native.cpp
+
+            - name: Rebuild native module
               run: npm run build:wasm
 
             - name: Verify checked-in artifacts

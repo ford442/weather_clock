@@ -54,6 +54,22 @@ describe('SCENE_LAYOUT', () => {
         expect(Object.isFrozen(SCENE_LAYOUT.starSphere)).toBe(true);
         expect(Object.isFrozen(SCENE_LAYOUT.depth)).toBe(true);
         expect(Object.isFrozen(SCENE_LAYOUT.sceneSpan)).toBe(true);
+        expect(Object.isFrozen(SCENE_LAYOUT.volume)).toBe(true);
+    });
+
+    it('defines one weather volume that shares fog Z and brackets every spawn height', () => {
+        const { volume, fog } = SCENE_LAYOUT;
+        expect(volume.minZ).toBe(fog.minZ);
+        expect(volume.maxZ).toBe(fog.maxZ);
+        expect(volume.minZ).toBeLessThan(volume.maxZ);
+        expect(volume.minY).toBeLessThan(volume.resetY);
+        expect(volume.resetY).toBeLessThan(volume.maxY);
+        expect(volume.dustMaxY).toBeGreaterThan(0);
+        expect(volume.dustMaxY).toBeLessThan(volume.maxY);
+        expect(volume.lightningY).toBeGreaterThan(volume.minY);
+        expect(volume.lightningY).toBeLessThanOrEqual(volume.maxY);
+        // The camera sits outside the slab looking in; the slab never swallows it.
+        expect(SCENE_LAYOUT.camera.position.z).toBeGreaterThanOrEqual(volume.maxZ);
     });
 
     it('keeps camera far beyond the sky disc and the star sphere inside both', () => {
@@ -181,6 +197,108 @@ describe('WeatherEffects coordinator zone wiring', () => {
             dust.dispose();
             clouds.dispose();
             fog.dispose();
+        }
+    });
+
+    it('hands every precipitation system the weather volume and spawns inside it', async () => {
+        const scene = new THREE.Scene();
+        const weatherEffects = new WeatherEffects(scene, new THREE.Group(), new THREE.PerspectiveCamera(), 'high');
+        try {
+            const { volume } = SCENE_LAYOUT;
+            const systems = [
+                weatherEffects.pastRain,
+                weatherEffects.pastSnow,
+                weatherEffects.pastDust,
+                weatherEffects.currRain,
+                weatherEffects.currSnow,
+                weatherEffects.currDust,
+                weatherEffects.futureRain,
+                weatherEffects.futureSnow,
+                weatherEffects.futureDust
+            ];
+            if (weatherEffects.currPollen) systems.push(weatherEffects.currPollen);
+            for (const system of systems) {
+                expect(system.volume).toBe(volume);
+                const positions = system.mesh.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    expect(positions[i]).toBeGreaterThanOrEqual(system.zone.minX);
+                    expect(positions[i]).toBeLessThanOrEqual(system.zone.maxX);
+                    expect(positions[i + 1]).toBeGreaterThanOrEqual(volume.minY);
+                    expect(positions[i + 1]).toBeLessThanOrEqual(volume.maxY + 1);
+                    expect(positions[i + 2]).toBeGreaterThanOrEqual(volume.minZ);
+                    expect(positions[i + 2]).toBeLessThanOrEqual(volume.maxZ);
+                }
+            }
+        } finally {
+            weatherEffects.dispose();
+        }
+    }, 20000); // builds the full WeatherEffects coordinator; slow under parallel suite load
+
+    it('spawns lightning at the volume height and inside its Z span', () => {
+        const weatherEffects = new WeatherEffects(
+            new THREE.Scene(),
+            new THREE.Group(),
+            new THREE.PerspectiveCamera(),
+            'low'
+        );
+        try {
+            for (let i = 0; i < 20; i++) {
+                weatherEffects.flashIntensity = 0;
+                weatherEffects.createLightning();
+                // Forcing repeat strikes would orphan the hide timer; clear it each time.
+                clearTimeout(weatherEffects.lightningTimeoutId ?? undefined);
+                const { y, z } = weatherEffects.lightningLight.position;
+                expect(y).toBe(SCENE_LAYOUT.volume.lightningY);
+                expect(z).toBeGreaterThanOrEqual(SCENE_LAYOUT.volume.minZ);
+                expect(z).toBeLessThanOrEqual(SCENE_LAYOUT.volume.maxZ);
+            }
+        } finally {
+            weatherEffects.dispose();
+        }
+    });
+
+    it('keeps CPU rain, snow, and dust inside their zone and the volume under a long +Z gale', async () => {
+        const { RainSystem } = await import('../effects/rain-system.js');
+        const { SnowSystem } = await import('../effects/snow-system.js');
+        const { WindDustSystem } = await import('../effects/wind-dust-system.js');
+        const scene = new THREE.Scene();
+        const zone = SCENE_LAYOUT.zones.future;
+        const { volume } = SCENE_LAYOUT;
+        const rain = new RainSystem(scene, zone, 200);
+        const snow = new SnowSystem(scene, zone, 200);
+        const dust = new WindDustSystem(scene, zone, 200);
+        try {
+            // windDir 0 = from the north → blows toward -Z; 180 = toward +Z. Push both
+            // ways at gale speed with a large, time-warp-sized frame step.
+            for (const windDir of [180, 0, 135]) {
+                for (let frame = 0; frame < 600; frame++) {
+                    rain.update(0.05, 80, windDir, 3, null, null, null, null);
+                    snow.update(0.05, 80, windDir, 3, null);
+                    dust.update(0.05, 80, windDir, 0, null);
+                }
+                for (const [system, stride, head] of [
+                    [rain, 6, 3],
+                    [snow, 3, 0],
+                    [dust, 3, 0]
+                ]) {
+                    const positions = system.mesh.geometry.attributes.position.array;
+                    const live = system.mesh.geometry.drawRange.count;
+                    const count = Number.isFinite(live) ? Math.min(live, positions.length / stride) : 0;
+                    expect(count).toBeGreaterThan(0);
+                    for (let i = 0; i < count; i++) {
+                        const x = positions[i * stride + head];
+                        const z = positions[i * stride + head + 2];
+                        expect(x).toBeGreaterThanOrEqual(zone.minX);
+                        expect(x).toBeLessThanOrEqual(zone.maxX);
+                        expect(z).toBeGreaterThanOrEqual(volume.minZ);
+                        expect(z).toBeLessThanOrEqual(volume.maxZ);
+                    }
+                }
+            }
+        } finally {
+            rain.dispose();
+            snow.dispose();
+            dust.dispose();
         }
     });
 });

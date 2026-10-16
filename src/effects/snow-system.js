@@ -11,6 +11,7 @@ export class SnowSystem extends ParticleSystemBase {
         this.activeCount = 0;
         this.maxParticles = maxParticles;
         this.zone = zone || SCENE_LAYOUT.zones.current;
+        this.volume = SCENE_LAYOUT.volume;
 
         this.nativeRuntime = getNativeRuntime();
         /** @type {{backend: string, positions: Float32Array, velocities: Float32Array, offsets: Float32Array, disposed: boolean, dispose(): void}|null} */
@@ -38,10 +39,11 @@ export class SnowSystem extends ParticleSystemBase {
         this.offsets = offsets;
 
         const posAttr = this.mesh.geometry.attributes.position.array;
+        const { minY, resetY, minZ, maxZ } = this.volume;
         for (let i = 0; i < maxParticles; i++) {
             posAttr[i * 3] = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
-            posAttr[i * 3 + 1] = Math.random() * 15;
-            posAttr[i * 3 + 2] = Math.random() * 20 - 10;
+            posAttr[i * 3 + 1] = minY + Math.random() * (resetY - minY);
+            posAttr[i * 3 + 2] = minZ + Math.random() * (maxZ - minZ);
 
             this.velocities[i * 3] = 0;
             this.velocities[i * 3 + 1] = -0.02 - Math.random() * 0.03;
@@ -94,13 +96,15 @@ export class SnowSystem extends ParticleSystemBase {
             mode: 0,
             minX: this.zone.minX,
             maxX: this.zone.maxX,
+            minZ: this.volume.minZ,
+            maxZ: this.volume.maxZ,
             time
         });
 
         for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
-            if (positions[i3 + 1] < -5) {
-                positions[i3 + 1] = 15;
+            if (positions[i3 + 1] < this.volume.minY) {
+                positions[i3 + 1] = this.volume.resetY;
                 positions[i3] = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
             }
         }

@@ -23,6 +23,7 @@ export class GPURainSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 10000, renderer = null) {
         super(scene);
         this.zone = zone || SCENE_LAYOUT.zones.current;
+        this.volume = SCENE_LAYOUT.volume;
         this.maxParticles = maxParticles;
         this.renderer = renderer;
         this.currentIntensity = 0;
@@ -54,17 +55,19 @@ export class GPURainSystem extends ParticleSystemBase {
     async initWebGPU() {
         if (this.computeUpdate || !this.renderer) return;
         const width = this.zone.maxX - this.zone.minX;
+        const { minY, maxY, resetY, minZ, maxZ } = this.volume;
+        const depth = maxZ - minZ;
         const seed = uint(Math.floor(Math.random() * 0xffffff));
         const init = Fn(() => {
             const position = this.positions.element(instanceIndex);
             const velocity = this.velocities.element(instanceIndex);
             position.x = hash(instanceIndex.add(seed)).mul(width).add(this.zone.minX);
             position.y = hash(instanceIndex.add(seed.add(17)))
-                .mul(25)
-                .add(-5);
+                .mul(maxY - minY)
+                .add(minY);
             position.z = hash(instanceIndex.add(seed.add(31)))
-                .mul(10)
-                .add(-5);
+                .mul(depth)
+                .add(minZ);
             velocity.assign(vec3(0));
             velocity.y = hash(instanceIndex.add(seed.add(47)))
                 .mul(-3)
@@ -81,8 +84,10 @@ export class GPURainSystem extends ParticleSystemBase {
 
             If(position.x.greaterThan(this.zone.maxX), () => position.x.subAssign(width));
             If(position.x.lessThan(this.zone.minX), () => position.x.addAssign(width));
+            If(position.z.greaterThan(maxZ), () => position.z.subAssign(depth));
+            If(position.z.lessThan(minZ), () => position.z.addAssign(depth));
 
-            const surfaceY = float(-5).toVar();
+            const surfaceY = float(minY).toVar();
             const radius = position.xz.length();
             If(radius.lessThan(SUNDIAL_DIMENSIONS.face.radius), () => {
                 surfaceY.assign(SUNDIAL_DIMENSIONS.face.y + SUNDIAL_DIMENSIONS.face.height / 2);
@@ -108,14 +113,14 @@ export class GPURainSystem extends ParticleSystemBase {
                     this.splashSystem.life.element(splashIndex).assign(1);
                 }
                 position.y = hash(instanceIndex.add(time.mul(1000).toUint()))
-                    .mul(5)
-                    .add(15);
+                    .mul(maxY - resetY)
+                    .add(resetY);
                 position.x = hash(instanceIndex.add(seed).add(time.mul(997).toUint()))
                     .mul(width)
                     .add(this.zone.minX);
                 position.z = hash(instanceIndex.add(seed.add(61)).add(time.mul(991).toUint()))
-                    .mul(10)
-                    .add(-5);
+                    .mul(depth)
+                    .add(minZ);
             });
         })()
             .compute(this.maxParticles)
