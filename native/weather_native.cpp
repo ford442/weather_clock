@@ -99,8 +99,9 @@ void generate_cloud_noise(uint8_t* output, int width, int height, int octaves, u
 }
 
 // mode: 0 = snow points, 1 = rain line-segment pairs, 2 = dust points.
+// X wraps on the zone, Z on SCENE_LAYOUT.volume. Lockstep with stepParticlesJS in src/native/js-kernels.js.
 void step_particles(float* positions, float* velocities, const float* offsets, int count, float wind_x, float wind_z,
-                    float dt, int mode, float min_x, float max_x, float time_seconds) {
+                    float dt, int mode, float min_x, float max_x, float min_z, float max_z, float time_seconds) {
     if (!positions || !velocities || count <= 0) return;
     const float frame_scale = std::clamp(dt * 60.0f, 0.0f, 3.0f);
     for (int i = 0; i < count; ++i) {
@@ -114,7 +115,7 @@ void step_particles(float* positions, float* velocities, const float* offsets, i
             const float vz = velocities[velocity_index + 2];
             positions[position_index + 3] = wrap(positions[position_index + 3] + vx * frame_scale, min_x, max_x);
             positions[position_index + 4] += vy * frame_scale;
-            positions[position_index + 5] += vz * frame_scale;
+            positions[position_index + 5] = wrap(positions[position_index + 5] + vz * frame_scale, min_z, max_z);
             positions[position_index] = positions[position_index + 3] - vx * 4.0f;
             positions[position_index + 1] = positions[position_index + 4] - vy * 4.0f;
             positions[position_index + 2] = positions[position_index + 5] - vz * 4.0f;
@@ -134,13 +135,13 @@ void step_particles(float* positions, float* velocities, const float* offsets, i
         if (mode == 2) {
             positions[position_index] = wrap(px + (wind_x + curl_x * 0.02f) * frame_scale, min_x, max_x);
             positions[position_index + 1] = py + std::sin(phase * 1.7f) * 0.005f * frame_scale;
-            positions[position_index + 2] = pz + (wind_z + curl_z * 0.02f) * frame_scale;
+            positions[position_index + 2] = wrap(pz + (wind_z + curl_z * 0.02f) * frame_scale, min_z, max_z);
         } else {
             positions[position_index] = wrap(
                 px + (velocities[velocity_index] + wind_x + curl_x * 0.05f) * frame_scale, min_x, max_x);
             positions[position_index + 1] = py + velocities[velocity_index + 1] * frame_scale;
             positions[position_index + 2] =
-                pz + (velocities[velocity_index + 2] + wind_z + curl_z * 0.05f) * frame_scale;
+                wrap(pz + (velocities[velocity_index + 2] + wind_z + curl_z * 0.05f) * frame_scale, min_z, max_z);
         }
     }
 }

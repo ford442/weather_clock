@@ -21,6 +21,7 @@ export class GPUSnowSystem extends ParticleSystemBase {
     constructor(scene, zone, maxParticles = 7500, renderer = null) {
         super(scene);
         this.zone = zone || SCENE_LAYOUT.zones.current;
+        this.volume = SCENE_LAYOUT.volume;
         this.maxParticles = maxParticles;
         this.renderer = renderer;
         this.currentIntensity = 0;
@@ -46,17 +47,19 @@ export class GPUSnowSystem extends ParticleSystemBase {
     async initWebGPU() {
         if (this.computeUpdate || !this.renderer) return;
         const width = this.zone.maxX - this.zone.minX;
+        const { minY, resetY, minZ, maxZ } = this.volume;
+        const depth = maxZ - minZ;
         const seed = uint(Math.floor(Math.random() * 0xffffff));
         const init = Fn(() => {
             const position = this.positions.element(instanceIndex);
             const velocity = this.velocities.element(instanceIndex);
             position.x = hash(instanceIndex.add(seed)).mul(width).add(this.zone.minX);
             position.y = hash(instanceIndex.add(seed.add(19)))
-                .mul(20)
-                .add(-5);
+                .mul(resetY - minY)
+                .add(minY);
             position.z = hash(instanceIndex.add(seed.add(37)))
-                .mul(20)
-                .add(-10);
+                .mul(depth)
+                .add(minZ);
             velocity.assign(vec3(0));
             velocity.y = hash(instanceIndex.add(seed.add(53)))
                 .mul(-0.7)
@@ -80,8 +83,10 @@ export class GPUSnowSystem extends ParticleSystemBase {
             );
             If(position.x.greaterThan(this.zone.maxX), () => position.x.subAssign(width));
             If(position.x.lessThan(this.zone.minX), () => position.x.addAssign(width));
-            If(position.y.lessThan(-5), () => {
-                position.y = 15;
+            If(position.z.greaterThan(maxZ), () => position.z.subAssign(depth));
+            If(position.z.lessThan(minZ), () => position.z.addAssign(depth));
+            If(position.y.lessThan(minY), () => {
+                position.y = resetY;
                 position.x = hash(instanceIndex.add(seed).add(time.mul(997).toUint()))
                     .mul(width)
                     .add(this.zone.minX);

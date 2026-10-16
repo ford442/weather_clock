@@ -518,11 +518,12 @@ export class WeatherEffects {
         if (this.flashIntensity > 0.5) return;
 
         const zone = SCENE_LAYOUT.lightning;
+        const { minZ, maxZ, lightningY } = SCENE_LAYOUT.volume;
         // Reuse pooled light
         this.lightningLight.position.set(
             zone.minX + Math.random() * (zone.maxX - zone.minX),
-            10,
-            Math.random() * 10 - 5
+            lightningY,
+            minZ + Math.random() * (maxZ - minZ)
         );
         this.lightningLight.visible = true;
 

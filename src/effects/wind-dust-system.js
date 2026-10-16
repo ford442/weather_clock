@@ -10,6 +10,7 @@ export class WindDustSystem extends ParticleSystemBase {
         this.currentIntensity = 0;
         this.maxParticles = maxParticles;
         this.zone = zone || SCENE_LAYOUT.zones.current;
+        this.volume = SCENE_LAYOUT.volume;
 
         this.nativeRuntime = getNativeRuntime();
         /** @type {{backend: string, positions: Float32Array, velocities: Float32Array, offsets: Float32Array, disposed: boolean, dispose(): void}|null} */
@@ -49,8 +50,8 @@ export class WindDustSystem extends ParticleSystemBase {
     resetParticle(i, posAttr) {
         posAttr[i * 3] = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
         // Aether Architect: Cluster dust near ground to simulate "invisible grass" rustling
-        posAttr[i * 3 + 1] = Math.pow(Math.random(), 2.5) * 8;
-        posAttr[i * 3 + 2] = Math.random() * 20 - 10;
+        posAttr[i * 3 + 1] = Math.pow(Math.random(), 2.5) * this.volume.dustMaxY;
+        posAttr[i * 3 + 2] = this.volume.minZ + Math.random() * (this.volume.maxZ - this.volume.minZ);
 
         // Initial random velocity
         this.velocities[i * 3] = 0;
@@ -103,14 +104,17 @@ export class WindDustSystem extends ParticleSystemBase {
             mode: 2,
             minX: this.zone.minX,
             maxX: this.zone.maxX,
+            minZ: this.volume.minZ,
+            maxZ: this.volume.maxZ,
             time
         });
 
+        const { dustMaxY } = this.volume;
         for (let i = 0; i < activeCount; i++) {
             const i3 = i * 3;
-            // Height clamp/wrap
-            if (positions[i3 + 1] > 8) positions[i3 + 1] = 0;
-            if (positions[i3 + 1] < 0) positions[i3 + 1] = 8;
+            // Height clamp/wrap (X and Z are already wrapped by the kernel)
+            if (positions[i3 + 1] > dustMaxY) positions[i3 + 1] = 0;
+            if (positions[i3 + 1] < 0) positions[i3 + 1] = dustMaxY;
         }
         this.mesh.geometry.attributes.position.needsUpdate = true;
     }

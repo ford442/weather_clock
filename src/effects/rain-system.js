@@ -19,6 +19,7 @@ export class RainSystem extends ParticleSystemBase {
         this.activeCount = 0;
         this.maxParticles = maxParticles;
         this.zone = zone || SCENE_LAYOUT.zones.current;
+        this.volume = SCENE_LAYOUT.volume;
 
         this.nativeRuntime = getNativeRuntime();
         /** @type {{backend: string, positions: Float32Array, velocities: Float32Array, offsets: Float32Array, disposed: boolean, dispose(): void}|null} */
@@ -52,8 +53,9 @@ export class RainSystem extends ParticleSystemBase {
         const positions = this.mesh.geometry.attributes.position.array;
 
         const x = this.zone.minX + Math.random() * (this.zone.maxX - this.zone.minX);
-        const y = randomY ? Math.random() * 20 - 5 : 15 + Math.random() * 5;
-        const z = Math.random() * 10 - 5;
+        const { minY, maxY, resetY, minZ, maxZ } = this.volume;
+        const y = randomY ? minY + Math.random() * (maxY - minY) : resetY + Math.random() * (maxY - resetY);
+        const z = minZ + Math.random() * (maxZ - minZ);
 
         this.velocities[i3] = 0;
         this.velocities[i3 + 1] = -0.2 - Math.random() * 0.1;
@@ -109,7 +111,9 @@ export class RainSystem extends ParticleSystemBase {
         this.nativeRuntime.stepParticles(this.nativeBuffers, activeCount, targetWindX, targetWindZ, delta, {
             mode: 1,
             minX: this.zone.minX,
-            maxX: this.zone.maxX
+            maxX: this.zone.maxX,
+            minZ: this.volume.minZ,
+            maxZ: this.volume.maxZ
         });
 
         for (let i = 0; i < activeCount; i++) {
@@ -157,7 +161,7 @@ export class RainSystem extends ParticleSystemBase {
                     }
                 }
 
-                if (headY < -5) this.resetParticle(i);
+                if (headY < this.volume.minY) this.resetParticle(i);
             }
         }
         this.mesh.geometry.attributes.position.needsUpdate = true;
