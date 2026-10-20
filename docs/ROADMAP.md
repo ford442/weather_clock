@@ -17,11 +17,11 @@ The previous index (issues 138–143) is closed. Do not treat those tickets as l
 ## P1 — Platform and correctness
 
 - [#152 — Native C++/WASM toolchain: compile database, real SIMD, or a JS-source-of-truth freeze](https://github.com/ford442/weather_clock/issues/152): production does not use WASM (`NATIVE_ADOPTION` is all false; nothing cleared the 2× gate). There is no `compile_commands.json` / `compile_flags.txt`, no `-Wall`, and `-msimd128` is a compiler flag over scalar loops. Decide freeze vs SIMD before any new C++ kernel. Vanilla JS + JSDoc stays the runtime; no scene-graph rewrite to TypeScript.
-- [#153 — WebGPU sized stars via instanced sprites](https://github.com/ford442/weather_clock/issues/153): Three's WebGPU backend draws `THREE.Points` as 1-pixel primitives and ignores `sizeNode`. Catalog and planets should be instanced sprites so magnitude is area, not just brightness. Playwright CI cannot see this (SwiftShader WebGL only).
+- [#153 — WebGPU sized stars via instanced sprites](https://github.com/ford442/weather_clock/issues/153): Three's WebGPU backend draws `THREE.Points` as 1-pixel primitives and ignores `sizeNode`. Catalog and planets now draw as instanced sprites on WebGPU so magnitude is area, not just brightness; the filler field stays 1-px dust. Remaining: a manual pass on real GPU hardware (checked only on SwiftShader's Vulkan WebGPU adapter). Playwright CI cannot see this (SwiftShader WebGL only).
 
 ## P2 — Next content bets
 
-- [#154 — True celestial sundial](https://github.com/ford442/weather_clock/issues/154): the namesake object is still analog hands plus a decorative gnomon that yaws on `Date.now()`. Latitude-aligned style, solar hour lines, equation of time as graphics, shadow as the clock. Independent of #150.
+- [#154 — True celestial sundial](https://github.com/ford442/weather_clock/issues/154): landed. The style is set at the observer's latitude, solar hour lines follow `tan θ = sin φ · tan h`, a warm/cool mean-sun ghost line shows the equation of time, a 24-hour civil pointer covers the night, and nothing moves on the wall clock (`sundial.js`, `sundial-astronomy.js`, `sundial.test.js`). Remaining before close: a look on real GPU hardware. The default camera sees the gnomon nearly end-on, so the shadow carries the reading.
 - [#155 — Optional orbital layer (ISS and bright satellites)](https://github.com/ford442/weather_clock/issues/155): TLE + `satellite.js` SGP4, parented into `StarField.skyGroup`, off by default, same twilight/cloud fade as the stars. Can live on the current star sphere; a distinct orbital radius waits on #150.
 
 Intent still lives in [VISION.md](./VISION.md).

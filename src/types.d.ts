@@ -73,6 +73,10 @@ interface MoonlightModel {
 
 /** Result of {@link AstronomyService.update} — scene-space positions plus lighting models. */
 interface AstroSnapshot {
+    /** Observer the snapshot was computed for, after the New York fallback — degrees. */
+    latitude: number;
+    /** Degrees east. */
+    longitude: number;
     sunPosition: import('three').Vector3;
     moonPosition: import('three').Vector3;
     moonIllumination: { fraction: number; phase: number; angle: number };

@@ -49,6 +49,8 @@ export class AstronomyService {
             : CELESTIAL_CONFIG.moonMeanDistanceKm;
 
         return {
+            latitude,
+            longitude,
             sunPosition: this.sunPosition,
             moonPosition: this.moonPosition,
             moonIllumination: moonIllum,

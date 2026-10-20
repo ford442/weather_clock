@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import { createStarFieldMaterial, createStarFieldMaterialWebGPU } from '../webgpu/materials/StarFieldMaterial.js';
+import {
+    buildStarFieldMaterialWebGPU,
+    createStarFieldMaterial,
+    loadStarFieldNodeModules
+} from '../webgpu/materials/StarFieldMaterial.js';
 import {
     DEG,
     HOURS_TO_RAD,
@@ -154,6 +158,12 @@ export class StarField {
         this._labelsBuilt = false;
         /** Flat [from, to] star-index pairs backing the constellation LineSegments. */
         this._lineIndices = getConstellationLineIndices();
+        /**
+         * Set by {@link initWebGPU}. Once present, the catalog and planets draw as
+         * sized instanced sprites and any rebuilt batch is born that way.
+         * @type {import('../webgpu/materials/StarFieldMaterial.js').StarFieldNodeModules|null}
+         */
+        this._nodeModules = null;
 
         this.skyGroup = new THREE.Group();
         this.skyGroup.matrixAutoUpdate = false;
@@ -168,7 +178,7 @@ export class StarField {
         // rotation carries it and the planets already land on its ecliptic line.
         this.zodiac = new ZodiacOverlay(this.skyGroup, { radius: this.radius, mode: this.zodiacMode });
 
-        // `mesh` stays the primary Points object so existing callers that reach
+        // `mesh` stays the primary catalog drawable so existing callers that reach
         // for it (quality tiers, disposal helpers) keep working.
         this.mesh = this.catalogStars;
         this.uniforms = this.catalogMaterial.uniforms;
@@ -203,8 +213,11 @@ export class StarField {
         geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
         geometry.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
 
+        /** CPU-side catalog data; the drawable below reads from it on either backend. */
+        this.catalogGeometry = geometry;
         this.catalogMaterial = createStarFieldMaterial();
         this.catalogMaterial.uniforms.uHorizonRadius.value = this.radius;
+        /** @type {THREE.Points|THREE.Sprite} */
         this.catalogStars = new THREE.Points(geometry, this.catalogMaterial);
         this.catalogStars.renderOrder = -1;
         this.catalogStars.frustumCulled = false;
@@ -274,12 +287,65 @@ export class StarField {
         geometry.setAttribute('size', new THREE.BufferAttribute(new Float32Array(count), 1));
         geometry.setAttribute('aColor', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
 
+        /** CPU-side planet data; the drawable below reads from it on either backend. */
+        this.planetGeometry = geometry;
+        if (this._nodeModules) {
+            // Rebuilt after WebGPU init (a new planet set): go straight to sprites
+            // so a WebGL material never reaches the WebGPU renderer.
+            const { drawable, material } = this._createSizedSprites(geometry);
+            this.planetMaterial = material;
+            this.planetPoints = drawable;
+            this.skyGroup.add(drawable);
+            return;
+        }
         this.planetMaterial = createStarFieldMaterial();
         this.planetMaterial.uniforms.uHorizonRadius.value = this.radius;
+        /** @type {THREE.Points|THREE.Sprite} */
         this.planetPoints = new THREE.Points(geometry, this.planetMaterial);
         this.planetPoints.renderOrder = -1;
         this.planetPoints.frustumCulled = false;
         this.skyGroup.add(this.planetPoints);
+    }
+
+    /**
+     * Wrap a star batch's data geometry in a sized, instanced sprite for the
+     * WebGPU backend, where `THREE.Points` can only draw 1-pixel primitives.
+     * The geometry's attributes become `InstancedBufferAttribute`s over the same
+     * arrays, so the existing setXYZ + `needsUpdate` refreshes feed the sprites
+     * directly and the geometry stays the one source of truth.
+     * @param {THREE.BufferGeometry} geometry
+     * @returns {{drawable: THREE.Sprite, material: import('three/webgpu').PointsNodeMaterial}}
+     */
+    _createSizedSprites(geometry) {
+        const modules = /** @type {import('../webgpu/materials/StarFieldMaterial.js').StarFieldNodeModules} */ (
+            this._nodeModules
+        );
+        /** @param {string} name */
+        const instanced = (name) => {
+            const current = geometry.getAttribute(name);
+            if (/** @type {any} */ (current).isInstancedBufferAttribute) {
+                return /** @type {THREE.InstancedBufferAttribute} */ (current);
+            }
+            const next = new THREE.InstancedBufferAttribute(
+                /** @type {Float32Array} */ (current.array),
+                current.itemSize
+            );
+            geometry.setAttribute(name, next);
+            return next;
+        };
+        const material = buildStarFieldMaterialWebGPU(modules, {
+            instanced: { position: instanced('position'), size: instanced('size'), color: instanced('aColor') }
+        });
+        material.userData.starUniforms.uHorizonRadius.value = this.radius;
+
+        const drawable = new THREE.Sprite(/** @type {any} */ (material));
+        drawable.count = geometry.getAttribute('position').count;
+        drawable.renderOrder = -1;
+        // The sprite object sits at the sky's origin; its instances are 2000 units out.
+        drawable.frustumCulled = false;
+        // Sky dots are not pickable, and Sprite.raycast throws without a camera.
+        drawable.raycast = () => {};
+        return { drawable, material };
     }
 
     _ensureLabels() {
@@ -315,7 +381,7 @@ export class StarField {
      * @returns {THREE.Vector3|null}
      */
     _constellationCentroid(constellation) {
-        const positions = this.catalogStars.geometry.getAttribute('position');
+        const positions = this.catalogGeometry.getAttribute('position');
         const sum = new THREE.Vector3();
         let used = 0;
         for (const [fromId, toId] of constellation.lines) {
@@ -435,9 +501,7 @@ export class StarField {
         if (!Array.isArray(ids) || ids.length === 0) return;
         this._planetIds = ids.slice();
         this._disposeLabels();
-        this.skyGroup.remove(this.planetPoints);
-        this.planetPoints.geometry.dispose();
-        this.planetMaterial.dispose();
+        this._disposeBatch(this.planetPoints, this.planetGeometry);
         this._buildPlanetPoints();
         this._refreshPlanets(this.observerDate, true);
         // Labels were torn down along with the old planet set; rebuild them if
@@ -455,7 +519,7 @@ export class StarField {
         }
         this.catalogEpochCenturies = centuries;
 
-        const positions = this.catalogStars.geometry.getAttribute('position');
+        const positions = this.catalogGeometry.getAttribute('position');
         for (let i = 0; i < STARS.length; i++) {
             const star = STARS[i];
             const { ra, dec } = precessFromJ2000(star.raHours * HOURS_TO_RAD, star.decDeg * DEG, centuries);
@@ -463,13 +527,13 @@ export class StarField {
             positions.setXYZ(i, vector.x, vector.y, vector.z);
         }
         positions.needsUpdate = true;
-        this.catalogStars.geometry.computeBoundingSphere();
+        this.catalogGeometry.computeBoundingSphere();
         this._refreshConstellationGeometry();
         this._refreshConstellationLabelPositions();
     }
 
     _refreshConstellationGeometry() {
-        const starPositions = this.catalogStars.geometry.getAttribute('position');
+        const starPositions = this.catalogGeometry.getAttribute('position');
         const linePositions = this.constellationLines.geometry.getAttribute('position');
         for (let i = 0; i < this._lineIndices.length; i++) {
             const starIndex = this._lineIndices[i];
@@ -501,9 +565,9 @@ export class StarField {
 
         this._planets = getPlanetPositions(when, this._planetIds);
         const centuries = julianCenturies(when);
-        const positions = this.planetPoints.geometry.getAttribute('position');
-        const sizes = this.planetPoints.geometry.getAttribute('size');
-        const colors = this.planetPoints.geometry.getAttribute('aColor');
+        const positions = this.planetGeometry.getAttribute('position');
+        const sizes = this.planetGeometry.getAttribute('size');
+        const colors = this.planetGeometry.getAttribute('aColor');
 
         for (let i = 0; i < this._planetIds.length; i++) {
             const planet = this._planets[i];
@@ -524,7 +588,7 @@ export class StarField {
         positions.needsUpdate = true;
         sizes.needsUpdate = true;
         colors.needsUpdate = true;
-        this.planetPoints.geometry.computeBoundingSphere();
+        this.planetGeometry.computeBoundingSphere();
     }
 
     _refreshSkyRotation() {
@@ -635,22 +699,60 @@ export class StarField {
         return this._planets.map((planet) => ({ ...planet }));
     }
 
+    /**
+     * Swap in the WebGPU materials. The filler field keeps its `THREE.Points`
+     * (1-pixel dust, still drawn through a draw range so quality tiers never
+     * rebuild it); the catalog and planets move to sized instanced sprites so
+     * the bright stars and planets have area rather than just brightness.
+     */
     async initWebGPU() {
-        for (const key of ['catalogMaterial', 'faintMaterial', 'planetMaterial']) {
-            const target =
-                key === 'catalogMaterial'
-                    ? this.catalogStars
-                    : key === 'faintMaterial'
-                      ? this.faintStars
-                      : this.planetPoints;
-            const material = await createStarFieldMaterialWebGPU();
-            material.userData.starUniforms.uHorizonRadius.value = this.radius;
-            const oldMaterial = target.material;
-            target.material = material;
-            this[key] = material;
-            oldMaterial?.dispose?.();
-        }
+        if (this._nodeModules) return;
+        const modules = await loadStarFieldNodeModules();
+        this._nodeModules = modules;
+
+        const faintMaterial = buildStarFieldMaterialWebGPU(modules);
+        faintMaterial.userData.starUniforms.uHorizonRadius.value = this.radius;
+        this.faintMaterial.dispose();
+        this.faintStars.material = /** @type {any} */ (faintMaterial);
+        this.faintMaterial = /** @type {any} */ (faintMaterial);
+
+        const catalog = this._createSizedSprites(this.catalogGeometry);
+        this._replaceDrawable(this.catalogStars, catalog.drawable);
+        this.catalogMaterial.dispose();
+        this.catalogStars = catalog.drawable;
+        this.catalogMaterial = /** @type {any} */ (catalog.material);
+
+        const planets = this._createSizedSprites(this.planetGeometry);
+        this._replaceDrawable(this.planetPoints, planets.drawable);
+        this.planetMaterial.dispose();
+        this.planetPoints = planets.drawable;
+        this.planetMaterial = /** @type {any} */ (planets.material);
+
+        this.mesh = this.catalogStars;
         this.uniforms = this.catalogMaterial.userData.starUniforms;
+    }
+
+    /**
+     * Put `next` where `previous` sat in the sky group, carrying its visibility.
+     * @param {THREE.Object3D} previous
+     * @param {THREE.Object3D} next
+     */
+    _replaceDrawable(previous, next) {
+        next.visible = previous.visible;
+        this.skyGroup.remove(previous);
+        this.skyGroup.add(next);
+    }
+
+    /**
+     * Remove and free one star batch. A sprite's own geometry is Three's shared
+     * quad (the text labels use it too), so only the data geometry is disposed.
+     * @param {THREE.Object3D & {material: THREE.Material}} drawable
+     * @param {THREE.BufferGeometry} geometry
+     */
+    _disposeBatch(drawable, geometry) {
+        this.skyGroup.remove(drawable);
+        geometry.dispose();
+        drawable.material.dispose();
     }
 
     _disposeLabels() {
@@ -667,10 +769,10 @@ export class StarField {
     dispose() {
         this._disposeLabels();
         this.zodiac.dispose();
-        for (const object of [this.catalogStars, this.faintStars, this.constellationLines, this.planetPoints]) {
-            this.skyGroup.remove(object);
-            object.geometry.dispose();
-            object.material.dispose();
+        this._disposeBatch(this.catalogStars, this.catalogGeometry);
+        this._disposeBatch(this.planetPoints, this.planetGeometry);
+        for (const object of [this.faintStars, this.constellationLines]) {
+            this._disposeBatch(object, object.geometry);
         }
         this.scene.remove(this.skyGroup);
     }

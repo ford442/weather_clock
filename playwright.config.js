@@ -19,6 +19,10 @@ export default defineConfig({
     use: {
         baseURL: 'http://127.0.0.1:5173',
         viewport: { width: 1280, height: 720 },
+        // Scenarios set local clock hours (setDebugTime), so the sun's position —
+        // and every daylight baseline — depends on the browser's timezone. Pin
+        // it to CI's so a laptop in CEST doesn't screenshot New York at night.
+        timezoneId: 'UTC',
         launchOptions: {
             args: [
                 '--no-sandbox',
