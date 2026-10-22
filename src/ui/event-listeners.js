@@ -19,6 +19,15 @@ export function setupEventListeners(callbacks, modeController) {
     const retryBtn = document.getElementById('retry-location');
     if (retryBtn) retryBtn.addEventListener('click', (e) => callbacks.onRetryLocation?.(e));
 
+    // Location-fallback notice: same retry flow, plus a shortcut into city search.
+    document
+        .getElementById('location-notice-primary')
+        ?.addEventListener('click', (e) => callbacks.onRetryLocation?.(e));
+    document.getElementById('location-notice-search')?.addEventListener('click', () => {
+        document.querySelector('.search-container')?.classList.add('expanded');
+        document.getElementById('location-search')?.focus();
+    });
+
     const unitToggle = document.getElementById('unit-toggle');
     if (unitToggle) {
         unitToggle.addEventListener('click', () => callbacks.onToggleUnit?.());

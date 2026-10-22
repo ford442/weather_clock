@@ -14,6 +14,10 @@
  * @property {string} offlineNoCachedData
  * @property {string} weatherLoadFailed
  * @property {string} locationNotDetected
+ * @property {(place: string|null, reason: LocationFallbackReason) => string} locationFallbackNotice
+ * @property {string} locationUseMine
+ * @property {string} locationRetry
+ * @property {string} locationSearchCity
  * @property {(query: string) => string} noResultsFor
  * @property {string} timeWarpDisabledReducedMotion
  * @property {(tier: string, reason: string) => string} qualityChanged
@@ -53,6 +57,20 @@ const STRINGS = {
         offlineNoCachedData: 'Offline — no cached weather data available',
         weatherLoadFailed: 'Failed to load weather data. Check your connection.',
         locationNotDetected: 'Could not detect location. Try searching for a city.',
+        locationFallbackNotice: (place, reason) => {
+            const shown = place ? `Showing ${place}` : 'Showing a default location';
+            const why = {
+                prompt: 'location not shared yet',
+                denied: 'location access is blocked in your browser settings',
+                timeout: 'location request timed out',
+                unavailable: 'your position could not be determined',
+                unsupported: 'this browser has no location support'
+            }[reason];
+            return `${shown}: ${why}.`;
+        },
+        locationUseMine: 'Use my location',
+        locationRetry: 'Retry',
+        locationSearchCity: 'Search city',
         noResultsFor: (query) => `No results found for "${query}"`,
         timeWarpDisabledReducedMotion: 'Time warp is disabled while reduced motion is enabled.',
         qualityChanged: (tier, reason) => `Quality changed to ${tier}${reason}.`,
@@ -94,6 +112,20 @@ const STRINGS = {
         offlineNoCachedData: 'Sin conexión — no hay datos del clima en caché',
         weatherLoadFailed: 'No se pudo cargar el clima. Comprueba tu conexión.',
         locationNotDetected: 'No se pudo detectar la ubicación. Prueba a buscar una ciudad.',
+        locationFallbackNotice: (place, reason) => {
+            const shown = place ? `Mostrando ${place}` : 'Mostrando una ubicación predeterminada';
+            const why = {
+                prompt: 'aún no has compartido tu ubicación',
+                denied: 'el acceso a la ubicación está bloqueado en tu navegador',
+                timeout: 'la solicitud de ubicación agotó el tiempo',
+                unavailable: 'no se pudo determinar tu posición',
+                unsupported: 'este navegador no admite la ubicación'
+            }[reason];
+            return `${shown}: ${why}.`;
+        },
+        locationUseMine: 'Usar mi ubicación',
+        locationRetry: 'Reintentar',
+        locationSearchCity: 'Buscar ciudad',
         noResultsFor: (query) => `No se encontraron resultados para "${query}"`,
         timeWarpDisabledReducedMotion: 'El salto temporal está desactivado porque el movimiento reducido está activo.',
         qualityChanged: (tier, reason) => `Calidad cambiada a ${tier}${reason}.`,

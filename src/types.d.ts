@@ -155,6 +155,17 @@ interface DailyForecastDay {
     };
 }
 
+/** Why geolocation did not produce a fix. `prompt` = permission not yet asked (not an error). */
+type LocationFallbackReason = 'denied' | 'timeout' | 'unavailable' | 'unsupported' | 'prompt';
+
+/** How `WeatherService.getLocation()` last resolved the location. */
+interface LocationStatus {
+    source: 'geolocation' | 'fallback';
+    reason: LocationFallbackReason | null;
+    /** Display name of the location now in use (the fallback's, when `source` is `fallback`). */
+    name: string | null;
+}
+
 /**
  * Result of {@link WeatherService.fetchWeather}, assembled in
  * `weather.js#_fetchWeatherOnce` and enriched in `main.js` with air quality,

@@ -109,6 +109,98 @@ describe('WeatherService', () => {
         expect(service.longitude).toBe(-74.006);
     });
 
+    describe('getLocation', () => {
+        const stubGeolocation = (getCurrentPosition, permissionState) =>
+            vi.stubGlobal('navigator', {
+                geolocation: { getCurrentPosition },
+                ...(permissionState && {
+                    permissions: { query: vi.fn().mockResolvedValue({ state: permissionState }) }
+                })
+            });
+
+        it('requests a fix with a 10 s timeout and a 10 min cache, with no competing timer', async () => {
+            vi.useFakeTimers();
+            const getCurrentPosition = vi.fn((success) =>
+                setTimeout(() => success({ coords: { latitude: 51.5, longitude: -0.12 } }), 8000)
+            );
+            stubGeolocation(getCurrentPosition, 'granted');
+            fetch.mockResolvedValue({ json: async () => ({ address: { city: 'London', country: 'UK' } }) });
+
+            const service = new WeatherService();
+            const pending = service.getLocation();
+            await vi.advanceTimersByTimeAsync(8000); // past the old 5 s cutoff
+
+            const status = await pending;
+            expect(getCurrentPosition.mock.calls[0][2]).toEqual({ timeout: 10000, maximumAge: 600000 });
+            expect(status).toEqual({ source: 'geolocation', reason: null, name: 'London, UK' });
+            expect(service.latitude).toBe(51.5);
+        });
+
+        it.each([
+            [1, 'denied'],
+            [2, 'unavailable'],
+            [3, 'timeout']
+        ])('reports GeolocationPositionError code %i as %s', async (code, reason) => {
+            stubGeolocation((_ok, fail) => fail({ code, message: 'nope' }), 'granted');
+            const service = new WeatherService();
+
+            const status = await service.getLocation();
+
+            expect(status).toMatchObject({ source: 'fallback', reason, name: 'New York, USA (default)' });
+            expect(service.locationStatus).toBe(status);
+        });
+
+        it('does not open a permission dialog unprompted when the state is "prompt"', async () => {
+            const getCurrentPosition = vi.fn();
+            stubGeolocation(getCurrentPosition, 'prompt');
+            const service = new WeatherService();
+
+            const status = await service.getLocation();
+
+            expect(getCurrentPosition).not.toHaveBeenCalled();
+            expect(status).toMatchObject({ source: 'fallback', reason: 'prompt' });
+        });
+
+        it('asks when the user initiated it, even if permission is still "prompt"', async () => {
+            const getCurrentPosition = vi.fn((success) => success({ coords: { latitude: 1, longitude: 2 } }));
+            stubGeolocation(getCurrentPosition, 'prompt');
+            fetch.mockResolvedValue({ json: async () => ({}) });
+            const service = new WeatherService();
+
+            const status = await service.getLocation({ userInitiated: true });
+
+            expect(getCurrentPosition).toHaveBeenCalledOnce();
+            expect(status.source).toBe('geolocation');
+        });
+
+        it('skips the request when permission is already denied', async () => {
+            const getCurrentPosition = vi.fn();
+            stubGeolocation(getCurrentPosition, 'denied');
+
+            const status = await new WeatherService().getLocation();
+
+            expect(getCurrentPosition).not.toHaveBeenCalled();
+            expect(status).toMatchObject({ source: 'fallback', reason: 'denied' });
+        });
+
+        it('reports unsupported browsers', async () => {
+            vi.stubGlobal('navigator', {});
+            const status = await new WeatherService().getLocation();
+            expect(status).toMatchObject({ source: 'fallback', reason: 'unsupported' });
+        });
+
+        it('keeps the current location on a failed retry instead of snapping to New York', async () => {
+            stubGeolocation((_ok, fail) => fail({ code: 3, message: 'timeout' }), 'granted');
+            const service = new WeatherService();
+            service.setManualLocation(48.85, 2.35, 'Paris');
+
+            const status = await service.getLocation({ userInitiated: true });
+
+            expect(status).toMatchObject({ source: 'fallback', reason: 'timeout', name: 'Paris' });
+            expect(service.latitude).toBe(48.85);
+        });
+    });
+
     it('should convert temperature correctly', () => {
         const service = new WeatherService();
         service.unit = 'metric';

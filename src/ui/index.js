@@ -21,6 +21,7 @@ export { drawSparkline } from './sparkline.js';
 export { drawPressureGauge } from './gauge.js';
 export { setupEventListeners } from './event-listeners.js';
 export { setSearchLoading } from './search.js';
+export { showLocationNotice, hideLocationNotice } from './location-notice.js';
 export { showToast, showActionToast } from './toast.js';
 export { setupKeyboardShortcuts } from './shortcuts.js';
 export { setupUiChrome, activateAdvancedTab, toggleDrawer } from './chrome.js';
