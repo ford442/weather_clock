@@ -1,8 +1,15 @@
 import * as THREE from 'three';
 import { starFieldVertexShader, starFieldFragmentShader } from '../../shaders.js';
 
-export function createStarFieldMaterial() {
+/**
+ * @param {{twinkle?: boolean}} [options] - `twinkle: false` holds every point
+ *   steady; the satellite layer uses it, since a moving point whose twinkle is
+ *   hashed from its position would flicker.
+ * @returns {THREE.ShaderMaterial}
+ */
+export function createStarFieldMaterial({ twinkle = true } = {}) {
     return new THREE.ShaderMaterial({
+        defines: twinkle ? { STAR_TWINKLE: '' } : {},
         uniforms: {
             uTime: { value: 0 },
             uOpacity: { value: 0.0 },
@@ -36,7 +43,10 @@ export function createStarFieldMaterial() {
  * Drive it through `material.userData.starUniforms`, which mirrors the shape of the
  * WebGL material's `uniforms` block.
  */
-export async function createStarFieldMaterialWebGPU() {
+/**
+ * @param {{twinkle?: boolean}} [options] - See {@link createStarFieldMaterial}.
+ */
+export async function createStarFieldMaterialWebGPU({ twinkle = true } = {}) {
     const { PointsNodeMaterial } = await import('three/webgpu');
     const { attribute, float, positionLocal, positionWorld, sin, smoothstep, uniform } = await import('three/tsl');
 
@@ -45,7 +55,7 @@ export async function createStarFieldMaterialWebGPU() {
     const uHorizonRadius = uniform(1);
 
     const hash = sin(positionLocal.x.mul(12.9898).add(positionLocal.y.mul(78.233)).add(positionLocal.z.mul(45.164)));
-    const twinkle = float(0.7).add(sin(uTime.mul(2.0).add(hash.mul(100.0))).mul(0.3));
+    const twinkleNode = twinkle ? float(0.7).add(sin(uTime.mul(2.0).add(hash.mul(100.0))).mul(0.3)) : float(1);
     const horizon = smoothstep(-0.03, 0.04, positionWorld.y.div(uHorizonRadius.max(1.0)));
 
     // Geometry sizes run ~1–9; map that onto a 0.35–1.0 brightness range.
@@ -59,7 +69,7 @@ export async function createStarFieldMaterialWebGPU() {
     // Blended, not coverage-based: alpha-to-coverage would quantise the twinkle.
     material.alphaToCoverage = false;
     material.colorNode = attribute('aColor', 'vec3');
-    material.opacityNode = uOpacity.mul(twinkle).mul(brightness).mul(horizon);
+    material.opacityNode = uOpacity.mul(twinkleNode).mul(brightness).mul(horizon);
     material.userData.starUniforms = { uTime, uOpacity, uHorizonRadius };
     return material;
 }

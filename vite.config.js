@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { fileURLToPath } from 'node:url';
 
 const normalizeId = (id) => id.replaceAll('\\', '/');
 
@@ -18,6 +19,19 @@ function manualChunks(id) {
         normalizedId.includes('/node_modules/three/examples/jsm/tsl/')
     ) {
         return 'three-webgpu';
+    }
+
+    // The optional satellite layer: SGP4, the TLE snapshot, and the layer
+    // itself. Only fetched when someone turns satellites on.
+    if (
+        normalizedId.includes('/node_modules/satellite.js/') ||
+        normalizedId.endsWith('/src/sky/satellites.js') ||
+        normalizedId.endsWith('/src/sky/satelliteCatalog.js') ||
+        normalizedId.endsWith('/src/sky/data/satellite-snapshot.json') ||
+        normalizedId.endsWith('/src/sky/satellite-wasm-stub.js') ||
+        normalizedId.endsWith('/src/effects/satellite-layer.js')
+    ) {
+        return 'satellites';
     }
 
     if (normalizedId.includes('/node_modules/three/examples/jsm/')) {
@@ -47,6 +61,15 @@ function manualChunks(id) {
 
 export default defineConfig({
     base: '/weather-clock/',
+    resolve: {
+        alias: [
+            {
+                // satellite.js's optional Emscripten propagators; see the stub.
+                find: /^#wasm-(single|multi)-thread$/,
+                replacement: fileURLToPath(new URL('./src/sky/satellite-wasm-stub.js', import.meta.url))
+            }
+        ]
+    },
     server: {
         // Bind IPv4 as well as IPv6 so Cursor Cloud port forwarding (127.0.0.1)
         // and CI smoke tests can reach the dev server.
@@ -92,7 +115,10 @@ export default defineConfig({
             workbox: {
                 clientsClaim: true,
                 globPatterns: ['**/*.{js,css,html,woff2,png,svg,ico,webmanifest}'],
-                globIgnores: ['**/native/**', '**/*.wasm'],
+                // The satellite chunk is opt-in, so the app shell does not
+                // precache it; it is runtime-cached below the first time the
+                // layer is turned on, and then works offline.
+                globIgnores: ['**/native/**', '**/*.wasm', '**/satellites-*.js'],
                 runtimeCaching: [
                     {
                         urlPattern: /^https:\/\/api\.open-meteo\.com\/v1\/forecast/,
@@ -123,6 +149,30 @@ export default defineConfig({
                             cacheName: 'openmeteo-airquality',
                             expiration: {
                                 maxEntries: 20,
+                                maxAgeSeconds: 60 * 60 * 6 // 6 hours
+                            }
+                        }
+                    },
+                    {
+                        urlPattern: ({ url }) => /\/assets\/satellites-[\w-]+\.js$/.test(url.pathname),
+                        handler: 'CacheFirst',
+                        options: {
+                            cacheName: 'satellite-layer',
+                            expiration: {
+                                maxEntries: 4,
+                                maxAgeSeconds: 60 * 60 * 24 * 90 // 90 days; filenames are content-hashed
+                            }
+                        }
+                    },
+                    {
+                        // Celestrak asks clients not to poll; 6 h matches how
+                        // often their GP elements are actually refreshed.
+                        urlPattern: /^https:\/\/celestrak\.org\/NORAD\/elements\/gp\.php/,
+                        handler: 'CacheFirst',
+                        options: {
+                            cacheName: 'celestrak-gp',
+                            expiration: {
+                                maxEntries: 4,
                                 maxAgeSeconds: 60 * 60 * 6 // 6 hours
                             }
                         }

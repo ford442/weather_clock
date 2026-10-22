@@ -34,6 +34,8 @@ The app has three viewing modes:
 | **Build Tool**           | Vite                                 | `^7.2.4`                                                          |
 | **Unit Tests**           | Vitest                               | `^3.2.4`                                                          |
 | **Astronomy**            | SunCalc                              | npm `suncalc`                                                     |
+| **Satellites**           | satellite.js (SGP4/SDP4)             | Lazy `satellites` chunk; JS propagator only (WASM builds stubbed) |
+| **Orbital Elements**     | Celestrak GP (`GROUP=visual`)        | Optional live refresh over a committed TLE snapshot; no key       |
 | **Weather Data**         | Open-Meteo API                       | Forecast + Archive endpoints                                      |
 | **Geocoding**            | Nominatim (OpenStreetMap)            | Used for search & reverse geocoding                               |
 | **PWA / Offline**        | `vite-plugin-pwa` + Workbox          | Precached app shell; runtime caching for Open-Meteo and Nominatim |
@@ -81,6 +83,8 @@ The app has three viewing modes:
 | `sky/`                                   | Night-sky astronomy, all pure math with no Three.js: `celestialCoordinates.js` (Julian dates, sidereal time, IAU 1976 precession, equatorial↔ecliptic with the obliquity of date, and the single rotation matrix that maps the whole equatorial catalog into the scene frame), `starCatalog.js` (~190 bright stars at J2000 plus 37 stylized constellation figures and B–V→RGB tinting), `planets.js` (JPL approximate Keplerian elements for Mercury–Neptune, geocentric RA/Dec and apparent magnitude, accurate to well under 1°), `zodiac.js` (the twelve signs, a truncated ELP-2000 lunar longitude, the Lahiri ayanamsa, and tropical/sidereal sign assignment for the Sun, Moon, and planets), and `skyBodies.js` (the flat Sun/Moon/planet + catalog-budget report behind `aetherDebug.getSkyBodies()`, in altitude/compass azimuth so it can be checked against a planetarium). |
 | `effects/star-field.js`                  | The night-sky layer. Real stars in true positions, constellation lines, and the naked-eye planets, all parented to one group whose matrix carries observer latitude + local sidereal time — so per-star alt/az is never recomputed. Fades with twilight, cloud cover, and a light-pollution knob; constellations/labels toggle with `C`. Budgeted by `SKY_QUALITY_TIERS`: the catalog and planets are never trimmed, the filler field is drawn via a draw range (so tier switches survive the WebGPU material swap), and constellations/labels are dropped below medium. Owns the zodiac overlay as a child of the same group.                                                                                                                                                                                                                                                           |
 | `effects/zodiac-overlay.js`              | The optional zodiacal band: the ecliptic as a thin arc, a tick at each of the twelve sign cusps, and a glyph beside each slice, with the Sun's and Moon's signs lit brighter. Parents into the star field's `skyGroup`, so one rotation carries it and the planets land on its line for free. Off by default; `Z` cycles off → tropical → sidereal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `effects/satellite-layer.js`             | The optional satellite layer: naked-eye satellites (mag ≲ 4, plus the ISS whenever it is up) as steady, magnitude-sized points on the star sphere, brightest first, and a short fading ISS trail solved from its own recent path (dropped under reduced motion). Parents into `StarField.skyGroup` and fades with the bright stars. Loaded with SGP4 as the lazy `satellites` chunk on first use; off by default, `S` toggles. |
+| `sky/satellites.js`, `sky/satelliteCatalog.js` | Pure satellite math and data, no Three.js: TLE/OMM parsing, `satellite.js` SGP4 propagation on `simulationTime`, *topocentric* RA/Dec + alt/az, Earth-shadow test, and apparent magnitude from a standard-magnitude table + range + Lambert phase. `satelliteCatalog.js` serves the committed snapshot (`sky/data/satellite-snapshot.json`, refreshed by `scripts/update-satellite-snapshot.mjs`) and lays a best-effort live Celestrak pull over it. |
 | `effects/text-sprite.js`                 | Shared canvas-texture label sprite used by the star field's planet/constellation names and the zodiac glyphs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### Timeline Subsystem (`src/timeline/`)
@@ -97,6 +101,7 @@ The app has three viewing modes:
 
 - Unit tests cover astronomy, weather, forecast logic, rendering quality/recovery, weather effects, and lighting.
 - `zodiac.test.js` cross-checks the zodiac layer the same way: the Sun reaching λ=0/90/180/270 within arcminutes of the published 2024 equinox and solstice instants, the Moon against Meeus' worked example 47.a and against SunCalc's independent lunar series via the illuminated fraction, an equatorial↔ecliptic round trip, and the drawn band's cusps measuring exactly 30° apart once projected back off the sky sphere.
+- `satellites.test.js` checks the satellite layer without the network: Vallado's SGP4 verification vector, a fixture ISS TLE whose topocentric RA/Dec — pushed through the scene's `equatorialToSceneMatrix` — agrees with satellite.js's independent look angles to 0.05°, parallax, Earth shadow, the magnitude model, snapshot/live catalog fallback, and the layer's toggle/fade/trail/reduced-motion behaviour.
 - `nightSky.test.js` cross-checks the star/planet astronomy against independent references: the Sun's ecliptic longitude at known equinox/solstice instants (within ~1.5 arcminutes), SunCalc's own sun position, Polaris sitting at the observer's latitude, and the scene rotation matrix agreeing with the alt/az formula to 12 decimals.
 
 ### Shaders (`shaders/`)
@@ -208,9 +213,10 @@ The runtime language is vanilla JavaScript; types come from JSDoc annotations ch
         window.aetherDebug.getSunPosition();
         window.aetherDebug.getMoonPosition();
         window.aetherDebug.getPlanetPositions(); // RA/Dec + apparent magnitude per planet
-        window.aetherDebug.getSkyBodies(); // Sun/Moon/planets in alt + compass az, catalog budget, native backend
+        window.aetherDebug.getSkyBodies(); // Sun/Moon/planets/satellites in alt + compass az, catalog + satellite budget, native backend
         window.aetherDebug.getNightSkyState(); // observer, cloud cover, overlay toggles
         window.aetherDebug.getZodiacState(); // Sun/Moon/planet signs under the active convention
+        await window.aetherDebug.setSatellites(true); // load + show the satellite layer (not persisted)
         ```
 
 window.aetherDebug.setLightPollution(0.8); // wash the faint stars out
@@ -236,6 +242,7 @@ window.aetherDebug.getRendererInfo(); // backend, adapter, limits, context attri
  - `weatherclock_wind_unit`
  - `weatherclock_night_sky`
  - `weatherclock_zodiac`
+ - `weatherclock_satellites`
 
 ---
 
@@ -287,6 +294,14 @@ The zodiac is a *cultural* layer sitting on top of the astronomy, and the split 
 - **Off by default, and it never touches the scientific sky.** `Z` cycles off → tropical → sidereal through `setSkyLayers({ zodiac, zodiacMode })`, persisted under `weatherclock_zodiac`. The band fades with the same twilight/cloud opacity the bright stars get, so it is gone in daylight like everything else up there.
 - **Graphical, not a panel.** The only emphasis it uses is light: the slice holding the Sun glows warm, the slice holding the Moon glows cool, the other ten stay quiet. Resist adding degrees, aspects, or houses as text — that is the HUD the vision explicitly rules out.
 
+### Satellite Layer (the optional orbital layer)
+Satellites are the planets' idea with a different ephemeris: TLE → SGP4 (TEME) → topocentric RA/Dec of date → the star field's existing rotation. TEME is used as-is against the precessed catalog; the nutation gap is ≲ 20″.
+
+- **Lazy, and never at boot.** `StarField.setSatellitesVisible(true)` dynamically imports `effects/satellite-layer.js`, which pulls `sky/satellites.js`, the snapshot, and `satellite.js` as the `satellites` chunk. `scripts/check-bundle-size.mjs` fails CI if the entry or `app` chunk imports it statically. The chunk is kept out of the Workbox precache and runtime-cached (`CacheFirst`) once loaded. satellite.js's optional Emscripten propagators are aliased to `sky/satellite-wasm-stub.js` in `vite.config.js` — per #152, no WASM SGP4.
+- **Data never needs a key.** The committed snapshot always draws (offline, `?test=1`, unit tests). In a real browser session the layer also fetches Celestrak's `visual` group at most every 6 h (service worker `CacheFirst`, 6 h TTL); any failure, CORS included, falls back to the snapshot silently. `getSkyBodies().catalog.satellites.epochAgeDays` shows how stale the elements are.
+- **Deterministic.** Everything propagates on the star field's observer date (i.e. `simulationTime`), throttled to 250 simulated ms; the ISS trail is re-solved from its own past positions rather than remembered, so time-warp, `setDebugTime`, photos, and time-lapse frames all agree.
+- **Graphical, not a HUD.** A magnitude-sized point and the ISS's fading tail are the whole language. No names, NORAD numbers, or pass countdowns on screen — those live in `aetherDebug.getSkyBodies().satellites` only.
+
 ### Coordinate Systems
 `SunCalc` uses spherical coordinates (azimuth/altitude). These are converted to Three.js Cartesian in `astronomy.js`. Azimuth 0° (South) maps to Z-, meaning North is Z+.
 
@@ -301,7 +316,7 @@ _WebGL path. Under WebGPU these are simulated by TSL compute nodes in `src/effec
 - **Splashes:** Small particle bursts spawn on the sundial surface when raindrops hit.
 
 ### Mode Switching
-`ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `C` to cycle the constellation overlay, `Z` to cycle the zodiacal band (off → tropical → sidereal). Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
+`ModeController` and the adapters in `src/modes/` coordinate Clock, Timeline, and Forecast mode transitions. Browser history keeps `?mode=timeline` and `?mode=forecast` shareable. Press `T` to cycle modes, `Esc` to return to Clock mode, and `ArrowLeft`/`ArrowRight` to toggle edge drawers. Press `C` to cycle the constellation overlay, `Z` to cycle the zodiacal band (off → tropical → sidereal), `S` to toggle the satellite layer. Press `P` to save a photo (share-card PNG) and `L` to export a 24-hour time-lapse WebM (`src/capture/`); while a time-lapse records, `ModeController.setLocked(true)` blocks all mode switching.
 
 ### Known Issues / Blockers
 _Last verified 2026-09-21. The 138–143 batch is closed; only currently open issues belong here._
@@ -310,7 +325,7 @@ _Last verified 2026-09-21. The 138–143 batch is closed; only currently open is
 - **[#152](https://github.com/ford442/weather_clock/issues/152) — Native toolchain** — WASM is off by default (nothing earned the 2× gate). No compile database, no `-Wall`, `-msimd128` without SIMD source. JS + JSDoc stays the runtime; no TypeScript scene rewrite; no new C++ kernel until this lands.
 - **[#153](https://github.com/ford442/weather_clock/issues/153) — WebGPU sized stars** — `THREE.Points` are 1-pixel primitives on WebGPU; magnitude is folded into brightness. Instanced sprites are the documented fix. Playwright CI is SwiftShader WebGL only (`?forceWebGL=1` for local comparison).
 - **[#154](https://github.com/ford442/weather_clock/issues/154) — True celestial sundial** — next identity feature (latitude gnomon, solar hour lines, shadow as the clock). Independent of #150.
-- **[#155](https://github.com/ford442/weather_clock/issues/155) — Optional orbital layer** — ISS / bright sats via TLE + SGP4 on the existing star sphere. Distinct orbital radius waits on #150.
+- **[#155](https://github.com/ford442/weather_clock/issues/155) — Optional orbital layer** — the satellite layer is in (`S`, star sphere, snapshot + Celestrak). Open: confirm Celestrak sends CORS headers for the Pages origin (if not, the snapshot is all users get until a same-origin proxy exists); a distinct orbital radius waits on #150; WebGPU satellites are 1-px like stars until #153.
 
 ---
 
