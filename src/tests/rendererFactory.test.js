@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const constructors = [];
 let throwOnCaveat = false;
+let throwAlways = false;
 let rendererName = 'NVIDIA GeForce';
 
 vi.mock('three', async () => {
@@ -9,7 +10,7 @@ vi.mock('three', async () => {
     class MockWebGLRenderer {
         constructor(params) {
             constructors.push(params);
-            if (throwOnCaveat && params.failIfMajorPerformanceCaveat) {
+            if (throwAlways || (throwOnCaveat && params.failIfMajorPerformanceCaveat)) {
                 throw new Error('WEBGL_fail_if_major_performance_caveat');
             }
             this.domElement = { nodeName: 'CANVAS' };
@@ -95,8 +96,10 @@ describe('RendererFactory context flags', () => {
     afterEach(() => {
         constructors.length = 0;
         throwOnCaveat = false;
+        throwAlways = false;
         rendererName = 'NVIDIA GeForce';
         vi.unstubAllGlobals();
+        vi.restoreAllMocks();
     });
 
     it('documents preserveDrawingBuffer false, logarithmic depth, and premultiplied alpha', () => {
@@ -157,5 +160,78 @@ describe('RendererFactory context flags', () => {
         expect(constructors).toHaveLength(1);
         expect(constructors[0].failIfMajorPerformanceCaveat).toBe(false);
         expect(result.softwareRenderer).toBe(false);
+    });
+    function stubBrowser({ hardwareContext, canvases = [] }) {
+        const loseContext = vi.fn();
+        vi.stubGlobal('window', { innerWidth: 800, innerHeight: 600, location: { search: '' } });
+        vi.stubGlobal('navigator', {});
+        vi.stubGlobal('sessionStorage', { getItem: () => null, setItem: vi.fn(), removeItem: vi.fn() });
+        vi.stubGlobal('document', {
+            createElement: () => {
+                const canvas = {
+                    getContext: vi.fn((_type, attrs) =>
+                        hardwareContext || !attrs?.failIfMajorPerformanceCaveat
+                            ? { getExtension: () => ({ loseContext }) }
+                            : null
+                    )
+                };
+                canvases.push(canvas);
+                return canvas;
+            }
+        });
+        return { loseContext, canvases };
+    }
+
+    it('pre-checks on a throwaway canvas and skips the doomed caveat constructor', async () => {
+        const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        rendererName = 'SwiftShader';
+        const { canvases } = stubBrowser({ hardwareContext: false });
+
+        const result = await createRenderer(null);
+        expect(constructors).toHaveLength(1);
+        expect(constructors[0].failIfMajorPerformanceCaveat).toBe(false);
+        expect(canvases).toHaveLength(1);
+        expect(result.softwareRenderer).toBe(true);
+        expect(getRendererInfo()?.failIfMajorPerformanceCaveat).toBe(false);
+        expect(info).toHaveBeenCalledWith(expect.stringContaining('using software WebGL'));
+        expect(warn.mock.calls.flat().some((a) => a instanceof Error)).toBe(false);
+    });
+
+    it('releases the probe context and keeps the caveat when hardware WebGL exists', async () => {
+        const { loseContext } = stubBrowser({ hardwareContext: true });
+
+        const result = await createRenderer(null);
+        expect(loseContext).toHaveBeenCalledTimes(1);
+        expect(constructors).toHaveLength(1);
+        expect(constructors[0].failIfMajorPerformanceCaveat).toBe(true);
+        expect(result.softwareRenderer).toBe(false);
+    });
+
+    it('retries on a fresh canvas when the caveat constructor still throws', async () => {
+        throwOnCaveat = true;
+        vi.spyOn(console, 'info').mockImplementation(() => {});
+        const { canvases } = stubBrowser({ hardwareContext: true });
+
+        const result = await createRenderer(null);
+        expect(constructors).toHaveLength(2);
+        expect(constructors[0].canvas).toBeUndefined();
+        expect(constructors[1].canvas).toBe(canvases[canvases.length - 1]);
+        expect(result.softwareRenderer).toBe(true);
+    });
+
+    it('shows a WebGL-unavailable message and throws clearly when the retry fails too', async () => {
+        throwOnCaveat = true;
+        throwAlways = true;
+        vi.spyOn(console, 'info').mockImplementation(() => {});
+        stubBrowser({ hardwareContext: true });
+        const appended = [];
+        const container = { appendChild: (el) => appended.push(el) };
+        const original = document.createElement;
+        document.createElement = () => ({ ...original(), style: {}, setAttribute: vi.fn() });
+
+        await expect(createRenderer(container)).rejects.toThrow(/WebGL unavailable/);
+        expect(appended).toHaveLength(1);
+        expect(appended[0].textContent).toMatch(/WebGL is unavailable/);
     });
 });
