@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WeatherService } from '../weather.js';
+import { resetRateLimit } from '../net/openMeteoClient.js';
 import { getWeatherAtTime } from '../weather-simulation.js';
 
 // Mock fetch
@@ -7,6 +8,7 @@ global.fetch = vi.fn();
 
 beforeEach(() => {
     fetch.mockReset();
+    resetRateLimit();
 });
 
 afterEach(() => {
@@ -193,6 +195,67 @@ describe('WeatherService', () => {
             expect(data.current.temp).toBe(15);
             expect(data.isCached).toBe(true);
             expect(data.cachedAt).toBeDefined();
+        });
+
+        describe('when Open-Meteo answers 429', () => {
+            const tooManyRequests = (retryAfter) => ({
+                ok: false,
+                status: 429,
+                statusText: 'Too Many Requests',
+                headers: { get: () => retryAfter ?? null }
+            });
+
+            it('makes one request, not the 2s/4s/8s ladder, and throws RATE_LIMITED with the wait', async () => {
+                const service = new WeatherService();
+                service.setManualLocation(40.71, -74.01, 'Test City');
+                fetch.mockResolvedValue(tooManyRequests());
+
+                await expect(service.fetchWeather()).rejects.toMatchObject({
+                    code: 'RATE_LIMITED',
+                    retryAfterMs: 60000
+                });
+                expect(fetch).toHaveBeenCalledTimes(1);
+            });
+
+            it('sends nothing further to any Open-Meteo endpoint while the pause lasts', async () => {
+                const service = new WeatherService();
+                service.setManualLocation(40.71, -74.01, 'Test City');
+                fetch.mockResolvedValue(tooManyRequests());
+
+                await expect(service.fetchWeather()).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+                await expect(service.fetchWeather()).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+                await expect(service.getDailyForecast(40.71, -74.01, 10)).rejects.toMatchObject({
+                    code: 'RATE_LIMITED'
+                });
+
+                expect(fetch).toHaveBeenCalledTimes(1);
+            });
+
+            it('backs off once for a short Retry-After and then gives up', async () => {
+                vi.useFakeTimers();
+                const service = new WeatherService();
+                service.setManualLocation(40.71, -74.01, 'Test City');
+                fetch.mockResolvedValue(tooManyRequests('3'));
+
+                const rejection = expect(service.fetchWeather()).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+                await vi.advanceTimersByTimeAsync(60000);
+
+                await rejection;
+                expect(fetch).toHaveBeenCalledTimes(2);
+            });
+
+            it('serves cached data instead of failing when a stale entry exists', async () => {
+                const service = new WeatherService();
+                service.setManualLocation(40.71, -74.01, 'Test City');
+                service.setCache(service.getCacheKey(40.71, -74.01), { current: { temp: 15 }, timeline: [] });
+                fetch.mockResolvedValue(tooManyRequests());
+
+                const data = await service.fetchWeather();
+
+                expect(data.isCached).toBe(true);
+                expect(data.current.temp).toBe(15);
+                expect(fetch).toHaveBeenCalledTimes(1);
+            });
         });
 
         it('should mark cached data as offline after a failed request while offline', async () => {
