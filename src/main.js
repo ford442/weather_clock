@@ -83,7 +83,8 @@ const PREF_KEYS = {
     windUnit: 'weatherclock_wind_unit',
     ambienceMuted: 'weatherclock_ambience_muted',
     nightSky: 'weatherclock_night_sky',
-    zodiac: 'weatherclock_zodiac'
+    zodiac: 'weatherclock_zodiac',
+    satellites: 'weatherclock_satellites'
 };
 
 /**
@@ -487,6 +488,14 @@ async function bootstrap() {
         weatherEffects.setSkyLayers?.({ zodiac: level.zodiac, zodiacMode: level.mode });
     }
 
+    // Satellites are off by default too; the layer and SGP4 are only fetched
+    // the first time someone turns them on.
+    let satellitesOn = readPref(PREF_KEYS.satellites) === '1';
+
+    function applySatellites() {
+        weatherEffects.setSkyLayers?.({ satellites: satellitesOn });
+    }
+
     function setupUICallbacks() {
         return {
             onRetryLocation: async () => {
@@ -527,6 +536,13 @@ async function bootstrap() {
                 applyZodiacLevel();
                 writePref(PREF_KEYS.zodiac, String(zodiacLevel));
                 showToast(t(ZODIAC_LEVELS[zodiacLevel].toast));
+            },
+
+            onToggleSatellites: () => {
+                satellitesOn = !satellitesOn;
+                applySatellites();
+                writePref(PREF_KEYS.satellites, satellitesOn ? '1' : '0');
+                showToast(t(satellitesOn ? 'satellitesOn' : 'satellitesOff'));
             },
 
             onSearch: async (query) => {
@@ -739,6 +755,7 @@ async function bootstrap() {
 
         applyNightSkyLevel();
         applyZodiacLevel();
+        if (satellitesOn) applySatellites();
 
         const callbacks = setupUICallbacks();
         setupEventListeners(callbacks, modeController);

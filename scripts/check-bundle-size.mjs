@@ -27,3 +27,13 @@ const webgpuChunkKey = Object.entries(manifest).find(([, chunk]) => chunk.name =
 if (webgpuChunkKey && entryImports.has(webgpuChunkKey)) {
     throw new Error('The entry bundle statically imports the optional Three.js WebGPU chunk');
 }
+
+// The satellite layer (SGP4 + TLE snapshot) is opt-in and must never load at
+// boot: neither the entry nor the app chunk may import it statically.
+const satellitesChunkKey = Object.entries(manifest).find(([, chunk]) => chunk.name === 'satellites')?.[0];
+if (!satellitesChunkKey) {
+    throw new Error('Could not find the satellites chunk in dist/.vite/manifest.json');
+}
+if (entryImports.has(satellitesChunkKey) || (appChunk.imports || []).includes(satellitesChunkKey)) {
+    throw new Error('The boot bundle statically imports the optional satellites chunk');
+}

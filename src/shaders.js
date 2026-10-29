@@ -218,11 +218,17 @@ void main() {
     vec4 worldPosition = modelMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * viewMatrix * worldPosition;
 ${LOG_DEPTH_VERTEX}
+#ifdef STAR_TWINKLE
     // Twinkle logic: Random offset based on position
     float random = sin(position.x * 12.9898 + position.y * 78.233 + position.z * 45.164);
 
     // Twinkle speed and intensity
     float twinkle = 0.7 + 0.3 * sin(uTime * 2.0 + random * 100.0);
+#else
+    // Satellites shine by reflected sunlight and move, so a position-hashed
+    // twinkle would read as flicker.
+    float twinkle = 1.0;
+#endif
 
     // The catalog covers the whole celestial sphere, so half of it is underfoot
     // at any moment. Fade it out through the horizon instead of letting stars

@@ -40,6 +40,8 @@
  * @property {string} zodiacOff
  * @property {string} zodiacTropical
  * @property {string} zodiacSidereal
+ * @property {string} satellitesOn
+ * @property {string} satellitesOff
  * @property {(args: {description?: string, temp?: number|string, unit?: string, precip?: string, sunset?: string}) => string} sceneSummary
  */
 
@@ -79,6 +81,8 @@ const STRINGS = {
         zodiacOff: 'Zodiac band hidden.',
         zodiacTropical: 'Zodiac band on — tropical signs.',
         zodiacSidereal: 'Zodiac band on — sidereal signs.',
+        satellitesOn: 'Satellites on.',
+        satellitesOff: 'Satellites hidden.',
         sceneSummary: ({ description, temp, unit, precip, sunset }) => {
             let s = `${description}, ${temp}°${unit}`;
             if (precip) s += `, ${precip}`;
@@ -121,6 +125,8 @@ const STRINGS = {
         zodiacOff: 'Banda zodiacal oculta.',
         zodiacTropical: 'Banda zodiacal activada — signos tropicales.',
         zodiacSidereal: 'Banda zodiacal activada — signos siderales.',
+        satellitesOn: 'Satélites activados.',
+        satellitesOff: 'Satélites ocultos.',
         sceneSummary: ({ description, temp, unit, precip, sunset }) => {
             let s = `${description}, ${temp}°${unit}`;
             if (precip) s += `, ${precip}`;

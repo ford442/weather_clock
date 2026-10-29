@@ -36,6 +36,7 @@
         "vitest": "^3.2.4"
     },
     "dependencies": {
+        "satellite.js": "7.1.0",
         "suncalc": "^1.9.0",
         "three": "0.181.2"
     }
