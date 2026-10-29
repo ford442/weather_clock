@@ -129,6 +129,57 @@ function detectSoftwareWebGL(renderer) {
 }
 
 /**
+ * Probe, on a throwaway canvas, whether the browser will hand out a WebGL context under
+ * `failIfMajorPerformanceCaveat: true` (i.e. hardware-backed). Lets us skip constructing a
+ * `THREE.WebGLRenderer` that is doomed to fail: when `getContext` returns null three keeps
+ * building and dies on an uninitialised internal with a misleading `TypeError`.
+ *
+ * Returns `true` when it cannot tell (no DOM), so the constructor's own try/catch still applies.
+ * @returns {boolean}
+ */
+function canCreateHardwareWebGLContext() {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return true;
+    try {
+        const probe = document.createElement('canvas');
+        if (typeof probe.getContext !== 'function') return true;
+        const attrs = { failIfMajorPerformanceCaveat: true };
+        const gl = probe.getContext('webgl2', attrs) || probe.getContext('webgl', attrs);
+        if (!gl) return false;
+        /** @type {WEBGL_lose_context|null} */
+        const lose = /** @type {any} */ (gl).getExtension?.('WEBGL_lose_context') ?? null;
+        lose?.loseContext();
+        return true;
+    } catch {
+        return true;
+    }
+}
+
+/**
+ * A fresh canvas for the retry, so nothing from the failed attempt (a context already bound
+ * with different attributes) leaks into it. `undefined` lets three create its own.
+ * @returns {HTMLCanvasElement|undefined}
+ */
+function freshCanvas() {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return undefined;
+    return document.createElement('canvas');
+}
+
+/**
+ * @param {HTMLElement|null} container
+ */
+function showWebGLUnavailable(container) {
+    if (!container || typeof document === 'undefined') return;
+    const msg = document.createElement('div');
+    msg.setAttribute('role', 'alert');
+    msg.className = 'webgl-unavailable';
+    msg.style.cssText =
+        'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
+        'padding:24px;text-align:center;color:#fff;font:16px system-ui,sans-serif;';
+    msg.textContent = 'WebGL is unavailable in this browser, so the 3D weather clock cannot be shown.';
+    container.appendChild(msg);
+}
+
+/**
  * @param {RendererFactoryOptions} options
  * @param {boolean} failIfMajorPerformanceCaveat
  */
@@ -242,20 +293,36 @@ export async function createRenderer(canvasContainer, userOptions = {}) {
         }
     }
 
-    const tryCaveat = options.failIfMajorPerformanceCaveat && !testMode;
+    // Only ask for a caveat-enforced context if the probe says one can exist; otherwise go
+    // straight to the software path instead of letting three build a renderer that must fail.
+    const tryCaveat = options.failIfMajorPerformanceCaveat && !testMode && canCreateHardwareWebGLContext();
     /** @type {THREE.WebGLRenderer} */
     let renderer;
     let usedCaveat = tryCaveat;
     let softwareRenderer = false;
 
+    if (options.failIfMajorPerformanceCaveat && !testMode && !tryCaveat) {
+        console.info('[RendererFactory] Hardware WebGL unavailable; using software WebGL');
+        softwareRenderer = true;
+    }
+
     try {
         renderer = new THREE.WebGLRenderer(webglConstructorParams(options, tryCaveat));
     } catch (err) {
-        console.warn(
-            '[RendererFactory] Hardware WebGL unavailable (failIfMajorPerformanceCaveat); retrying software path:',
-            err
-        );
-        renderer = new THREE.WebGLRenderer(webglConstructorParams(options, false));
+        if (!tryCaveat) {
+            showWebGLUnavailable(canvasContainer);
+            throw new Error('WebGL unavailable: could not create a WebGL context', { cause: err });
+        }
+        console.info('[RendererFactory] Hardware WebGL unavailable; using software WebGL');
+        try {
+            renderer = new THREE.WebGLRenderer({
+                ...webglConstructorParams(options, false),
+                canvas: freshCanvas()
+            });
+        } catch (retryErr) {
+            showWebGLUnavailable(canvasContainer);
+            throw new Error('WebGL unavailable: could not create a WebGL context', { cause: retryErr });
+        }
         usedCaveat = false;
         softwareRenderer = true;
     }
