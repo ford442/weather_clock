@@ -23,10 +23,23 @@ export const STAR_FIELD_CONFIG = Object.freeze({
     precessionRebuildCenturies: 0.01,
     /** Planets barely move in a minute of simulated time. */
     planetRecomputeMs: 60000,
+    /** Pull live satellite elements at most this often (wall clock); matches the service-worker TTL. */
+    satelliteRefreshMs: 6 * 60 * 60 * 1000,
     /** Default location when the app has no fix yet (New York, matching AstronomyService). */
     defaultLatitude: 40.7128,
     defaultLongitude: -74.006
 });
+
+/**
+ * Whether the satellite layer may pull live elements from Celestrak. Only in a
+ * real browser session, never under `?test=1` (Playwright baselines) or in unit
+ * tests, which stay on the committed snapshot.
+ * @returns {boolean}
+ */
+function liveSatelliteElementsAllowed() {
+    if (typeof window === 'undefined' || !window.location) return false;
+    return !new URLSearchParams(window.location.search).has('test');
+}
 
 /**
  * How much sky each quality tier can afford.
@@ -110,7 +123,7 @@ function mulberry32(seed) {
 export class StarField {
     /**
      * @param {THREE.Scene} scene
-     * @param {{radius?: number, faintStarCount?: number, quality?: EffectQuality}} [options]
+     * @param {{radius?: number, faintStarCount?: number, quality?: EffectQuality, liveSatelliteElements?: boolean}} [options]
      */
     constructor(scene, options = {}) {
         this.scene = scene;
@@ -134,6 +147,20 @@ export class StarField {
         this.showZodiac = false;
         /** @type {import('../sky/zodiac.js').ZodiacMode} */
         this.zodiacMode = 'tropical';
+        this.showSatellites = false;
+        this.reducedMotion = false;
+        /**
+         * The satellite layer is loaded on first use — it and SGP4 live in their
+         * own chunk — so this stays null in every session that never turns it on.
+         * @type {import('./satellite-layer.js').SatelliteLayer|null}
+         */
+        this.satellites = null;
+        /** @type {Promise<import('./satellite-layer.js').SatelliteLayer|null>|null} */
+        this._satelliteLoad = null;
+        this._liveSatelliteElements = options.liveSatelliteElements ?? liveSatelliteElementsAllowed();
+        this._satelliteRefreshedAt = Number.NEGATIVE_INFINITY;
+        this._webgpu = false;
+        this._disposed = false;
 
         this._opacity = 0;
         /**
@@ -354,7 +381,12 @@ export class StarField {
         this._refreshCatalogPositions(this.observerDate);
         this._refreshPlanets(this.observerDate);
         this.zodiac.setDate(this.observerDate);
+        if (this.showSatellites) this._refreshSatellites();
         this._refreshSkyRotation();
+    }
+
+    _refreshSatellites() {
+        this.satellites?.setDate(this.observerDate, { latitude: this.latitude, longitude: this.longitude });
     }
 
     /**
@@ -418,6 +450,83 @@ export class StarField {
     setZodiacMode(mode) {
         this.zodiacMode = mode === 'sidereal' ? 'sidereal' : 'tropical';
         this.zodiac.setMode(this.zodiacMode, this.observerDate);
+    }
+
+    /**
+     * Show or hide the satellite layer. Off by default. The first time it is
+     * turned on, the layer and SGP4 are fetched as a separate chunk; the
+     * returned promise settles once the layer is drawing (or has failed to
+     * load, in which case the toggle quietly stays dark).
+     * @param {boolean} visible
+     * @returns {Promise<void>}
+     */
+    async setSatellitesVisible(visible) {
+        this.showSatellites = !!visible;
+        if (!this.showSatellites) {
+            this.satellites?.setVisible(false);
+            return;
+        }
+        const layer = await this._ensureSatelliteLayer();
+        // The toggle may have been flipped back off while the chunk loaded.
+        if (!layer || !this.showSatellites) return;
+        layer.setVisible(true);
+        this._refreshSatellites();
+        this._refreshLiveSatelliteElements();
+    }
+
+    /** @returns {Promise<import('./satellite-layer.js').SatelliteLayer|null>} */
+    _ensureSatelliteLayer() {
+        if (this.satellites) return Promise.resolve(this.satellites);
+        if (!this._satelliteLoad) {
+            this._satelliteLoad = import('./satellite-layer.js')
+                .then(async ({ SatelliteLayer }) => {
+                    const layer = new SatelliteLayer(this.skyGroup, {
+                        radius: this.radius,
+                        reducedMotion: this.reducedMotion
+                    });
+                    if (this._webgpu) await layer.initWebGPU();
+                    if (this._disposed) {
+                        layer.dispose();
+                        return null;
+                    }
+                    this.satellites = layer;
+                    return layer;
+                })
+                .catch((error) => {
+                    console.warn('Satellite layer failed to load:', error);
+                    this._satelliteLoad = null;
+                    return null;
+                });
+        }
+        return this._satelliteLoad;
+    }
+
+    /**
+     * Lay live Celestrak elements over the bundled snapshot, at most once per
+     * refresh window. Fire-and-forget: the snapshot is already drawing.
+     */
+    _refreshLiveSatelliteElements() {
+        if (!this._liveSatelliteElements || !this.satellites) return;
+        const now = Date.now();
+        if (now - this._satelliteRefreshedAt < STAR_FIELD_CONFIG.satelliteRefreshMs) return;
+        this._satelliteRefreshedAt = now;
+        import('../sky/satelliteCatalog.js')
+            .then(({ loadLiveCatalog }) => loadLiveCatalog())
+            .then((catalog) => {
+                if (catalog.source === 'live') this.satellites?.setCatalog(catalog);
+            })
+            .catch((error) => console.warn('Satellite elements refresh failed:', error));
+    }
+
+    /**
+     * Reduced motion drops the ISS trail; the points themselves still move,
+     * exactly as the stars still turn.
+     * @param {boolean} reducedMotion
+     */
+    setReducedMotion(reducedMotion) {
+        this.reducedMotion = !!reducedMotion;
+        this.satellites?.setReducedMotion(this.reducedMotion);
+        if (this.showSatellites) this._refreshSatellites();
     }
 
     /** @param {boolean} visible */
@@ -587,6 +696,7 @@ export class StarField {
 
         this._updateLabelOpacity(brightOpacity);
         this.zodiac.update(brightOpacity);
+        this.satellites?.update(this.showSatellites ? brightOpacity : 0);
     }
 
     /**
@@ -622,12 +732,30 @@ export class StarField {
 
     /** Catalog sizes behind the current sky, for the debug API and tests. */
     getCatalogSummary() {
+        const satellites = this.satellites?.getSummary();
         return {
             stars: STARS.length,
             renderedFaintStars: this.getRenderedFaintStarCount(),
             constellations: this._tier.constellations ? CONSTELLATIONS.length : 0,
-            quality: this.quality
+            quality: this.quality,
+            satellites: {
+                enabled: this.showSatellites,
+                loaded: !!this.satellites,
+                tracked: satellites?.tracked ?? 0,
+                drawn: this.showSatellites ? (satellites?.drawn ?? 0) : 0,
+                source: satellites?.source ?? null,
+                epochAgeDays: satellites?.epochAgeDays ?? null
+            }
         };
+    }
+
+    /**
+     * Satellites currently drawn, brightest first — empty while the layer is
+     * off or not yet loaded.
+     * @returns {import('../sky/satellites.js').SatellitePosition[]}
+     */
+    getSatellitePositions() {
+        return this.showSatellites ? (this.satellites?.getPositions() ?? []) : [];
     }
 
     /** Current planet solutions, for the debug API and tests. */
@@ -651,6 +779,8 @@ export class StarField {
             oldMaterial?.dispose?.();
         }
         this.uniforms = this.catalogMaterial.userData.starUniforms;
+        this._webgpu = true;
+        await this.satellites?.initWebGPU();
     }
 
     _disposeLabels() {
@@ -667,6 +797,10 @@ export class StarField {
     dispose() {
         this._disposeLabels();
         this.zodiac.dispose();
+        this._disposed = true;
+        this.satellites?.dispose();
+        this.satellites = null;
+        this.showSatellites = false;
         for (const object of [this.catalogStars, this.faintStars, this.constellationLines, this.planetPoints]) {
             this.skyGroup.remove(object);
             object.geometry.dispose();

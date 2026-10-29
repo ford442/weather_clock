@@ -246,6 +246,7 @@ export class WeatherEffects {
 
     setReducedMotion(reducedMotion) {
         this.reducedMotion = reducedMotion;
+        this.starField?.setReducedMotion?.(reducedMotion);
         if (reducedMotion) {
             this.flashIntensity = 0;
             if (this.lightningTimeoutId != null) {
@@ -272,15 +273,18 @@ export class WeatherEffects {
 
     /**
      * Toggle the optional night-sky overlays so the sky can stay uncluttered.
-     * @param {{constellations?: boolean, planets?: boolean, labels?: boolean, zodiac?: boolean, zodiacMode?: import('../sky/zodiac.js').ZodiacMode, lightPollution?: number}} options
+     * @param {{constellations?: boolean, planets?: boolean, labels?: boolean, zodiac?: boolean, zodiacMode?: import('../sky/zodiac.js').ZodiacMode, satellites?: boolean, lightPollution?: number}} options
+     * @returns {Promise<void>} Settles once an optional layer that loads on demand (satellites) is ready.
      */
-    setSkyLayers({ constellations, planets, labels, zodiac, zodiacMode, lightPollution } = {}) {
+    setSkyLayers({ constellations, planets, labels, zodiac, zodiacMode, satellites, lightPollution } = {}) {
         if (constellations !== undefined) this.starField?.setConstellationsVisible?.(constellations);
         if (planets !== undefined) this.starField?.setPlanetsVisible?.(planets);
         if (labels !== undefined) this.starField?.setLabelsVisible?.(labels);
         if (zodiacMode !== undefined) this.starField?.setZodiacMode?.(zodiacMode);
         if (zodiac !== undefined) this.starField?.setZodiacVisible?.(zodiac);
         if (lightPollution !== undefined) this.starField?.setLightPollution?.(lightPollution);
+        if (satellites !== undefined) return this.starField?.setSatellitesVisible?.(satellites) ?? Promise.resolve();
+        return Promise.resolve();
     }
 
     /**

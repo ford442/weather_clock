@@ -32,7 +32,7 @@ import {
 } from './scene-objects.js';
 import { initMoonWebGPU } from './moonPhase.js';
 import { getRequestedNativeKernels, initializeNativeRuntime } from './native/native-runtime.js';
-import { WeatherService } from './weather.js';
+import { WeatherService, DEFAULT_LOCATION_NAME } from './weather.js';
 import { isWeatherRateLimited, RATE_LIMIT_CONFIG } from './net/openMeteoClient.js';
 import { AstronomyService } from './astronomy.js';
 import {
@@ -42,6 +42,8 @@ import {
     updateQualityButton,
     setupEventListeners,
     setSearchLoading,
+    showLocationNotice,
+    hideLocationNotice,
     drawSparkline,
     showToast,
     setupKeyboardShortcuts,
@@ -84,7 +86,8 @@ const PREF_KEYS = {
     windUnit: 'weatherclock_wind_unit',
     ambienceMuted: 'weatherclock_ambience_muted',
     nightSky: 'weatherclock_night_sky',
-    zodiac: 'weatherclock_zodiac'
+    zodiac: 'weatherclock_zodiac',
+    satellites: 'weatherclock_satellites'
 };
 
 /**
@@ -201,7 +204,11 @@ async function bootstrap() {
         const unit = readPref(PREF_KEYS.unit);
         const windUnit = readPref(PREF_KEYS.windUnit);
 
-        if (lat && lon && location) {
+        // Older builds persisted the New York fallback as if the user had chosen
+        // it, which froze them there; treat it as "no saved location" so
+        // geolocation gets another chance.
+        const hasSavedLocation = !!(lat && lon && location) && location !== DEFAULT_LOCATION_NAME;
+        if (hasSavedLocation) {
             weatherService.setManualLocation(lat, lon, location);
         }
         if (unit === 'metric' || unit === 'imperial') {
@@ -210,11 +217,12 @@ async function bootstrap() {
         if (windUnit === 'metric' || windUnit === 'imperial') {
             weatherService.windUnit = windUnit;
         }
-        return !!(lat && lon);
+        return hasSavedLocation;
     }
 
     function savePreferences() {
-        if (weatherService.latitude) {
+        // The New York fallback is a placeholder, not a choice worth remembering.
+        if (weatherService.latitude && weatherService.location !== DEFAULT_LOCATION_NAME) {
             writePref(PREF_KEYS.lat, String(weatherService.latitude));
             writePref(PREF_KEYS.lon, String(weatherService.longitude));
             writePref(PREF_KEYS.location, weatherService.location);
@@ -488,13 +496,29 @@ async function bootstrap() {
         weatherEffects.setSkyLayers?.({ zodiac: level.zodiac, zodiacMode: level.mode });
     }
 
+    // Satellites are off by default too; the layer and SGP4 are only fetched
+    // the first time someone turns them on.
+    let satellitesOn = readPref(PREF_KEYS.satellites) === '1';
+
+    function applySatellites() {
+        weatherEffects.setSkyLayers?.({ satellites: satellitesOn });
+    }
+
     function setupUICallbacks() {
         return {
             onRetryLocation: async () => {
                 const locationEl = document.getElementById('location');
+                const previousName = weatherService.location;
                 if (locationEl) locationEl.textContent = 'Retrying…';
                 try {
-                    await weatherService.getLocation();
+                    // A click is the user gesture that makes asking for permission fair.
+                    const status = await weatherService.getLocation({ userInitiated: true });
+                    showLocationNotice(status);
+                    if (status.source === 'fallback' && state.weatherData && status.name === previousName) {
+                        // Nothing changed; don't spend an API call (or a 429) re-fetching the same place.
+                        if (locationEl) locationEl.textContent = previousName;
+                        return;
+                    }
                     const data = await weatherService.fetchWeather();
                     await applyWeatherData(data);
                 } catch (error) {
@@ -530,6 +554,13 @@ async function bootstrap() {
                 showToast(t(ZODIAC_LEVELS[zodiacLevel].toast));
             },
 
+            onToggleSatellites: () => {
+                satellitesOn = !satellitesOn;
+                applySatellites();
+                writePref(PREF_KEYS.satellites, satellitesOn ? '1' : '0');
+                showToast(t(satellitesOn ? 'satellitesOn' : 'satellitesOff'));
+            },
+
             onSearch: async (query) => {
                 if (!query) return;
                 const requestId = ++searchRequestId;
@@ -543,6 +574,7 @@ async function bootstrap() {
                         weatherService.countryCode = best.address?.country_code ?? null;
                         weatherService.setWindUnit(isUS ? 'imperial' : 'metric');
                         weatherService.setManualLocation(best.lat, best.lon, best.display_name.split(',')[0]);
+                        hideLocationNotice();
 
                         const locationEl = document.getElementById('location');
                         if (locationEl) locationEl.textContent = 'Updating…';
@@ -688,6 +720,7 @@ async function bootstrap() {
                 data = await weatherService.fetchWeather();
             } else {
                 data = await weatherService.initialize();
+                if (weatherService.locationStatus) showLocationNotice(weatherService.locationStatus);
                 savePreferences();
             }
 
@@ -780,6 +813,7 @@ async function bootstrap() {
 
         applyNightSkyLevel();
         applyZodiacLevel();
+        if (satellitesOn) applySatellites();
 
         const callbacks = setupUICallbacks();
         setupEventListeners(callbacks, modeController);

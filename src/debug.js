@@ -184,6 +184,7 @@ export function setupDebugAPI(state, services, scene3d) {
                 longitude,
                 astro: astronomyService.getPositionsForDate(date, latitude, longitude),
                 planets: starField?.getPlanetPositions?.() ?? [],
+                satellites: starField?.getSatellitePositions?.() ?? [],
                 catalog: starField?.getCatalogSummary?.(),
                 backend: window.__NATIVE_BACKEND__ || 'js'
             });
@@ -203,12 +204,15 @@ export function setupDebugAPI(state, services, scene3d) {
                 labels: starField.showLabels,
                 zodiac: starField.showZodiac,
                 zodiacMode: starField.zodiacMode,
+                satellites: starField.showSatellites,
                 opacity: starField._opacity
             };
         },
         /** Sun/Moon/planet placements in the twelve signs, under the active convention. */
         getZodiacState: () => weatherEffects.starField?.zodiac?.getState?.() ?? null,
         setLightPollution: (amount) => weatherEffects.setSkyLayers?.({ lightPollution: amount }),
+        /** Turn the satellite layer on/off without persisting; resolves once its chunk has loaded. */
+        setSatellites: (visible = true) => weatherEffects.setSkyLayers?.({ satellites: visible }),
         /** Past→present→future narrative driving the zone tints, drift, and temporal band. */
         getTemporalNarrative: () => weatherEffects.narrative ?? null,
         spawnBolt: () => {

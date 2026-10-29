@@ -15,6 +15,10 @@
  * @property {string} weatherLoadFailed
  * @property {(seconds: number) => string} weatherRateLimited
  * @property {string} locationNotDetected
+ * @property {(place: string|null, reason: LocationFallbackReason) => string} locationFallbackNotice
+ * @property {string} locationUseMine
+ * @property {string} locationRetry
+ * @property {string} locationSearchCity
  * @property {(query: string) => string} noResultsFor
  * @property {string} timeWarpDisabledReducedMotion
  * @property {(tier: string, reason: string) => string} qualityChanged
@@ -41,6 +45,8 @@
  * @property {string} zodiacOff
  * @property {string} zodiacTropical
  * @property {string} zodiacSidereal
+ * @property {string} satellitesOn
+ * @property {string} satellitesOff
  * @property {(args: {description?: string, temp?: number|string, unit?: string, precip?: string, sunset?: string}) => string} sceneSummary
  */
 
@@ -55,6 +61,20 @@ const STRINGS = {
         weatherLoadFailed: 'Failed to load weather data. Check your connection.',
         weatherRateLimited: (seconds) => `Weather service is rate-limited, retrying in ${seconds} s`,
         locationNotDetected: 'Could not detect location. Try searching for a city.',
+        locationFallbackNotice: (place, reason) => {
+            const shown = place ? `Showing ${place}` : 'Showing a default location';
+            const why = {
+                prompt: 'location not shared yet',
+                denied: 'location access is blocked in your browser settings',
+                timeout: 'location request timed out',
+                unavailable: 'your position could not be determined',
+                unsupported: 'this browser has no location support'
+            }[reason];
+            return `${shown}: ${why}.`;
+        },
+        locationUseMine: 'Use my location',
+        locationRetry: 'Retry',
+        locationSearchCity: 'Search city',
         noResultsFor: (query) => `No results found for "${query}"`,
         timeWarpDisabledReducedMotion: 'Time warp is disabled while reduced motion is enabled.',
         qualityChanged: (tier, reason) => `Quality changed to ${tier}${reason}.`,
@@ -81,6 +101,8 @@ const STRINGS = {
         zodiacOff: 'Zodiac band hidden.',
         zodiacTropical: 'Zodiac band on — tropical signs.',
         zodiacSidereal: 'Zodiac band on — sidereal signs.',
+        satellitesOn: 'Satellites on.',
+        satellitesOff: 'Satellites hidden.',
         sceneSummary: ({ description, temp, unit, precip, sunset }) => {
             let s = `${description}, ${temp}°${unit}`;
             if (precip) s += `, ${precip}`;
@@ -97,6 +119,20 @@ const STRINGS = {
         weatherLoadFailed: 'No se pudo cargar el clima. Comprueba tu conexión.',
         weatherRateLimited: (seconds) => `El servicio del clima está limitado, reintentando en ${seconds} s`,
         locationNotDetected: 'No se pudo detectar la ubicación. Prueba a buscar una ciudad.',
+        locationFallbackNotice: (place, reason) => {
+            const shown = place ? `Mostrando ${place}` : 'Mostrando una ubicación predeterminada';
+            const why = {
+                prompt: 'aún no has compartido tu ubicación',
+                denied: 'el acceso a la ubicación está bloqueado en tu navegador',
+                timeout: 'la solicitud de ubicación agotó el tiempo',
+                unavailable: 'no se pudo determinar tu posición',
+                unsupported: 'este navegador no admite la ubicación'
+            }[reason];
+            return `${shown}: ${why}.`;
+        },
+        locationUseMine: 'Usar mi ubicación',
+        locationRetry: 'Reintentar',
+        locationSearchCity: 'Buscar ciudad',
         noResultsFor: (query) => `No se encontraron resultados para "${query}"`,
         timeWarpDisabledReducedMotion: 'El salto temporal está desactivado porque el movimiento reducido está activo.',
         qualityChanged: (tier, reason) => `Calidad cambiada a ${tier}${reason}.`,
@@ -124,6 +160,8 @@ const STRINGS = {
         zodiacOff: 'Banda zodiacal oculta.',
         zodiacTropical: 'Banda zodiacal activada — signos tropicales.',
         zodiacSidereal: 'Banda zodiacal activada — signos siderales.',
+        satellitesOn: 'Satélites activados.',
+        satellitesOff: 'Satélites ocultos.',
         sceneSummary: ({ description, temp, unit, precip, sunset }) => {
             let s = `${description}, ${temp}°${unit}`;
             if (precip) s += `, ${precip}`;

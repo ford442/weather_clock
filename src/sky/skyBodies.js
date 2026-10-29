@@ -24,15 +24,32 @@
  *   distanceKm: number|null
  * }} MoonBody
  * @typedef {SkyBodyBase & {magnitude: number, distanceAu: number}} PlanetBody
+ * @typedef {SkyBodyBase & {magnitude: number, rangeKm: number, sunlit: boolean}} SatelliteBody
+ *
+ * @typedef {{
+ *   enabled: boolean,
+ *   loaded: boolean,
+ *   tracked: number,
+ *   drawn: number,
+ *   source: 'snapshot'|'live'|null,
+ *   epochAgeDays: number|null
+ * }} SatelliteBudget
  *
  * @typedef {{
  *   date: string,
  *   observer: {latitude: number, longitude: number},
  *   backend: string,
- *   catalog: {stars: number, renderedFaintStars: number, constellations: number, quality: string},
+ *   catalog: {
+ *     stars: number,
+ *     renderedFaintStars: number,
+ *     constellations: number,
+ *     quality: string,
+ *     satellites: SatelliteBudget
+ *   },
  *   sun: SunBody,
  *   moon: MoonBody,
- *   planets: PlanetBody[]
+ *   planets: PlanetBody[],
+ *   satellites: SatelliteBody[]
  * }} SkyBodiesReport
  */
 
@@ -89,12 +106,22 @@ export function equatorialToHorizontalDeg(raRad, decRad, date, latitude, longitu
  *   longitude: number,
  *   astro: AstroSnapshot,
  *   planets?: import('./planets.js').PlanetPosition[],
- *   catalog?: {stars?: number, renderedFaintStars?: number, constellations?: number, quality?: string},
+ *   satellites?: ReadonlyArray<{id: number|string, name: string, altitudeDeg: number, azimuthDeg: number, magnitude: number, rangeKm: number, sunlit: boolean}>,
+ *   catalog?: {stars?: number, renderedFaintStars?: number, constellations?: number, quality?: string, satellites?: Partial<SatelliteBudget>},
  *   backend?: string
  * }} input
  * @returns {SkyBodiesReport}
  */
-export function describeSkyBodies({ date, latitude, longitude, astro, planets = [], catalog = {}, backend = 'js' }) {
+export function describeSkyBodies({
+    date,
+    latitude,
+    longitude,
+    astro,
+    planets = [],
+    satellites = [],
+    catalog = {},
+    backend = 'js'
+}) {
     const when = date instanceof Date ? date : new Date(date);
     const sunHorizontal = positionToHorizontalDeg(astro?.sunPosition);
     const moonHorizontal = positionToHorizontalDeg(astro?.moonPosition);
@@ -107,7 +134,15 @@ export function describeSkyBodies({ date, latitude, longitude, astro, planets = 
             stars: catalog.stars ?? 0,
             renderedFaintStars: catalog.renderedFaintStars ?? 0,
             constellations: catalog.constellations ?? 0,
-            quality: catalog.quality ?? 'unknown'
+            quality: catalog.quality ?? 'unknown',
+            satellites: {
+                enabled: catalog.satellites?.enabled ?? false,
+                loaded: catalog.satellites?.loaded ?? false,
+                tracked: catalog.satellites?.tracked ?? 0,
+                drawn: catalog.satellites?.drawn ?? 0,
+                source: catalog.satellites?.source ?? null,
+                epochAgeDays: catalog.satellites?.epochAgeDays ?? null
+            }
         },
         sun: {
             id: 'sun',
@@ -136,6 +171,18 @@ export function describeSkyBodies({ date, latitude, longitude, astro, planets = 
                 magnitude: planet.magnitude,
                 distanceAu: planet.distanceAu
             };
-        })
+        }),
+        // Satellites arrive already solved for this observer (SGP4 look angles
+        // are topocentric), so they are passed through rather than re-derived.
+        satellites: satellites.map((satellite) => ({
+            id: String(satellite.id),
+            name: satellite.name,
+            altitudeDeg: satellite.altitudeDeg,
+            azimuthDeg: satellite.azimuthDeg,
+            aboveHorizon: satellite.altitudeDeg > 0,
+            magnitude: satellite.magnitude,
+            rangeKm: satellite.rangeKm,
+            sunlit: satellite.sunlit
+        }))
     };
 }

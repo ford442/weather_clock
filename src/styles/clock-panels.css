@@ -339,6 +339,54 @@
     background: rgba(255, 255, 255, 0.4);
 }
 
+/* ── Location fallback notice (hangs under the top bar) ── */
+.location-notice {
+    position: absolute;
+    top: 64px;
+    left: 24px;
+    max-width: min(520px, calc(100vw - 48px));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(232, 168, 56, 0.5);
+    background: rgba(30, 30, 40, 0.92);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.35;
+}
+.location-notice[hidden] {
+    display: none;
+}
+.location-notice-text {
+    flex: 1 1 220px;
+}
+.location-notice-btn {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 10px;
+    white-space: nowrap;
+    transition:
+        background 0.2s,
+        border-color 0.2s;
+}
+.location-notice-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+.location-notice-btn[hidden] {
+    display: none;
+}
+
 /* ── Sparkline & Pressure Gauge ── */
 #sparkline {
     display: block;
