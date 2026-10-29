@@ -11,7 +11,7 @@ export class WeatherServiceError extends Error {
      * @param {string} message
      * @param {number|null} [status]
      * @param {string|null} [endpoint]
-     * @param {{code?: string, isOffline?: boolean, cause?: unknown}} [options]
+     * @param {{code?: string, isOffline?: boolean, retryAfterMs?: number|null, cause?: unknown}} [options]
      */
     constructor(message, status = null, endpoint = null, options = {}) {
         super(message);
@@ -20,6 +20,8 @@ export class WeatherServiceError extends Error {
         this.endpoint = endpoint;
         this.code = options.code ?? null;
         this.isOffline = options.isOffline ?? false;
+        /** @type {number|null} How long a RATE_LIMITED caller should wait before trying again. */
+        this.retryAfterMs = options.retryAfterMs ?? null;
         if (options.cause) this.cause = options.cause;
     }
 }
@@ -32,6 +34,98 @@ const OPEN_METEO_AIR_QUALITY = 'https://air-quality-api.open-meteo.com/v1/air-qu
 const NOMINATIM_SEARCH = 'https://nominatim.openstreetmap.org/search';
 const NOMINATIM_REVERSE = 'https://nominatim.openstreetmap.org/reverse';
 const NWS_ALERTS = 'https://api.weather.gov/alerts/active';
+
+/**
+ * HTTP 429 handling. Open-Meteo's limits are per IP across every `*.open-meteo.com`
+ * host, so one 429 pauses all of them (see {@link getRateLimitRemainingMs}).
+ */
+export const RATE_LIMIT_CONFIG = {
+    /** Pause used when a 429 carries no usable Retry-After (browsers can't read it cross-origin unless exposed). */
+    defaultPauseMs: 60 * 1000,
+    /** Floor, so `Retry-After: 0` can't turn the breaker into a hot loop. */
+    minPauseMs: 1000,
+    /** Ceiling, so a daily-quota Retry-After can't wedge the page for hours. */
+    maxPauseMs: 10 * 60 * 1000,
+    /** {@link withRetry} sleeps through a rate-limit window at most this long; longer ones fail fast. */
+    maxInlineWaitMs: 15 * 1000
+};
+
+/** Epoch ms until which Open-Meteo requests are refused locally (0 = not paused). */
+let openMeteoPausedUntil = 0;
+
+/** @type {Map<string, {promise: Promise<any>, followers: number}>} */
+const inFlightRequests = new Map();
+
+/** @param {string} urlString */
+function isOpenMeteoUrl(urlString) {
+    try {
+        const host = new URL(urlString).hostname;
+        return host === 'open-meteo.com' || host.endsWith('.open-meteo.com');
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Parse a `Retry-After` header value, either delta-seconds or an HTTP date.
+ * @param {string|null|undefined} value
+ * @param {number} [now]
+ * @returns {number|null} Milliseconds to wait, or null when absent/unparseable.
+ */
+export function parseRetryAfter(value, now = Date.now()) {
+    const text = value?.trim();
+    if (!text) return null;
+    if (/^\d+$/.test(text)) return Number(text) * 1000;
+    // HTTP dates always contain letters; this keeps Date.parse from accepting junk like "1.5".
+    if (!/[a-z]/i.test(text)) return null;
+    const date = Date.parse(text);
+    return Number.isNaN(date) ? null : Math.max(0, date - now);
+}
+
+/**
+ * Milliseconds left in the current Open-Meteo rate-limit pause (0 when clear).
+ * @param {number} [now]
+ */
+export function getRateLimitRemainingMs(now = Date.now()) {
+    return Math.max(0, openMeteoPausedUntil - now);
+}
+
+/** Clear the Open-Meteo pause. Exposed for tests and for an explicit user retry. */
+export function resetRateLimit() {
+    openMeteoPausedUntil = 0;
+}
+
+/**
+ * True for a 429, whether it came from the server or from the local breaker.
+ * @param {unknown} error
+ * @returns {error is WeatherServiceError}
+ */
+export function isRateLimitedError(error) {
+    return error instanceof WeatherServiceError && (error.code === 'RATE_LIMITED' || error.status === 429);
+}
+
+/**
+ * True when the weather API (not Nominatim/NWS) is the one rate-limiting us, i.e.
+ * when the Open-Meteo breaker is, or just was, the reason a request failed.
+ * @param {unknown} error
+ * @returns {error is WeatherServiceError}
+ */
+export function isWeatherRateLimited(error) {
+    return isRateLimitedError(error) && isOpenMeteoUrl(error.endpoint ?? '');
+}
+
+/**
+ * @param {string} urlString
+ * @param {number} retryAfterMs
+ */
+function rateLimitedError(urlString, retryAfterMs) {
+    return new WeatherServiceError(
+        `Weather service is rate-limited; retry in ${Math.ceil(retryAfterMs / 1000)}s`,
+        429,
+        urlString,
+        { code: 'RATE_LIMITED', retryAfterMs }
+    );
+}
 
 /**
  * @param {string} base
@@ -110,15 +204,27 @@ export function alertsUrl(lat, lon) {
 }
 
 /**
- * Fetch and parse JSON with a hard timeout and abort support. Any failure —
- * HTTP error status, timeout, cancellation, or network/offline error — is
- * normalized to a {@link WeatherServiceError}.
- *
- * @param {string|URL} url
- * @param {{timeoutMs?: number, signal?: AbortSignal}} [options]
+ * Turn a 429 response into a RATE_LIMITED error and, for Open-Meteo, pause every
+ * Open-Meteo request until the window passes.
+ * @param {string} urlString
+ * @param {Response} response
  */
-export async function fetchJSON(url, { timeoutMs = 10000, signal } = {}) {
-    const urlString = String(url);
+function rateLimitFromResponse(urlString, response) {
+    const { defaultPauseMs, minPauseMs, maxPauseMs } = RATE_LIMIT_CONFIG;
+    const requestedMs = parseRetryAfter(response.headers?.get?.('Retry-After')) ?? defaultPauseMs;
+    const retryAfterMs = Math.min(Math.max(requestedMs, minPauseMs), maxPauseMs);
+    if (isOpenMeteoUrl(urlString)) {
+        openMeteoPausedUntil = Math.max(openMeteoPausedUntil, Date.now() + retryAfterMs);
+    }
+    return rateLimitedError(urlString, retryAfterMs);
+}
+
+/**
+ * One network round trip: the timeout/abort/error-normalizing half of {@link fetchJSON}.
+ * @param {string} urlString
+ * @param {{timeoutMs?: number, signal?: AbortSignal}} options
+ */
+async function requestJSON(urlString, { timeoutMs = 10000, signal } = {}) {
     const controller = new AbortController();
     let timedOut = false;
 
@@ -137,6 +243,7 @@ export async function fetchJSON(url, { timeoutMs = 10000, signal } = {}) {
     try {
         const response = await fetch(urlString, { signal: controller.signal });
         if (response.ok === false) {
+            if (response.status === 429) throw rateLimitFromResponse(urlString, response);
             throw new WeatherServiceError(
                 `Request failed with status ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
                 response.status,
@@ -173,20 +280,68 @@ export async function fetchJSON(url, { timeoutMs = 10000, signal } = {}) {
     }
 }
 
+/**
+ * Fetch and parse JSON with a hard timeout and abort support. Any failure —
+ * HTTP error status, timeout, cancellation, or network/offline error — is
+ * normalized to a {@link WeatherServiceError}.
+ *
+ * Two guards keep a burst of callers from hammering a rate-limited API:
+ * - After a 429 from Open-Meteo, every Open-Meteo request fails immediately
+ *   with `RATE_LIMITED` (no network) until the Retry-After window has passed.
+ * - Concurrent calls for the same URL share one request. Each caller gets its
+ *   own copy of the parsed JSON, so one can mutate it safely. Calls that pass
+ *   their own `signal` are never shared, because cancelling one caller must
+ *   not cancel the others.
+ *
+ * @param {string|URL} url
+ * @param {{timeoutMs?: number, signal?: AbortSignal}} [options]
+ * @returns {Promise<any>}
+ */
+export async function fetchJSON(url, options = {}) {
+    const urlString = String(url);
+
+    if (isOpenMeteoUrl(urlString)) {
+        const remainingMs = getRateLimitRemainingMs();
+        if (remainingMs > 0) throw rateLimitedError(urlString, remainingMs);
+    }
+
+    if (options.signal) return requestJSON(urlString, options);
+
+    const shared = inFlightRequests.get(urlString);
+    if (shared) {
+        shared.followers++;
+        return structuredClone(await shared.promise);
+    }
+
+    const entry = {
+        followers: 0,
+        promise: requestJSON(urlString, options).finally(() => inFlightRequests.delete(urlString))
+    };
+    inFlightRequests.set(urlString, entry);
+
+    const data = await entry.promise;
+    // The settled promise's value is shared with every follower, so nobody gets it directly.
+    return entry.followers > 0 ? structuredClone(data) : data;
+}
+
 export function isOffline() {
     return typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 
 /**
- * Default retry predicate: retry transient/server errors, never retry an
- * intentional cancellation or a confirmed offline device.
+ * Default retry predicate for the fixed backoff schedule: retry
+ * transient/server errors, never retry an intentional cancellation or a
+ * confirmed offline device. A 429 is deliberately excluded — climbing the
+ * schedule while rate-limited only adds requests; {@link withRetry} gives it
+ * a single Retry-After backoff instead.
  * @param {unknown} error
  */
 export function isRetryableError(error) {
+    if (isRateLimitedError(error)) return false;
     if (!(error instanceof WeatherServiceError)) return false;
     if (error.code === 'ABORTED' || error.code === 'OFFLINE') return false;
     if (error.status == null) return true;
-    return error.status === 408 || error.status === 429 || error.status >= 500;
+    return error.status === 408 || error.status >= 500;
 }
 
 /**
@@ -195,21 +350,44 @@ export function isRetryableError(error) {
  * operations that issue several requests per attempt (e.g. WeatherService's
  * current+historical fetch).
  *
+ * A rate-limited (429) failure ignores the schedule: it waits the server's
+ * Retry-After once, then gives up if that fails too. If the wait is longer than
+ * `maxRateLimitWaitMs` it gives up straight away, so the caller can surface the
+ * `RATE_LIMITED` error (and its `retryAfterMs`) instead of hanging.
+ *
  * @template T
  * @param {() => Promise<T>} fn
- * @param {{retryDelaysMs?: number[], isRetryable?: (error: unknown) => boolean, onRetry?: (error: unknown, attempt: number, delayMs: number) => void}} [options]
+ * @param {{retryDelaysMs?: number[], isRetryable?: (error: unknown) => boolean, onRetry?: (error: unknown, attempt: number, delayMs: number) => void, maxRateLimitWaitMs?: number}} [options]
  * @returns {Promise<T>}
  */
-export async function withRetry(fn, { retryDelaysMs = [], isRetryable = isRetryableError, onRetry } = {}) {
+export async function withRetry(
+    fn,
+    {
+        retryDelaysMs = [],
+        isRetryable = isRetryableError,
+        onRetry,
+        maxRateLimitWaitMs = RATE_LIMIT_CONFIG.maxInlineWaitMs
+    } = {}
+) {
     let lastError;
+    let rateLimitRetried = false;
 
     for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
         try {
             return await fn();
         } catch (error) {
             lastError = error;
-            const delayMs = retryDelaysMs[attempt];
-            if (delayMs === undefined || !isRetryable(error)) break;
+            let delayMs = retryDelaysMs[attempt];
+            if (delayMs === undefined) break;
+
+            if (isRateLimitedError(error)) {
+                const waitMs = error.retryAfterMs ?? RATE_LIMIT_CONFIG.defaultPauseMs;
+                if (rateLimitRetried || waitMs > maxRateLimitWaitMs) break;
+                rateLimitRetried = true;
+                delayMs = waitMs;
+            } else if (!isRetryable(error)) {
+                break;
+            }
 
             onRetry?.(error, attempt, delayMs);
             await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -222,9 +400,9 @@ export async function withRetry(fn, { retryDelaysMs = [], isRetryable = isRetrya
 /**
  * {@link fetchJSON} wrapped in {@link withRetry} for a single URL.
  * @param {string|URL} url
- * @param {{timeoutMs?: number, signal?: AbortSignal, retryDelaysMs?: number[], isRetryable?: (error: unknown) => boolean, onRetry?: (error: unknown, attempt: number, delayMs: number) => void}} [options]
+ * @param {{timeoutMs?: number, signal?: AbortSignal, retryDelaysMs?: number[], isRetryable?: (error: unknown) => boolean, onRetry?: (error: unknown, attempt: number, delayMs: number) => void, maxRateLimitWaitMs?: number}} [options]
  */
 export async function fetchJSONWithRetry(url, options = {}) {
-    const { retryDelaysMs, isRetryable, onRetry, ...fetchOptions } = options;
-    return withRetry(() => fetchJSON(url, fetchOptions), { retryDelaysMs, isRetryable, onRetry });
+    const { retryDelaysMs, isRetryable, onRetry, maxRateLimitWaitMs, ...fetchOptions } = options;
+    return withRetry(() => fetchJSON(url, fetchOptions), { retryDelaysMs, isRetryable, onRetry, maxRateLimitWaitMs });
 }

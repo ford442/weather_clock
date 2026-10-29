@@ -33,6 +33,7 @@ import {
 import { initMoonWebGPU } from './moonPhase.js';
 import { getRequestedNativeKernels, initializeNativeRuntime } from './native/native-runtime.js';
 import { WeatherService, DEFAULT_LOCATION_NAME } from './weather.js';
+import { isWeatherRateLimited, RATE_LIMIT_CONFIG } from './net/openMeteoClient.js';
 import { AstronomyService } from './astronomy.js';
 import {
     updateTimeDisplay,
@@ -591,6 +592,10 @@ async function bootstrap() {
                 } catch (error) {
                     if (error?.code === 'ABORTED') return;
                     console.error('Search failed:', error);
+                    if (isWeatherRateLimited(error)) {
+                        handleRateLimited(error);
+                        return;
+                    }
                     showToast(
                         error?.isOffline
                             ? 'Search unavailable while offline.'
@@ -733,8 +738,44 @@ async function bootstrap() {
                 showToast(t('offlineNoCachedData'), 'error');
             } else {
                 updateOfflineStatus(false);
-                showToast(t('weatherLoadFailed'), 'error');
+                if (isWeatherRateLimited(error)) handleRateLimited(error);
+                else showToast(t('weatherLoadFailed'), 'error');
             }
+        }
+    }
+
+    /** @type {ReturnType<typeof setTimeout>|null} */
+    let rateLimitRetryTimer = null;
+
+    /**
+     * The weather API is rate-limiting us: say so, and retry once its window has
+     * passed. A rate-limit error means a fetch was attempted, so the location is
+     * already set and a plain refresh is enough, even for the very first load.
+     * @param {import('./net/openMeteoClient.js').WeatherServiceError} error
+     */
+    function handleRateLimited(error) {
+        const retryAfterMs = error.retryAfterMs ?? RATE_LIMIT_CONFIG.defaultPauseMs;
+        showToast(t('weatherRateLimited', Math.ceil(retryAfterMs / 1000)), 'info', 6000);
+        if (rateLimitRetryTimer) return;
+        rateLimitRetryTimer = setTimeout(() => {
+            rateLimitRetryTimer = null;
+            refreshWeather();
+        }, retryAfterMs);
+    }
+
+    async function refreshWeather() {
+        if (state.isDebugMode) return;
+        try {
+            const data = await weatherService.fetchWeather();
+            if (state.isDebugMode) return;
+            await applyWeatherData(data);
+        } catch (error) {
+            console.error('Weather update failed:', error);
+            if (isWeatherRateLimited(error)) {
+                handleRateLimited(error);
+                return;
+            }
+            showToast(error?.isOffline ? t('offlineNoCachedData') : 'Weather update failed.', 'error');
         }
     }
 
@@ -817,18 +858,6 @@ async function bootstrap() {
         }
 
         await fetchAndDisplayWeather();
-
-        async function refreshWeather() {
-            if (state.isDebugMode) return;
-            try {
-                const data = await weatherService.fetchWeather();
-                if (state.isDebugMode) return;
-                await applyWeatherData(data);
-            } catch (error) {
-                console.error('Weather update failed:', error);
-                showToast(error?.isOffline ? t('offlineNoCachedData') : 'Weather update failed.', 'error');
-            }
-        }
 
         setInterval(async () => {
             await refreshWeather();

@@ -13,6 +13,7 @@
  * @property {(time: string) => string} offlineCachedWeatherAt
  * @property {string} offlineNoCachedData
  * @property {string} weatherLoadFailed
+ * @property {(seconds: number) => string} weatherRateLimited
  * @property {string} locationNotDetected
  * @property {(place: string|null, reason: LocationFallbackReason) => string} locationFallbackNotice
  * @property {string} locationUseMine
@@ -58,6 +59,7 @@ const STRINGS = {
         offlineCachedWeatherAt: (time) => `Showing cached weather from ${time}`,
         offlineNoCachedData: 'Offline — no cached weather data available',
         weatherLoadFailed: 'Failed to load weather data. Check your connection.',
+        weatherRateLimited: (seconds) => `Weather service is rate-limited, retrying in ${seconds} s`,
         locationNotDetected: 'Could not detect location. Try searching for a city.',
         locationFallbackNotice: (place, reason) => {
             const shown = place ? `Showing ${place}` : 'Showing a default location';
@@ -115,6 +117,7 @@ const STRINGS = {
         offlineCachedWeatherAt: (time) => `Mostrando el clima en caché desde las ${time}`,
         offlineNoCachedData: 'Sin conexión — no hay datos del clima en caché',
         weatherLoadFailed: 'No se pudo cargar el clima. Comprueba tu conexión.',
+        weatherRateLimited: (seconds) => `El servicio del clima está limitado, reintentando en ${seconds} s`,
         locationNotDetected: 'No se pudo detectar la ubicación. Prueba a buscar una ciudad.',
         locationFallbackNotice: (place, reason) => {
             const shown = place ? `Mostrando ${place}` : 'Mostrando una ubicación predeterminada';
