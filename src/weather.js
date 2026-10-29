@@ -39,6 +39,23 @@ function getBrowserLanguage() {
 
 export { WeatherServiceError };
 
+/** Name given to the New York fallback; also how a persisted fallback is recognised. */
+export const DEFAULT_LOCATION_NAME = 'New York, USA (default)';
+
+// `maximumAge` lets a fix from the last 10 minutes answer instantly (Retry
+// after a transient failure, reloads) instead of waking the GPS/wifi radio.
+const GEOLOCATION_OPTIONS = Object.freeze({ timeout: 10000, maximumAge: 10 * 60 * 1000 });
+
+/**
+ * @param {any} error a GeolocationPositionError (code 1/2/3) or anything else thrown
+ * @returns {LocationFallbackReason}
+ */
+function geolocationFailureReason(error) {
+    if (error?.code === 1) return 'denied';
+    if (error?.code === 3) return 'timeout';
+    return 'unavailable';
+}
+
 export class WeatherService {
     /**
      * @param {{ timeoutMs?: number, retryDelaysMs?: number[] }} [options]
@@ -56,6 +73,8 @@ export class WeatherService {
         this.windUnit = 'metric'; // 'metric' = km/h, 'imperial' = mph
         /** @type {string|null} ISO 3166-1 alpha-2 of the active location; picks the AQI scale. */
         this.countryCode = null;
+        /** @type {LocationStatus|null} How the active location was last resolved; null before the first getLocation(). */
+        this.locationStatus = null;
         this._cacheStore = new TTLCache({ storagePrefix: CACHE_STORAGE_PREFIX, maxStorageEntries: MAX_CACHE_ENTRIES });
         this.cache = this._cacheStore.memory;
         this.timeoutMs = timeoutMs;
@@ -140,56 +159,79 @@ export class WeatherService {
         this.location = name;
     }
 
-    /** Resolve lat/lon via geolocation, falling back to New York. @returns {Promise<void>} */
-    async getLocation() {
-        return new Promise((resolve) => {
-            if (!navigator.geolocation) {
-                this.setDefaultLocation();
-                resolve(undefined);
-                return;
-            }
+    /**
+     * Resolve lat/lon via geolocation. Never throws: when the browser can't (or
+     * won't) say where the user is, the current location is kept (or New York
+     * on a cold start) and `locationStatus` records why, so the UI can explain.
+     *
+     * Unless `userInitiated`, a still-undecided permission is not requested —
+     * a prompt nobody asked for reads as a hang. The UI offers a "Use my
+     * location" button instead, and the click passes `userInitiated`.
+     * @param {{ userInitiated?: boolean }} [options]
+     * @returns {Promise<LocationStatus>}
+     */
+    async getLocation({ userInitiated = false } = {}) {
+        const geolocation = typeof navigator !== 'undefined' ? navigator.geolocation : undefined;
+        if (!geolocation) return this.#useFallbackLocation('unsupported');
 
-            // 5-second timeout for geolocation
-            const timeoutId = setTimeout(() => {
-                console.warn('Geolocation timeout (5s), using fallback location');
-                this.setDefaultLocation();
-                resolve(undefined);
-            }, 5000);
+        if (!userInitiated) {
+            const permission = await this.#geolocationPermission();
+            if (permission === 'denied') return this.#useFallbackLocation('denied');
+            if (permission === 'prompt') return this.#useFallbackLocation('prompt');
+        }
 
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                    clearTimeout(timeoutId);
-                    this.latitude = position.coords.latitude;
-                    this.longitude = position.coords.longitude;
-
-                    try {
-                        const locationName = await this.reverseGeocode(this.latitude, this.longitude);
-                        this.location = locationName;
-                    } catch (error) {
-                        this.location = `${this.latitude.toFixed(2)}, ${this.longitude.toFixed(2)}`;
-                    }
-
-                    resolve(undefined);
-                },
-                (error) => {
-                    clearTimeout(timeoutId);
-                    console.warn('Geolocation failed, using fallback location:', error.message);
-                    this.setFallbackLocation();
-                    resolve(undefined);
-                }
+        /** @type {GeolocationPosition} */
+        let position;
+        try {
+            // The browser's own `timeout` does not run while its permission
+            // dialog is open, so a slow human is never reported as a timeout.
+            position = await new Promise((resolve, reject) =>
+                geolocation.getCurrentPosition(resolve, reject, GEOLOCATION_OPTIONS)
             );
-        });
+        } catch (error) {
+            const reason = geolocationFailureReason(error);
+            console.warn(`Geolocation failed (${reason}), using fallback location:`, error?.message);
+            return this.#useFallbackLocation(reason);
+        }
+
+        this.latitude = position.coords.latitude;
+        this.longitude = position.coords.longitude;
+        try {
+            this.location = await this.reverseGeocode(this.latitude, this.longitude);
+        } catch (error) {
+            this.location = `${this.latitude.toFixed(2)}, ${this.longitude.toFixed(2)}`;
+        }
+        this.locationStatus = { source: 'geolocation', reason: null, name: this.location };
+        return this.locationStatus;
     }
 
-    setFallbackLocation() {
-        this.setDefaultLocation();
+    /** @returns {Promise<PermissionState|null>} null when the Permissions API can't say. */
+    async #geolocationPermission() {
+        try {
+            const status = await navigator.permissions?.query({ name: 'geolocation' });
+            return status?.state ?? null;
+        } catch (error) {
+            return null; // Older Safari rejects the 'geolocation' descriptor.
+        }
     }
 
-    /** NYC fallback used when geolocation is missing or denied. */
+    /**
+     * Keep whatever location is already set (a previous fix, a saved or searched
+     * city) and only fall to New York when there is none.
+     * @param {LocationFallbackReason} reason
+     * @returns {LocationStatus}
+     */
+    #useFallbackLocation(reason) {
+        if (this.latitude == null || this.longitude == null) this.setDefaultLocation();
+        this.locationStatus = { source: 'fallback', reason, name: this.location };
+        return this.locationStatus;
+    }
+
+    /** NYC fallback used when there is no location at all. */
     setDefaultLocation() {
         this.latitude = 40.7128;
         this.longitude = -74.006;
-        this.location = 'New York, USA (default)';
+        this.location = DEFAULT_LOCATION_NAME;
         this.windUnit = 'imperial'; // NYC default is US
         this.countryCode = 'us';
     }
