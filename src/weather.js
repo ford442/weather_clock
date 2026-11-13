@@ -20,6 +20,7 @@ import {
     alertsUrl
 } from './net/openMeteoClient.js';
 import { TTLCache } from './net/weatherCache.js';
+import { saveLastKnownGood, loadLastKnownGood, reviveWeatherDates } from './net/lastKnownGood.js';
 import { meanAbsoluteError, meanAbsoluteErrorGated, accuracyCacheSuffix, ACCURACY_CACHE_TTL_MS } from './accuracy.js';
 
 // localStorage is shared by the whole origin (other apps on the same host
@@ -90,10 +91,13 @@ export class WeatherService {
         return fetchJSON(url, { timeoutMs, signal });
     }
 
-    /** @returns {Promise<WeatherData>} */
-    async initialize() {
+    /**
+     * @param {FetchWeatherOptions} [options]
+     * @returns {Promise<WeatherData>}
+     */
+    async initialize(options) {
         await this.getLocation();
-        return await this.fetchWeather();
+        return await this.fetchWeather(options);
     }
 
     /** @returns {'metric'|'imperial'} */
@@ -281,36 +285,85 @@ export class WeatherService {
         };
     }
 
-    /** @returns {Promise<WeatherData>} */
-    async fetchWeather() {
+    /**
+     * Fetch live weather, retrying transient failures. When every attempt fails
+     * this serves the best stale payload instead (see {@link getStaleWeather}) and
+     * only throws if there is nothing at all to show.
+     *
+     * `onFirstFailure` fires once, as soon as the first attempt fails and a retry
+     * is about to start. The retries can take most of a minute, so it is the UI's
+     * cue to stop spinning and show what it has (or an error) while they run.
+     * @param {FetchWeatherOptions} [options]
+     * @returns {Promise<WeatherData>}
+     */
+    async fetchWeather({ onFirstFailure } = {}) {
         let lastError;
 
         try {
-            return await withRetry(() => this._fetchWeatherOnce(), {
+            const live = await withRetry(() => this._fetchWeatherOnce(), {
                 retryDelaysMs: this.retryDelaysMs,
                 onRetry: (error, attempt, delayMs) => {
                     console.warn(
                         `Weather fetch failed. Retrying in ${delayMs}ms (attempt ${attempt + 1}/${this.retryDelaysMs.length})...`
                     );
+                    if (attempt !== 0 || !onFirstFailure) return;
+                    try {
+                        onFirstFailure(error);
+                    } catch (callbackError) {
+                        console.error('onFirstFailure callback threw:', callbackError);
+                    }
                 }
             });
+            this.#rememberLastGood(live);
+            return live;
         } catch (error) {
             lastError = error;
         }
 
         console.error('Weather fetch failed, attempting cache fallback:', lastError);
-        const cached = this.getFromCache(this.getCacheKey(this.latitude, this.longitude), true);
-        if (cached) {
-            const offline = lastError?.isOffline === true || isOffline();
+        const stale = this.getStaleWeather(lastError);
+        if (stale) {
             console.warn('Serving cached weather data due to fetch error');
-            return {
-                ...cached.data,
-                isCached: true,
-                isOffline: offline,
-                cachedAt: cached.timestamp
-            };
+            return stale;
         }
         throw lastError;
+    }
+
+    /**
+     * The best payload to show when live weather is unavailable, or null.
+     * Prefers the cache entry for the active location (any age); otherwise falls
+     * back to the last-known-good snapshot, which may be for a different place —
+     * `data.location` always names the place the numbers are for.
+     * @param {unknown} [liveError] why the live fetch failed, kept on the result as `liveError`
+     * @returns {WeatherData|null}
+     */
+    getStaleWeather(liveError) {
+        /** @type {{data: WeatherData, timestamp: number}|null} */
+        let source = this.getFromCache(this.getCacheKey(this.latitude, this.longitude), true);
+        if (!source) {
+            const snapshot = loadLastKnownGood();
+            if (snapshot) source = { data: snapshot.data, timestamp: snapshot.savedAt };
+        }
+        if (!source) return null;
+
+        const failure = /** @type {{isOffline?: boolean}|null|undefined} */ (liveError);
+        return {
+            ...reviveWeatherDates(source.data),
+            isCached: true,
+            isOffline: failure?.isOffline === true || isOffline(),
+            cachedAt: source.timestamp,
+            ...(liveError instanceof Error ? { liveError } : {})
+        };
+    }
+
+    /** @param {WeatherData} data */
+    #rememberLastGood(data) {
+        saveLastKnownGood(data, {
+            lat: this.latitude,
+            lon: this.longitude,
+            location: this.location,
+            countryCode: this.countryCode
+        });
     }
 
     _isRetryable(error) {

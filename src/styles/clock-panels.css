@@ -99,6 +99,29 @@
     border-bottom-color: rgb(var(--accent));
 }
 
+/* A tab whose data has not loaded can't be opened; it would only show `--`. */
+.tab-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.tab-btn:disabled:hover {
+    color: var(--text-secondary);
+}
+
+/* With no tab available, say so instead of showing a panel of placeholders. */
+.adv-empty {
+    display: none;
+    padding: 8px 24px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+.advanced-drawer.no-data .adv-empty {
+    display: block;
+}
+.advanced-drawer.no-data .tab-content {
+    display: none;
+}
+
 .tab-panels {
     position: relative;
     flex: 1;
@@ -339,12 +362,21 @@
     background: rgba(255, 255, 255, 0.4);
 }
 
-/* ── Location fallback notice (hangs under the top bar) ── */
-.location-notice {
+/* ── Top-bar notices (location fallback, stale weather) hang under the top bar ── */
+.top-notices {
     position: absolute;
     top: 64px;
     left: 24px;
     max-width: min(520px, calc(100vw - 48px));
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}
+.location-notice,
+.weather-notice {
+    box-sizing: border-box;
+    max-width: 100%;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -358,11 +390,20 @@
     font-size: 13px;
     line-height: 1.35;
 }
-.location-notice[hidden] {
+.location-notice[hidden],
+.weather-notice[hidden] {
     display: none;
+}
+/* Stale data is a warning (amber, like the location fallback); no data at all is an error. */
+.weather-notice[data-kind='error'] {
+    border-color: rgba(224, 96, 96, 0.6);
 }
 .location-notice-text {
     flex: 1 1 220px;
+}
+/* Short messages stay on one line with their button; long ones wrap and the button follows. */
+.weather-notice-text {
+    flex: 1 1 auto;
 }
 .location-notice-btn {
     background: rgba(255, 255, 255, 0.15);
