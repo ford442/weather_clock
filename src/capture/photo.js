@@ -15,7 +15,10 @@ function readCaptionContext(state) {
         simulationTime: state.simulationTime,
         locationName,
         tempText: elementText('current-temp'),
-        descriptionText: elementText('current-description')
+        // Before data arrives (or when none will) the description line is a status message, not a condition.
+        descriptionText: ['loading', 'error'].includes(document.body.dataset.weatherState ?? '')
+            ? ''
+            : elementText('current-description')
     };
 }
 

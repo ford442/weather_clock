@@ -32,7 +32,7 @@ import {
 } from './scene-objects.js';
 import { initMoonWebGPU } from './moonPhase.js';
 import { getRequestedNativeKernels, initializeNativeRuntime } from './native/native-runtime.js';
-import { WeatherService, DEFAULT_LOCATION_NAME } from './weather.js';
+import { WeatherService, WeatherServiceError, DEFAULT_LOCATION_NAME } from './weather.js';
 import { isWeatherRateLimited, RATE_LIMIT_CONFIG } from './net/openMeteoClient.js';
 import { AstronomyService } from './astronomy.js';
 import {
@@ -50,7 +50,10 @@ import {
     setReducedMotionPreference,
     updateAirQualityDisplay,
     updateAlertBanner,
-    updateHealthPanel
+    updateHealthPanel,
+    setWeatherStatus,
+    getAdvancedTabAvailability,
+    setAdvancedTabAvailability
 } from './ui.js';
 import { t, formatTime, formatTemp } from './i18n/strings.js';
 import { AnimationController } from './animation.js';
@@ -318,6 +321,10 @@ async function bootstrap() {
 
     const offlineStatus = document.getElementById('offline-status');
 
+    /**
+     * @param {boolean|undefined} isOffline
+     * @param {number|null|undefined} [cachedAt] epoch ms of the data being shown, if it is stale
+     */
     function updateOfflineStatus(isOffline, cachedAt = null) {
         if (!offlineStatus) return;
         if (isOffline && cachedAt) {
@@ -348,31 +355,165 @@ async function bootstrap() {
     window.addEventListener('offline', showLatestOfflineStatus);
     window.addEventListener('online', () => updateOfflineStatus(false));
 
-    /** Apply one weather payload consistently across state, UI, persistence, and forecast data. */
-    async function applyWeatherData(data) {
+    /** Epoch ms of the last live (non-cached) payload shown; dates the banner if a later refresh fails. */
+    let lastLiveWeatherAt = 0;
+    /** One live fetch at a time across startup, the refresh timer, rate-limit retries and the Retry button. */
+    let weatherFetchInFlight = false;
+
+    /**
+     * The place a stale payload is for, when that isn't the place now selected
+     * (a failed search leaves the previous city's numbers on screen).
+     * @param {WeatherData} data
+     * @returns {string|null}
+     */
+    function stalePlace(data) {
+        return data.location && data.location !== weatherService.location ? data.location : null;
+    }
+
+    /**
+     * Put one weather payload on screen: state, panels, sparkline, preferences,
+     * the stale/ready indicator, and which advanced tabs have data behind them.
+     * Network-free, so it can also show a stale payload while retries still run.
+     * @param {WeatherData} data
+     * @param {{retrying?: boolean}} [options] more live attempts are underway
+     */
+    function renderWeatherData(data, { retrying = false } = {}) {
         state.weatherData = data;
         groundEffects.setLatitude(weatherService.latitude);
         updateWeatherDisplay(data, weatherService);
         drawSparkline(state.simulationTime, data, weatherService);
         savePreferences();
 
-        if (data?.isCached) {
+        if (data.isCached) {
             updateOfflineStatus(data.isOffline, data.cachedAt);
-            if (data.isOffline) {
-                showToast(t('offlineCachedData'), 'info');
-            } else {
-                const timeStr = formatTime(new Date(data.cachedAt));
-                showToast(t('offlineCachedWeatherAt', timeStr), 'info');
-            }
-        } else if (!navigator.onLine) {
-            showLatestOfflineStatus();
+            setWeatherStatus({
+                kind: 'stale',
+                cachedAt: data.cachedAt ?? Date.now(),
+                place: stalePlace(data),
+                retrying
+            });
         } else {
-            updateOfflineStatus(false);
+            lastLiveWeatherAt = Date.now();
+            if (!navigator.onLine) showLatestOfflineStatus();
+            else updateOfflineStatus(false);
+            setWeatherStatus({ kind: 'ready' });
         }
+        setAdvancedTabAvailability(getAdvancedTabAvailability(data));
+    }
+
+    /**
+     * Apply one weather payload consistently across state, UI, persistence, and
+     * forecast data. A stale payload whose live update was rate-limited also
+     * schedules the retry that a thrown error would have.
+     * @param {WeatherData} data
+     */
+    async function applyWeatherData(data) {
+        renderWeatherData(data);
 
         await loadDailyForecast();
         await loadAirQualityAndAlerts();
+        // Health opens once the air-quality attempt is over, found or not. Skip if a newer payload has replaced this one.
+        if (state.weatherData === data) {
+            setAdvancedTabAvailability(getAdvancedTabAvailability(data, { healthReady: true }));
+        }
+
+        if (data.isCached && isWeatherRateLimited(data.liveError)) handleRateLimited(data.liveError);
     }
+
+    /** Header text for a location whose weather could not be loaded. */
+    function showLocationNameInHeader() {
+        const locationEl = document.getElementById('location');
+        if (locationEl) locationEl.textContent = weatherService.location ?? t('weatherUnavailable');
+    }
+
+    /**
+     * The first live attempt failed and retries (tens of seconds) are starting.
+     * Stop spinning: show the best stale payload now, or an error if there is
+     * none, and let the retries finish quietly behind it.
+     */
+    function showWeatherAttemptFailed() {
+        const showing = state.weatherData;
+        // Live data for the selected place is already up (a background refresh): keep it.
+        if (showing && !showing.isCached && showing.location === weatherService.location) return;
+
+        const stale = weatherService.getStaleWeather();
+        if (stale) {
+            renderWeatherData(stale, { retrying: true });
+        } else {
+            showLocationNameInHeader();
+            setWeatherStatus({ kind: 'error', retrying: true });
+        }
+    }
+
+    /** @type {FetchWeatherOptions} */
+    const liveFetchOptions = { onFirstFailure: showWeatherAttemptFailed };
+
+    /**
+     * Every attempt failed and there was nothing cached to fall back to.
+     * @param {any} error
+     */
+    function showWeatherFailure(error) {
+        const offline = error?.isOffline || !navigator.onLine;
+        const showing = state.weatherData;
+        if (showing) {
+            // Something older is on screen: label it rather than leave it looking current.
+            setWeatherStatus({
+                kind: 'stale',
+                cachedAt: showing.cachedAt ?? (lastLiveWeatherAt || Date.now()),
+                place: stalePlace(showing)
+            });
+            if (offline) showLatestOfflineStatus();
+            if (isWeatherRateLimited(error)) handleRateLimited(error);
+            return;
+        }
+
+        showLocationNameInHeader();
+        setWeatherStatus({ kind: 'error' });
+        if (offline) {
+            showLatestOfflineStatus();
+            showToast(t('offlineNoCachedData'), 'error');
+        } else {
+            updateOfflineStatus(false);
+            if (isWeatherRateLimited(error)) handleRateLimited(error);
+            else showToast(t('weatherLoadFailed'), 'error');
+        }
+    }
+
+    /** The Retry button was pressed: show that attempts are running so it isn't pressed twice. */
+    function markWeatherRetrying() {
+        const showing = state.weatherData;
+        if (showing?.isCached) {
+            setWeatherStatus({
+                kind: 'stale',
+                cachedAt: showing.cachedAt ?? Date.now(),
+                place: stalePlace(showing),
+                retrying: true
+            });
+        } else if (!showing) {
+            setWeatherStatus({ kind: 'error', retrying: true });
+        }
+    }
+
+    // A weather request that fails outside any handled path (a lazily loaded
+    // mode, a future caller) must not surface as "Uncaught (in promise)". Say so
+    // once in a while; the paths that own a UI state report their own failures.
+    let lastStrayErrorToastAt = 0;
+    window.addEventListener('unhandledrejection', (event) => {
+        if (!(event.reason instanceof WeatherServiceError)) return;
+        event.preventDefault();
+        console.warn('Weather request failed outside a handled path:', event.reason);
+        const now = Date.now();
+        if (now - lastStrayErrorToastAt < 5000) return;
+        lastStrayErrorToastAt = now;
+        showToast(event.reason.isOffline ? t('offline') : t('weatherLoadFailed'), 'error');
+    });
+
+    // A mode (Timeline/Forecast) whose data could not load rolled back to where
+    // the user was; ModeController dispatches this instead of rejecting.
+    window.addEventListener('modeerror', (event) => {
+        const { mode } = /** @type {CustomEvent<{mode: string}>} */ (event).detail;
+        showToast(t('modeLoadFailed', mode), 'error');
+    });
 
     // Kiosk / wake-lock mode
     /** @type {WakeLockSentinel|null} */
@@ -519,7 +660,7 @@ async function bootstrap() {
                         if (locationEl) locationEl.textContent = previousName;
                         return;
                     }
-                    const data = await weatherService.fetchWeather();
+                    const data = await weatherService.fetchWeather(liveFetchOptions);
                     await applyWeatherData(data);
                 } catch (error) {
                     console.error('Location retry failed:', error);
@@ -527,6 +668,8 @@ async function bootstrap() {
                     showToast(t('locationNotDetected'), 'error');
                 }
             },
+
+            onRetryWeather: () => refreshWeather({ manual: true }),
 
             onToggleUnit: () => {
                 weatherService.toggleUnit();
@@ -578,7 +721,7 @@ async function bootstrap() {
 
                         const locationEl = document.getElementById('location');
                         if (locationEl) locationEl.textContent = 'Updating…';
-                        const data = await weatherService.fetchWeather();
+                        const data = await weatherService.fetchWeather(liveFetchOptions);
                         if (requestId !== searchRequestId) return;
                         await applyWeatherData(data);
 
@@ -592,6 +735,11 @@ async function bootstrap() {
                 } catch (error) {
                     if (error?.code === 'ABORTED') return;
                     console.error('Search failed:', error);
+                    // The header was set to "Updating…" for a fetch that never finished.
+                    const locationEl = document.getElementById('location');
+                    if (locationEl && locationEl.textContent === 'Updating…') {
+                        locationEl.textContent = state.weatherData?.location ?? weatherService.location;
+                    }
                     if (isWeatherRateLimited(error)) {
                         handleRateLimited(error);
                         return;
@@ -709,17 +857,22 @@ async function bootstrap() {
     async function fetchAndDisplayWeather() {
         if (state.isDebugMode) return;
 
-        const locationEl = document.getElementById('location');
-        if (locationEl) locationEl.textContent = 'Loading…';
+        // The one loading indicator: the description line, until data (or an error) replaces it.
+        setWeatherStatus({ kind: 'loading' });
+        // Nothing to show in the advanced drawer yet: tabs off, placeholder on (localised).
+        setAdvancedTabAvailability(getAdvancedTabAvailability(null));
+        weatherFetchInFlight = true;
         try {
             const hadSavedLocation = loadPreferences();
             updateUnitButton(weatherService);
+            // A saved place is known now; only a cold start is still "Detecting Location...".
+            if (hadSavedLocation) showLocationNameInHeader();
 
             let data;
             if (hadSavedLocation) {
-                data = await weatherService.fetchWeather();
+                data = await weatherService.fetchWeather(liveFetchOptions);
             } else {
-                data = await weatherService.initialize();
+                data = await weatherService.initialize(liveFetchOptions);
                 if (weatherService.locationStatus) showLocationNotice(weatherService.locationStatus);
                 savePreferences();
             }
@@ -728,19 +881,9 @@ async function bootstrap() {
             await applyWeatherData(data);
         } catch (error) {
             console.error('Weather initialization failed:', error);
-            if (locationEl) locationEl.textContent = 'Weather data unavailable';
-            const descEl = document.getElementById('current-description');
-            if (descEl) descEl.textContent = 'Unable to fetch';
-
-            const isOffline = error?.isOffline || !navigator.onLine;
-            if (isOffline) {
-                showLatestOfflineStatus();
-                showToast(t('offlineNoCachedData'), 'error');
-            } else {
-                updateOfflineStatus(false);
-                if (isWeatherRateLimited(error)) handleRateLimited(error);
-                else showToast(t('weatherLoadFailed'), 'error');
-            }
+            showWeatherFailure(error);
+        } finally {
+            weatherFetchInFlight = false;
         }
     }
 
@@ -763,19 +906,20 @@ async function bootstrap() {
         }, retryAfterMs);
     }
 
-    async function refreshWeather() {
-        if (state.isDebugMode) return;
+    /** @param {{manual?: boolean}} [options] manual: the user pressed Retry */
+    async function refreshWeather({ manual = false } = {}) {
+        if (state.isDebugMode || weatherFetchInFlight) return;
+        weatherFetchInFlight = true;
+        if (manual) markWeatherRetrying();
         try {
-            const data = await weatherService.fetchWeather();
+            const data = await weatherService.fetchWeather(liveFetchOptions);
             if (state.isDebugMode) return;
             await applyWeatherData(data);
         } catch (error) {
             console.error('Weather update failed:', error);
-            if (isWeatherRateLimited(error)) {
-                handleRateLimited(error);
-                return;
-            }
-            showToast(error?.isOffline ? t('offlineNoCachedData') : 'Weather update failed.', 'error');
+            showWeatherFailure(error);
+        } finally {
+            weatherFetchInFlight = false;
         }
     }
 
