@@ -10,10 +10,19 @@
  * @property {string} offline
  * @property {(time: string) => string} offlineWithTime
  * @property {string} offlineCachedData
- * @property {(time: string) => string} offlineCachedWeatherAt
  * @property {string} offlineNoCachedData
  * @property {string} weatherLoadFailed
  * @property {(seconds: number) => string} weatherRateLimited
+ * @property {string} weatherLoading
+ * @property {string} weatherUnavailable
+ * @property {(time: string, place: string|null) => string} weatherStaleBanner
+ * @property {string} weatherUnavailableBanner
+ * @property {string} weatherRetrying
+ * @property {string} weatherRetry
+ * @property {string} advancedTabUnavailable
+ * @property {string} advancedPanelEmpty
+ * @property {(mode: string) => string} modeLoadFailed
+ * @property {string} forecastUnavailable
  * @property {string} locationNotDetected
  * @property {(place: string|null, reason: LocationFallbackReason) => string} locationFallbackNotice
  * @property {string} locationUseMine
@@ -56,10 +65,20 @@ const STRINGS = {
         offline: 'Offline',
         offlineWithTime: (time) => `Offline — showing data from ${time}`,
         offlineCachedData: 'Offline — showing cached data',
-        offlineCachedWeatherAt: (time) => `Showing cached weather from ${time}`,
         offlineNoCachedData: 'Offline — no cached weather data available',
         weatherLoadFailed: 'Failed to load weather data. Check your connection.',
         weatherRateLimited: (seconds) => `Weather service is rate-limited, retrying in ${seconds} s`,
+        weatherLoading: 'Loading weather…',
+        weatherUnavailable: 'Weather data unavailable',
+        weatherStaleBanner: (time, place) =>
+            `Showing cached data${place ? ` for ${place}` : ''} from ${time}. Live update failed.`,
+        weatherUnavailableBanner: 'Could not load weather data.',
+        weatherRetrying: 'Retrying…',
+        weatherRetry: 'Retry',
+        advancedTabUnavailable: 'Available once weather data has loaded',
+        advancedPanelEmpty: 'Weather details appear here once data has loaded.',
+        modeLoadFailed: (mode) => `Could not load ${mode} data. Check your connection and try again.`,
+        forecastUnavailable: 'Forecast data is unavailable. Check your connection and try again.',
         locationNotDetected: 'Could not detect location. Try searching for a city.',
         locationFallbackNotice: (place, reason) => {
             const shown = place ? `Showing ${place}` : 'Showing a default location';
@@ -114,10 +133,21 @@ const STRINGS = {
         offline: 'Sin conexión',
         offlineWithTime: (time) => `Sin conexión — datos de las ${time}`,
         offlineCachedData: 'Sin conexión — mostrando datos en caché',
-        offlineCachedWeatherAt: (time) => `Mostrando el clima en caché desde las ${time}`,
         offlineNoCachedData: 'Sin conexión — no hay datos del clima en caché',
         weatherLoadFailed: 'No se pudo cargar el clima. Comprueba tu conexión.',
         weatherRateLimited: (seconds) => `El servicio del clima está limitado, reintentando en ${seconds} s`,
+        weatherLoading: 'Cargando el clima…',
+        weatherUnavailable: 'Datos del clima no disponibles',
+        weatherStaleBanner: (time, place) =>
+            `Mostrando datos en caché${place ? ` de ${place}` : ''} desde las ${time}. Falló la actualización en vivo.`,
+        weatherUnavailableBanner: 'No se pudieron cargar los datos del clima.',
+        weatherRetrying: 'Reintentando…',
+        weatherRetry: 'Reintentar',
+        advancedTabUnavailable: 'Disponible cuando se carguen los datos del clima',
+        advancedPanelEmpty: 'Los detalles del clima aparecerán aquí cuando se carguen los datos.',
+        modeLoadFailed: (mode) =>
+            `No se pudieron cargar los datos de ${{ timeline: 'la línea de tiempo', forecast: 'el pronóstico' }[mode] ?? mode}. Comprueba tu conexión e inténtalo de nuevo.`,
+        forecastUnavailable: 'El pronóstico no está disponible. Comprueba tu conexión e inténtalo de nuevo.',
         locationNotDetected: 'No se pudo detectar la ubicación. Prueba a buscar una ciudad.',
         locationFallbackNotice: (place, reason) => {
             const shown = place ? `Mostrando ${place}` : 'Mostrando una ubicación predeterminada';

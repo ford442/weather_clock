@@ -51,8 +51,7 @@ test.describe('functional', () => {
 
         const api = await page.evaluate(() => ({
             hasValidateAll: typeof window.aetherDebug?.validateAll,
-            stubGone:
-                typeof window.DOMBindingValidator === 'undefined' && typeof window.ZIndexManager === 'undefined'
+            stubGone: typeof window.DOMBindingValidator === 'undefined' && typeof window.ZIndexManager === 'undefined'
         }));
         expect(api.hasValidateAll).toBe('function');
         expect(api.stubGone).toBe(true);
@@ -217,5 +216,126 @@ test.describe('functional', () => {
         await page.locator('#panel-advanced .tab-btn[data-tab="health"]').click();
         await expect(page.locator('#health-aqi-eu')).toHaveClass(/primary-scale/);
         await expect(page.locator('#health-aqi-us')).not.toHaveClass(/primary-scale/);
+    });
+});
+
+/**
+ * Open-Meteo goes down. Registered after mockExternalAPIs, so it takes
+ * precedence; a 400 is not retryable, which keeps the spec fast.
+ * @returns {{restore: () => Promise<void>}}
+ */
+async function failOpenMeteo(page) {
+    const handler = (route) => route.fulfill({ status: 400, body: 'unavailable' });
+    await page.route(/open-meteo\.com/, handler);
+    return { restore: () => page.unroute(/open-meteo\.com/, handler) };
+}
+
+test.describe('weather failure handling', () => {
+    test.beforeEach(async ({ page }) => {
+        await mockExternalAPIs(page);
+    });
+
+    test('a failed load shows one error state, disables the detail tabs, and Retry recovers', async ({ page }) => {
+        const outage = await failOpenMeteo(page);
+        await launchApp(page);
+
+        const notice = page.locator('#weather-notice');
+        await expect(notice).toBeVisible();
+        await expect(page.locator('#weather-notice-text')).toHaveText('Could not load weather data.');
+        await expect(page.locator('#weather-notice-retry')).toBeVisible();
+
+        // One indicator, now an error: neither a "Loading…" header nor a spinner left behind.
+        await expect(page.locator('#current-description')).toHaveText('Weather data unavailable');
+        await expect(page.locator('#location')).not.toHaveText(/loading/i);
+        await expect(page.locator('body')).toHaveAttribute('data-weather-state', 'error');
+
+        // Nothing to look at yet, so the tabs say so rather than opening onto `--`.
+        for (const tab of ['history', 'accuracy', 'nearby', 'health']) {
+            const button = page.locator(`#panel-advanced .tab-btn[data-tab="${tab}"]`);
+            await expect(button).toBeDisabled();
+            await expect(button).toHaveAttribute('aria-disabled', 'true');
+        }
+        await page.locator('#panel-advanced .tab-btn[data-tab="health"]').click({ force: true });
+        await expect(page.locator('#panel-advanced')).toHaveClass(/no-data/);
+        await expect(page.locator('#panel-advanced .tab-btn.active')).toHaveAttribute('data-tab', 'history');
+
+        await outage.restore();
+        await page.locator('#weather-notice-retry').click();
+
+        await expect(notice).toBeHidden({ timeout: 30_000 });
+        await expect(page.locator('body')).toHaveAttribute('data-weather-state', 'ready');
+        // Each tab opens with its own data: nearby and health do; accuracy has none in the fixtures.
+        await expect(page.locator('#panel-advanced .tab-btn[data-tab="nearby"]')).toBeEnabled();
+        await expect(page.locator('#panel-advanced .tab-btn[data-tab="health"]')).toBeEnabled({ timeout: 30_000 });
+        await expect(page.locator('#panel-advanced .tab-btn[data-tab="accuracy"]')).toBeDisabled();
+        await expect(page.locator('#panel-advanced')).not.toHaveClass(/no-data/);
+    });
+
+    test('a failed update keeps the last good weather on screen, labelled, with Retry', async ({ page }) => {
+        await launchApp(page); // loads fine, so a last-known-good snapshot is stored
+        await expect(page.locator('body')).toHaveAttribute('data-weather-state', 'ready');
+        const placeName = await page.locator('#location').textContent();
+
+        const outage = await failOpenMeteo(page);
+        await searchForLocation(page, 'London'); // a place that has never loaded
+
+        // The snapshot of the previous place is shown, and the banner says whose it is and when.
+        const text = page.locator('#weather-notice-text');
+        await expect(text).toHaveText(/^Showing cached data for .+ from .+\. Live update failed\.$/, {
+            timeout: 30_000
+        });
+        await expect(text).toContainText(placeName.trim());
+        await expect(page.locator('#location')).toHaveText(placeName);
+        await expect(page.locator('body')).toHaveAttribute('data-weather-state', 'stale');
+        await expect(page.locator('#weather-notice-retry')).toBeVisible();
+
+        await outage.restore();
+        await page.locator('#weather-notice-retry').click();
+
+        await expect(page.locator('#weather-notice')).toBeHidden({ timeout: 30_000 });
+        await expect(page.locator('#location')).toHaveText('London');
+    });
+
+    test('a timeline that cannot load stays on the clock with a toast and no uncaught error', async ({ page }) => {
+        const pageErrors = [];
+        page.on('pageerror', (error) => pageErrors.push(error.message));
+        await launchApp(page);
+
+        const outage = await failOpenMeteo(page);
+        await page.keyboard.press('t');
+
+        await expect(page.locator('#toast-container .toast-error', { hasText: /timeline/i })).toBeVisible({
+            timeout: 30_000
+        });
+        await expect
+            .poll(() => page.evaluate(() => window.modeController.isTransitioning), { timeout: 30_000 })
+            .toBe(false);
+        expect(await page.evaluate(() => window.modeController.currentMode)).toBe('clock');
+        await expect(page).not.toHaveURL(/[?&]mode=/);
+        await expect(page.locator('#panel-left')).not.toHaveClass(/hidden/);
+        expect(pageErrors).toEqual([]);
+
+        // The failed attempt left nothing behind that would open the timeline empty.
+        await outage.restore();
+        await page.keyboard.press('t');
+        await expect(page).toHaveURL(/[?&]mode=timeline/, { timeout: 30_000 });
+        await expect(page.locator('#timeline-ui-container')).toHaveClass(/visible/, { timeout: 30_000 });
+    });
+
+    test('a weather request that fails outside any handled path becomes a toast, not an uncaught error', async ({
+        page
+    }) => {
+        const pageErrors = [];
+        page.on('pageerror', (error) => pageErrors.push(error.message));
+        await launchApp(page);
+        await failOpenMeteo(page);
+
+        // A real WeatherServiceError rejection that nothing awaits or catches.
+        await page.evaluate(() => {
+            window.modeController.weatherService.getDailyForecast(1, 2, 3);
+        });
+
+        await expect(page.locator('#toast-container .toast-error')).toContainText(/weather/i, { timeout: 15_000 });
+        expect(pageErrors).toEqual([]);
     });
 });

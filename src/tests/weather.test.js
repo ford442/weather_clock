@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WeatherService } from '../weather.js';
-import { resetRateLimit } from '../net/openMeteoClient.js';
+import { resetRateLimit, WeatherServiceError } from '../net/openMeteoClient.js';
+import { LAST_GOOD_MAX_AGE_MS, LAST_GOOD_STORAGE_KEY } from '../net/lastKnownGood.js';
 import { getWeatherAtTime } from '../weather-simulation.js';
 
 // Mock fetch
@@ -835,5 +836,187 @@ describe('Forecast accuracy', () => {
         expect(first).not.toBeNull();
         expect(second).toEqual(first);
         expect(fetch).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('WeatherService stale-weather fallback', () => {
+    const livePayload = (location) => ({
+        location,
+        current: { temp: 20 },
+        timeline: [
+            { time: new Date('2026-11-13T10:00:00Z'), temp: 19 },
+            { time: new Date('2026-11-13T11:00:00Z'), temp: 21 }
+        ],
+        sunrise: new Date('2026-11-13T11:30:00Z'),
+        sunset: new Date('2026-11-13T21:30:00Z'),
+        historicalYearAgo: null,
+        regional: null,
+        accuracy: null
+    });
+
+    function serviceAt(name, lat, lon, options = { retryDelaysMs: [] }) {
+        const service = new WeatherService(options);
+        service.setManualLocation(lat, lon, name);
+        return service;
+    }
+
+    it('remembers the last live payload for any location and serves it when another place fails', async () => {
+        const storage = createFakeLocalStorage();
+        vi.stubGlobal('localStorage', storage);
+
+        const london = serviceAt('London', 51.5, -0.12);
+        vi.spyOn(london, '_fetchWeatherOnce').mockResolvedValue(livePayload('London'));
+        await london.fetchWeather();
+        expect(storage.store[LAST_GOOD_STORAGE_KEY]).toBeDefined();
+
+        // A fresh session searches for Paris, which has never loaded and now fails.
+        const paris = serviceAt('Paris', 48.85, 2.35);
+        vi.spyOn(paris, '_fetchWeatherOnce').mockRejectedValue(new WeatherServiceError('down', 500));
+
+        const data = await paris.fetchWeather();
+
+        expect(data.location).toBe('London'); // the numbers say which place they are for
+        expect(data.current.temp).toBe(20);
+        expect(data.isCached).toBe(true);
+        expect(data.cachedAt).toBeGreaterThan(0);
+        expect(data.liveError).toBeInstanceOf(WeatherServiceError);
+        expect(data.timeline[0].time).toBeInstanceOf(Date); // revived: the pipeline calls .getTime()
+        expect(data.sunset).toBeInstanceOf(Date);
+    });
+
+    it('prefers the cache entry for the active location over the snapshot of another', async () => {
+        vi.stubGlobal('localStorage', createFakeLocalStorage());
+
+        const london = serviceAt('London', 51.5, -0.12);
+        vi.spyOn(london, '_fetchWeatherOnce').mockResolvedValue(livePayload('London'));
+        await london.fetchWeather();
+
+        const paris = serviceAt('Paris', 48.85, 2.35);
+        paris.setCache(paris.getCacheKey(48.85, 2.35), livePayload('Paris'));
+        vi.spyOn(paris, '_fetchWeatherOnce').mockRejectedValue(new WeatherServiceError('down', 500));
+
+        expect((await paris.fetchWeather()).location).toBe('Paris');
+    });
+
+    it('revives Dates on a cache entry read back from localStorage after a reload', async () => {
+        vi.stubGlobal('localStorage', createFakeLocalStorage());
+
+        const before = serviceAt('London', 51.5, -0.12);
+        before.setCache(before.getCacheKey(51.5, -0.12), livePayload('London'));
+
+        // Same place, new page load: nothing in memory, only what localStorage kept.
+        const after = serviceAt('London', 51.5, -0.12);
+        vi.spyOn(after, '_fetchWeatherOnce').mockRejectedValue(new WeatherServiceError('down', 500));
+        const data = await after.fetchWeather();
+
+        expect(data.isCached).toBe(true);
+        expect(data.timeline[0].time).toBeInstanceOf(Date);
+
+        // Why it matters: the weather pipeline calls .getTime() on every timeline point.
+        const noon = new Date('2026-11-13T10:30:00Z');
+        const unrevived = JSON.parse(JSON.stringify(livePayload('London'))).timeline;
+        expect(() => getWeatherAtTime(noon, unrevived)).toThrow(TypeError);
+        expect(getWeatherAtTime(noon, data.timeline).temp).toBe(20);
+    });
+
+    it('throws the live error when there is neither a cache entry nor a usable snapshot', async () => {
+        const storage = createFakeLocalStorage();
+        vi.stubGlobal('localStorage', storage);
+        const service = serviceAt('Paris', 48.85, 2.35);
+        const failure = new WeatherServiceError('down', 500);
+        vi.spyOn(service, '_fetchWeatherOnce').mockRejectedValue(failure);
+
+        await expect(service.fetchWeather()).rejects.toBe(failure);
+        expect(service.getStaleWeather()).toBeNull();
+
+        // An expired snapshot is as good as none.
+        storage.setItem(
+            LAST_GOOD_STORAGE_KEY,
+            JSON.stringify({
+                savedAt: Date.now() - LAST_GOOD_MAX_AGE_MS - 1000,
+                data: livePayload('London')
+            })
+        );
+        await expect(service.fetchWeather()).rejects.toBe(failure);
+    });
+
+    it('marks stale data offline when the failure was an offline one', async () => {
+        vi.stubGlobal('localStorage', createFakeLocalStorage());
+        vi.stubGlobal('navigator', { onLine: true });
+        const service = serviceAt('London', 51.5, -0.12);
+        service.setCache(service.getCacheKey(51.5, -0.12), livePayload('London'));
+        const offline = new WeatherServiceError('Device is offline', null, null, { code: 'OFFLINE', isOffline: true });
+        vi.spyOn(service, '_fetchWeatherOnce').mockRejectedValue(offline);
+
+        const data = await service.fetchWeather();
+
+        expect(data.isOffline).toBe(true);
+        expect(data.liveError).toBe(offline);
+    });
+
+    describe('onFirstFailure', () => {
+        it('fires once, as soon as the first attempt fails and before the retries finish', async () => {
+            vi.useFakeTimers();
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const service = serviceAt('London', 51.5, -0.12, { retryDelaysMs: [2000, 4000, 8000] });
+            service.setCache(service.getCacheKey(51.5, -0.12), livePayload('London'));
+            const attempt = vi
+                .spyOn(service, '_fetchWeatherOnce')
+                .mockRejectedValue(new WeatherServiceError('down', 500));
+            const onFirstFailure = vi.fn();
+
+            const result = service.fetchWeather({ onFirstFailure });
+
+            await vi.advanceTimersByTimeAsync(0);
+            expect(attempt).toHaveBeenCalledTimes(1);
+            expect(onFirstFailure).toHaveBeenCalledTimes(1); // 14 s of retries still ahead
+            expect(onFirstFailure.mock.calls[0][0]).toBeInstanceOf(WeatherServiceError);
+
+            await vi.advanceTimersByTimeAsync(14000);
+            expect((await result).isCached).toBe(true);
+            expect(attempt).toHaveBeenCalledTimes(4);
+            expect(onFirstFailure).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not fire when the first attempt succeeds, or when a retry recovers it', async () => {
+            vi.useFakeTimers();
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const service = serviceAt('London', 51.5, -0.12, { retryDelaysMs: [1000] });
+            const attempt = vi.spyOn(service, '_fetchWeatherOnce').mockResolvedValue(livePayload('London'));
+            const onFirstFailure = vi.fn();
+
+            await service.fetchWeather({ onFirstFailure });
+            expect(onFirstFailure).not.toHaveBeenCalled();
+
+            attempt.mockRejectedValueOnce(new WeatherServiceError('blip', 503));
+            const recovered = service.fetchWeather({ onFirstFailure });
+            await vi.advanceTimersByTimeAsync(1000);
+            expect((await recovered).isCached).toBeUndefined();
+            expect(onFirstFailure).toHaveBeenCalledTimes(1); // the blip itself, which is the point
+        });
+
+        it('is not called when nothing will be retried, and a throwing callback cannot break the fetch', async () => {
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            vi.spyOn(console, 'error').mockImplementation(() => {});
+            const service = serviceAt('London', 51.5, -0.12, { retryDelaysMs: [1] });
+            service.setCache(service.getCacheKey(51.5, -0.12), livePayload('London'));
+
+            const attempt = vi
+                .spyOn(service, '_fetchWeatherOnce')
+                .mockRejectedValue(new WeatherServiceError('bad request', 400));
+            const onFirstFailure = vi.fn();
+            await service.fetchWeather({ onFirstFailure });
+            expect(attempt).toHaveBeenCalledTimes(1);
+            expect(onFirstFailure).not.toHaveBeenCalled();
+
+            attempt.mockRejectedValue(new WeatherServiceError('down', 500));
+            const exploding = vi.fn(() => {
+                throw new Error('UI bug');
+            });
+            await expect(service.fetchWeather({ onFirstFailure: exploding })).resolves.toMatchObject({
+                isCached: true
+            });
+            expect(exploding).toHaveBeenCalledTimes(1);
+        });
     });
 });

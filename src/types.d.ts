@@ -190,10 +190,19 @@ interface WeatherData {
     alerts?: Array<{ event: string; severity: string; headline: string; description: string }>;
     /** Attached by main.js once the 10-Day Forecast View lazily loads it. */
     dailyForecast?: DailyForecastDay[];
-    /** Set when fetchWeather() fell back to a stale cache entry after a fetch failure. */
+    /** Set when fetchWeather() fell back to a stale cache entry or the last-known-good snapshot after a fetch failure. */
     isCached?: boolean;
     isOffline?: boolean;
+    /** Epoch ms the stale payload was originally fetched (only with `isCached`). */
     cachedAt?: number;
+    /** Why the live fetch failed (only with `isCached`); lets the UI schedule a rate-limit retry. */
+    liveError?: Error;
+}
+
+/** Options for `WeatherService.fetchWeather()` / `initialize()`. */
+interface FetchWeatherOptions {
+    /** Called once when the first attempt fails and a retry is about to start. */
+    onFirstFailure?: (error: unknown) => void;
 }
 
 /**

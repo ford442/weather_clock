@@ -110,6 +110,23 @@ export class ForecastUI {
         if (this.scrubberEl) this.scrubberEl.style.display = 'none';
     }
 
+    /**
+     * Replace the loading skeletons with a message once the forecast is known
+     * not to be coming; otherwise they shimmer forever.
+     * @param {string} message
+     */
+    renderUnavailable(message) {
+        if (!this.cardsContainer) return;
+        this.disposePreviewBuffers();
+        const note = document.createElement('div');
+        note.className = 'forecast-unavailable';
+        note.setAttribute('role', 'status');
+        note.textContent = message;
+        this.cardsContainer.replaceChildren(note);
+        this.cards = [];
+        if (this.scrubberEl) this.scrubberEl.style.display = 'none';
+    }
+
     renderCards(days) {
         if (!this.cardsContainer) return;
         this.disposePreviewBuffers();
@@ -235,6 +252,7 @@ export class ForecastUI {
             .skeleton { position:relative; overflow:hidden; border-radius:4px; background:rgba(255,255,255,.10); color:transparent; }
             .skeleton::after { content:''; position:absolute; inset:0; transform:translateX(-100%); background:linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent); animation:forecast-shimmer 1.4s infinite; }
             .fc-preview.skeleton { height:72px; }
+            .forecast-unavailable { padding:18px 8px; font-size:13px; opacity:.85; }
             @keyframes forecast-shimmer { to { transform:translateX(100%); } }
             @media (max-width: 720px) {
                 .forecast-strip { padding: 8px; }

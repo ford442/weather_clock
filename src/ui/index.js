@@ -24,4 +24,11 @@ export { setSearchLoading } from './search.js';
 export { showLocationNotice, hideLocationNotice } from './location-notice.js';
 export { showToast, showActionToast } from './toast.js';
 export { setupKeyboardShortcuts } from './shortcuts.js';
-export { setupUiChrome, activateAdvancedTab, toggleDrawer } from './chrome.js';
+export {
+    setupUiChrome,
+    activateAdvancedTab,
+    toggleDrawer,
+    getAdvancedTabAvailability,
+    setAdvancedTabAvailability
+} from './chrome.js';
+export { setWeatherStatus } from './weather-status.js';

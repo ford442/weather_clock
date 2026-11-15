@@ -137,7 +137,12 @@ export class ModeController {
         return this.switchMode(/** @type {AppMode} */ (MODES[(currentIndex + 1) % MODES.length]));
     }
 
-    /** @param {AppMode} newMode */
+    /**
+     * Switch modes. Never rejects: if the new mode fails to enter (its data
+     * could not load, a module failed to import) the user is put back in the
+     * mode they left and a `modeerror` event is dispatched for the UI to report.
+     * @param {AppMode} newMode
+     */
     async switchMode(newMode) {
         if (!MODES.includes(newMode) || newMode === this.currentMode || this.isTransitioning || this.locked) return;
 
@@ -152,9 +157,31 @@ export class ModeController {
             this.currentMode = newMode;
             this.updateToggleUI();
             window.dispatchEvent(new CustomEvent('modechange', { detail: { mode: newMode } }));
+        } catch (error) {
+            console.error(`Could not enter ${newMode} mode:`, error);
+            await this.rollbackModeSwitch(previousMode, newMode);
+            window.dispatchEvent(new CustomEvent('modeerror', { detail: { mode: newMode, error } }));
         } finally {
             this.isTransitioning = false;
         }
+    }
+
+    /**
+     * Undo a switch that failed partway. exit() already hid the previous mode's
+     * UI and enter() may have built part of the new one; a half-built mode is
+     * disposed so the next attempt starts from init() instead of opening empty.
+     * @param {AppMode} previousMode
+     * @param {AppMode} failedMode
+     */
+    async rollbackModeSwitch(previousMode, failedMode) {
+        try {
+            this.adapters[failedMode].dispose?.();
+            await this.adapters[previousMode].enter?.({ from: failedMode });
+        } catch (rollbackError) {
+            console.error(`Could not restore ${previousMode} mode:`, rollbackError);
+        }
+        this.updateHistory(previousMode, { replace: true });
+        this.updateToggleUI();
     }
 
     enterTimelineMode() {
@@ -202,16 +229,16 @@ export class ModeController {
         this.shell.updateToggleUI();
     }
 
-    /** @param {AppMode} mode */
-    updateHistory(mode) {
+    /**
+     * @param {AppMode} mode
+     * @param {{replace?: boolean}} [options] replace the current entry instead of adding one
+     */
+    updateHistory(mode, { replace = false } = {}) {
         const url = new URL(window.location.href);
-        if (mode === 'clock') {
-            url.searchParams.delete('mode');
-            history.pushState({ mode: 'clock' }, '', url);
-        } else {
-            url.searchParams.set('mode', mode);
-            history.pushState({ mode }, '', url);
-        }
+        if (mode === 'clock') url.searchParams.delete('mode');
+        else url.searchParams.set('mode', mode);
+        if (replace) history.replaceState({ mode }, '', url);
+        else history.pushState({ mode }, '', url);
     }
 
     setupHistory() {

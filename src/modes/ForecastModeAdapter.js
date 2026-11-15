@@ -1,4 +1,5 @@
 import { animateModeCamera, MODE_CAMERA } from './camera-transition.js';
+import { t } from '../i18n/strings.js';
 
 export class ForecastModeAdapter {
     /** @param {import('../ModeController.js').ModeController} owner */
@@ -89,6 +90,7 @@ export class ForecastModeAdapter {
         );
         await controller.loadData(location.lat, location.lon, prefetchedDaily);
         if (controller.days.length) controller.focusDay(0);
+        else if (controller.loadError) this.ui?.renderUnavailable?.(t('forecastUnavailable'));
 
         const fromPosition = this.owner.camera.position.clone();
         const fromTarget = this.owner.controls.target.clone();

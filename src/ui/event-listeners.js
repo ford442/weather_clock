@@ -4,6 +4,7 @@ import { setupUiChrome } from './chrome.js';
 /**
  * @param {{
  *   onRetryLocation?: (e: MouseEvent) => void,
+ *   onRetryWeather?: () => void,
  *   onToggleUnit?: () => void,
  *   onSetQuality?: (tier: string|undefined) => void,
  *   onSearch: (query: string) => void,
@@ -27,6 +28,9 @@ export function setupEventListeners(callbacks, modeController) {
         document.querySelector('.search-container')?.classList.add('expanded');
         document.getElementById('location-search')?.focus();
     });
+
+    // Stale/unavailable weather banner: try the live fetch again.
+    document.getElementById('weather-notice-retry')?.addEventListener('click', () => callbacks.onRetryWeather?.());
 
     const unitToggle = document.getElementById('unit-toggle');
     if (unitToggle) {

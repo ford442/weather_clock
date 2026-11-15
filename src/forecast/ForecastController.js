@@ -31,12 +31,15 @@ export class ForecastController {
 
         this.isVisible = false;
         this.isLoading = false;
+        /** @type {unknown} Why the last loadData() failed; null after a success. */
+        this.loadError = null;
     }
 
     /** @param {DailyForecastDay[]|null} [prefetchedDaily] */
     async loadData(lat, lon, prefetchedDaily = null) {
         if (this.isLoading) return;
         this.isLoading = true;
+        this.loadError = null;
         try {
             if (prefetchedDaily && prefetchedDaily.length > 0) {
                 this.days = prefetchedDaily.slice(0, 10);
@@ -52,6 +55,7 @@ export class ForecastController {
             }
         } catch (e) {
             console.warn('Forecast data load failed, using empty set', e);
+            this.loadError = e;
             this.days = [];
         } finally {
             this.isLoading = false;

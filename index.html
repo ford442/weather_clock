@@ -12,10 +12,17 @@
 
         <!-- Top Bar -->
         <div id="top-bar">
-            <div id="location-notice" class="location-notice" role="status" aria-live="polite" hidden>
-                <span id="location-notice-text" class="location-notice-text"></span>
-                <button id="location-notice-primary" class="location-notice-btn" type="button"></button>
-                <button id="location-notice-search" class="location-notice-btn" type="button"></button>
+            <div id="top-notices" class="top-notices">
+                <div id="location-notice" class="location-notice" role="status" aria-live="polite" hidden>
+                    <span id="location-notice-text" class="location-notice-text"></span>
+                    <button id="location-notice-primary" class="location-notice-btn" type="button"></button>
+                    <button id="location-notice-search" class="location-notice-btn" type="button"></button>
+                </div>
+                <!-- Stale / unavailable weather: filled and shown by src/ui/weather-status.js -->
+                <div id="weather-notice" class="weather-notice" role="status" aria-live="polite" hidden>
+                    <span id="weather-notice-text" class="weather-notice-text"></span>
+                    <button id="weather-notice-retry" class="location-notice-btn" type="button">Retry</button>
+                </div>
             </div>
             <div class="top-bar-left">
                 <div class="location-display">
@@ -420,17 +427,21 @@
         </div>
 
         <!-- Advanced Drawer -->
-        <div id="panel-advanced" class="advanced-drawer">
+        <div id="panel-advanced" class="advanced-drawer no-data">
             <div class="drawer-handle-grip">
                 <span class="drawer-handle-grip-label">History • Accuracy • Nearby • Health</span>
             </div>
             <div class="drawer-tabs">
-                <button class="tab-btn active" data-tab="history">History</button>
-                <button class="tab-btn" data-tab="accuracy">Accuracy</button>
-                <button class="tab-btn" data-tab="nearby">Nearby</button>
-                <button class="tab-btn" data-tab="health">Health</button>
+                <!-- Disabled until the data behind each tab has loaded (src/ui/chrome.js). -->
+                <button class="tab-btn active" data-tab="history" disabled aria-disabled="true">History</button>
+                <button class="tab-btn" data-tab="accuracy" disabled aria-disabled="true">Accuracy</button>
+                <button class="tab-btn" data-tab="nearby" disabled aria-disabled="true">Nearby</button>
+                <button class="tab-btn" data-tab="health" disabled aria-disabled="true">Health</button>
             </div>
             <div class="tab-panels">
+                <div id="advanced-empty" class="adv-empty" role="status">
+                    Weather details appear here once data has loaded.
+                </div>
                 <div class="tab-content active" id="tab-history">
                     <div class="adv-section">
                         <h3>1 Year Ago</h3>
