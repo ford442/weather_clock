@@ -596,7 +596,7 @@ export class StarField {
             this._satelliteLoad = import('./satellite-layer.js')
                 .then(async ({ SatelliteLayer }) => {
                     const layer = new SatelliteLayer(this.skyGroup, {
-                        radius: this.radius,
+                        radius: SCENE_LAYOUT.orbital.radius,
                         reducedMotion: this.reducedMotion
                     });
                     if (this._webgpu) await layer.initWebGPU();

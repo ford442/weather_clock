@@ -17,6 +17,7 @@ import { getSnapshotCatalog, loadLiveCatalog } from '../sky/satelliteCatalog.js'
 import { SATELLITE_LAYER_CONFIG, SatelliteLayer } from '../effects/satellite-layer.js';
 import { StarField } from '../effects/star-field.js';
 import { describeSkyBodies } from '../sky/skyBodies.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 
 const NYC = { latitude: 40.7128, longitude: -74.006 };
 const RAD_TO_DEG = 180 / Math.PI;
@@ -305,6 +306,15 @@ describe('satellite catalog loading', () => {
             expect(catalog.source).toBe('snapshot');
             expect(catalog.satellites.length).toBe(getSnapshotCatalog().satellites.length);
         }
+    });
+});
+
+describe('orbital radius', () => {
+    it('sits between the star sphere and the sky, inside the far plane', () => {
+        const { starSphere, orbital, sky, camera } = SCENE_LAYOUT;
+        expect(starSphere.radius).toBeLessThan(orbital.radius);
+        expect(orbital.radius).toBeLessThan(sky.scale);
+        expect(sky.scale).toBeLessThan(camera.far);
     });
 });
 

@@ -78,6 +78,15 @@ export const SCENE_LAYOUT = Object.freeze({
     }),
     sky: Object.freeze({ scale: 450000 }),
     starSphere: Object.freeze({ radius: 2000 }),
+    /**
+     * Shell the satellite layer is painted on. Strictly between
+     * `starSphere.radius` and `sky.scale` (`starSphere.radius < orbital.radius
+     * < sky.scale < camera.far`), so a satellite and a star at the same alt/az
+     * no longer share one depth under logarithmic depth. Directions still come
+     * from topocentric RA/Dec through `StarField.skyGroup`; only the radial
+     * distance differs.
+     */
+    orbital: Object.freeze({ radius: 20000 }),
     depth: Object.freeze({
         /**
          * Logarithmic depth on both backends — the right fix for a 2e6 far
