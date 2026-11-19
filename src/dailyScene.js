@@ -286,7 +286,7 @@ export class DailyScene {
             this.moonLight?.color || null
         );
 
-        this.sundial?.update?.(this.representativeTime);
+        this.sundial?.update?.(this.representativeTime, astro);
         return snap;
     }
 

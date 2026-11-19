@@ -969,6 +969,7 @@ async function bootstrap() {
             {
                 scene,
                 sky,
+                sundial,
                 weatherEffects,
                 sunLight,
                 moonLight,

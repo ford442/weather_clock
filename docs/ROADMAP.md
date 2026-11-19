@@ -3,25 +3,23 @@
 This is the living index of planned work for Weather Clock. GitHub issues own requirements, discussion, and completion state; this page only groups the currently open work into a useful order.
 
 - [All open issues](https://github.com/ford442/weather_clock/issues?q=is%3Aissue%20state%3Aopen)
-- Last reconciled with the issue tracker: 2026-09-21
+- Last reconciled with the issue tracker: 2026-11-19
 
 When an issue closes, remove it from this document. Add new work to the issue tracker before adding it here so this file does not become a second backlog.
 
-The previous index (issues 138–143) is closed. Do not treat those tickets as living work; the batch below is the tracker.
+The previous batch (issues 150–155) is closed. The in-repo sky and logarithmic depth (#150), Z-wrapped precipitation (#151), the JS-source-of-truth kernel freeze (#152), the true sundial (#154, landed under #168), and the satellite layer (#155) are on `main`. #153 closed with its work still on `examine/sundial-starfield`; #169 owns landing it. Do not reopen those tickets.
 
 ## P0 — Land this first
 
-- [#150 — Replace Three.js Sky and unlock a real depth contract](https://github.com/ford442/weather_clock/issues/150): the `Sky` addon is replaced by the in-repo dual-backend `SkyMaterial` and `SCENE_LAYOUT.depth.mode` is now `'logarithmic'` (reverse-Z waits on Three exposing it for `WebGPURenderer`). Remaining: recapture the sky-colour visual baselines, then distant-sky content (Milky Way, aurora, a distinct orbital radius) can build on the deep depth buffer.
-- [#151 — Precipitation volume: wrap Z, kill leftover spawn literals](https://github.com/ford442/weather_clock/issues/151): `SCENE_LAYOUT` owns zone X and fog Z; rain/snow/dust/lightning still spawn and drift on magic Z numbers and wrap **X only**. Wind plus time-warp walks precipitation out of the scene. JS kernel, C++ kernel, and committed WASM stay in lockstep.
+- [#169 — WebGPU sized stars: instanced sprites for catalog and planets](https://github.com/ford442/weather_clock/issues/169): Three's WebGPU backend draws `THREE.Points` as 1-pixel primitives and ignores `sizeNode`, so magnitude is folded into brightness and Venus has no disc. Land the star half of `examine/sundial-starfield`: catalog and planets as instanced sprites, the filler field still 1-px points. Every further sky layer composites against these stars. Playwright CI cannot see it (SwiftShader WebGL only).
 
-## P1 — Platform and correctness
+## P1 — Next sky layers
 
-- [#152 — Native C++/WASM toolchain: compile database, real SIMD, or a JS-source-of-truth freeze](https://github.com/ford442/weather_clock/issues/152): production does not use WASM (`NATIVE_ADOPTION` is all false; nothing cleared the 2× gate). There is no `compile_commands.json` / `compile_flags.txt`, no `-Wall`, and `-msimd128` is a compiler flag over scalar loops. Decide freeze vs SIMD before any new C++ kernel. Vanilla JS + JSDoc stays the runtime; no scene-graph rewrite to TypeScript.
-- [#153 — WebGPU sized stars via instanced sprites](https://github.com/ford442/weather_clock/issues/153): Three's WebGPU backend draws `THREE.Points` as 1-pixel primitives and ignores `sizeNode`. Catalog and planets should be instanced sprites so magnitude is area, not just brightness. Playwright CI cannot see this (SwiftShader WebGL only).
+- [#170 — Milky Way band on the star sphere](https://github.com/ford442/weather_clock/issues/170): pure galactic-pole math in `src/sky/`, one mesh parented to `StarField.skyGroup` on the star sphere, fading with twilight, cloud, and light pollution. No label. After #169.
+- [#172 — Satellites on their own orbital radius](https://github.com/ford442/weather_clock/issues/172): one `SCENE_LAYOUT.orbital.radius` between the star sphere and the sky, so a pass occludes stars under log depth. Same SGP4 path and `skyGroup` rotation as the layer already on `main`; no native kernel.
 
-## P2 — Next content bets
+## P2 — Content bets
 
-- [#154 — True celestial sundial](https://github.com/ford442/weather_clock/issues/154): the namesake object is still analog hands plus a decorative gnomon that yaws on `Date.now()`. Latitude-aligned style, solar hour lines, equation of time as graphics, shadow as the clock. Independent of #150.
-- [#155 — Optional orbital layer (ISS and bright satellites)](https://github.com/ford442/weather_clock/issues/155): TLE + `satellite.js` SGP4, parented into `StarField.skyGroup`, off by default, same twilight/cloud fade as the stars. Can live on the current star sphere; a distinct orbital radius waits on #150.
+- [#171 — Aurora curtains from the planetary K-index](https://github.com/ford442/weather_clock/issues/171): NOAA SWPC Kp, latitude-gated, snuffed by cloud, with the curtain as the only readout. After #169 and #170.
 
 Intent still lives in [VISION.md](./VISION.md).

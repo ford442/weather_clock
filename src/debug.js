@@ -85,7 +85,7 @@ export function createDebugWeatherData(simulationTime, weatherCode, timeline) {
  */
 export function setupDebugAPI(state, services, scene3d) {
     const { weatherService, astronomyService } = services;
-    const { scene, sky, weatherEffects, sunLight, moonLight, ambientLight, ambienceEngine } = scene3d;
+    const { scene, sky, sundial, weatherEffects, sunLight, moonLight, ambientLight, ambienceEngine } = scene3d;
 
     // Debug function: set weather code
     window.setDebugWeather = (weatherCode) => {
@@ -213,6 +213,8 @@ export function setupDebugAPI(state, services, scene3d) {
         setLightPollution: (amount) => weatherEffects.setSkyLayers?.({ lightPollution: amount }),
         /** Turn the satellite layer on/off without persisting; resolves once its chunk has loaded. */
         setSatellites: (visible = true) => weatherEffects.setSkyLayers?.({ satellites: visible }),
+        /** Gnomon latitude, drawn hour lines, and what the shadow / ghost / night pointer read right now. */
+        getSundialState: () => sundial?.getState?.() ?? null,
         /** Past→present→future narrative driving the zone tints, drift, and temporal band. */
         getTemporalNarrative: () => weatherEffects.narrative ?? null,
         spawnBolt: () => {
