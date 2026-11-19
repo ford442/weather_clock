@@ -20,7 +20,7 @@
             <div class="top-bar-left">
                 <div class="location-display">
                     <span id="location">Detecting Location...</span>
-                    <button id="retry-location" class="retry-btn" title="Retry Location">
+                    <button id="retry-location" class="retry-btn" title="Retry Location" aria-label="Retry location">
                         <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                             <path
                                 d="M2,8 A6,6 0 1,0 8,2"
@@ -82,7 +82,13 @@
                 <div class="search-container">
                     <input type="text" id="location-search" class="search-input" placeholder="City name…" />
                 </div>
-                <button id="search-btn" class="search-btn">
+                <button
+                    id="search-btn"
+                    class="search-btn"
+                    type="button"
+                    aria-label="Search location"
+                    title="Search location"
+                >
                     <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                         <circle cx="7" cy="7" r="5" stroke="currentColor" fill="none" stroke-width="1.5" />
                         <line
@@ -98,7 +104,7 @@
                 </button>
             </div>
             <div class="top-bar-right">
-                <button id="photo-capture" class="mode-toggle-btn" title="Save photo (P)">
+                <button id="photo-capture" class="mode-toggle-btn" title="Save photo (P)" aria-label="Save photo">
                     <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                         <rect
                             x="1.5"
@@ -120,7 +126,12 @@
                         />
                     </svg>
                 </button>
-                <button id="timelapse-record" class="mode-toggle-btn" title="Export time-lapse (L)">
+                <button
+                    id="timelapse-record"
+                    class="mode-toggle-btn"
+                    title="Export time-lapse (L)"
+                    aria-label="Export time-lapse"
+                >
                     <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                         <circle cx="8" cy="8" r="6.5" stroke="currentColor" fill="none" stroke-width="1.5" />
                         <circle cx="8" cy="8" r="2.5" fill="currentColor" />
@@ -130,6 +141,7 @@
                     id="kiosk-toggle"
                     class="mode-toggle-btn"
                     title="Enter kiosk mode (fullscreen + keep screen on)"
+                    aria-label="Kiosk mode"
                     aria-pressed="false"
                     hidden
                 >
@@ -164,7 +176,13 @@
                         />
                     </svg>
                 </button>
-                <button id="ambience-toggle" class="mode-toggle-btn" title="Ambient sound (muted)" aria-pressed="false">
+                <button
+                    id="ambience-toggle"
+                    class="mode-toggle-btn"
+                    title="Ambient sound (muted)"
+                    aria-label="Ambient sound"
+                    aria-pressed="false"
+                >
                     <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                         <path
                             d="M2 6h2.5L8 3v10L4.5 10H2V6z"
@@ -193,7 +211,12 @@
                         />
                     </svg>
                 </button>
-                <button id="mode-toggle" class="mode-toggle-btn" title="Switch to Timeline View (T)">
+                <button
+                    id="mode-toggle"
+                    class="mode-toggle-btn"
+                    title="Switch to Timeline View (T)"
+                    aria-label="Switch to timeline view"
+                >
                     <svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                         <circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5" />
                         <line
@@ -499,7 +522,12 @@
 
         <!-- Timeline Scrubber -->
         <div id="timeline-scrubber">
-            <button id="scrubber-play-btn" class="scrubber-btn" title="Play/Pause (W)">
+            <button
+                id="scrubber-play-btn"
+                class="scrubber-btn"
+                title="Play/Pause (W)"
+                aria-label="Play or pause time warp"
+            >
                 <svg id="scrubber-play-icon" viewBox="0 0 16 16" aria-hidden="true">
                     <polygon
                         points="5,3 13,8 5,13"

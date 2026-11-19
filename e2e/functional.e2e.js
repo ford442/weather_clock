@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import {
     launchApp,
     mockExternalAPIs,
@@ -15,6 +16,15 @@ import {
 test.describe('functional', () => {
     test.beforeEach(async ({ page }) => {
         await mockExternalAPIs(page);
+    });
+
+    test('toolbar icon buttons have accessible names', async ({ page }) => {
+        await launchApp(page);
+        const results = await new AxeBuilder({ page }).withRules(['button-name']).analyze();
+        expect(results.violations).toEqual([]);
+
+        await expect(page.locator('#search-btn')).toHaveAttribute('aria-label', 'Search location');
+        await expect(page.locator('#mode-toggle')).toHaveAttribute('aria-label', 'Switch to timeline view');
     });
 
     test('T key cycles modes and updates ?mode=', async ({ page }) => {
