@@ -349,3 +349,47 @@ test.describe('weather failure handling', () => {
         expect(pageErrors).toEqual([]);
     });
 });
+
+test.describe('aurora', () => {
+    test.beforeEach(async ({ page }) => {
+        await mockExternalAPIs(page);
+    });
+
+    test('boots with the Kp endpoint offline and draws no curtain', async ({ page }) => {
+        let kpRequests = 0;
+        await page.route('https://services.swpc.noaa.gov/**', (route) => {
+            kpRequests++;
+            return route.abort('internetdisconnected');
+        });
+        await launchApp(page, { query: 'aurora=live' });
+
+        await expect(page.locator('body')).toHaveAttribute('data-weather-state', 'ready');
+        expect(kpRequests).toBeGreaterThan(0);
+        const state = await page.evaluate(() => window.aetherDebug.getAuroraState());
+        expect(state).toMatchObject({ built: false, visible: false, opacity: 0, source: null });
+    });
+
+    test('setDebugAurora forces a curtain on a clear night', async ({ page }) => {
+        await launchApp(page);
+        await page.evaluate(() => {
+            window.setDebugTime(0);
+            window.setDebugWeather(0);
+            window.setDebugAurora(9);
+        });
+        await expect
+            .poll(() => page.evaluate(() => window.aetherDebug.getAuroraState()), { timeout: 15_000 })
+            .toMatchObject({ source: 'debug', built: true, visible: true });
+        const drawn = await page.evaluate(() => {
+            const mesh = window.aetherDebug.scene.getObjectByName('aurora');
+            return {
+                inScene: Boolean(mesh),
+                visible: mesh?.visible,
+                backend: window.aetherDebug.getAuroraState().backend
+            };
+        });
+        expect(drawn).toEqual({ inScene: true, visible: true, backend: expect.stringMatching(/^web(gl|gpu)$/) });
+
+        await page.evaluate(() => window.setDebugAurora(null));
+        await expect.poll(() => page.evaluate(() => window.aetherDebug.getAuroraState().visible)).toBe(false);
+    });
+});

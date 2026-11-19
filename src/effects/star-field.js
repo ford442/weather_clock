@@ -18,6 +18,8 @@ import { NAKED_EYE_PLANETS, getPlanetPositions } from '../sky/planets.js';
 import { createTextSprite } from './text-sprite.js';
 import { ZodiacOverlay } from './zodiac-overlay.js';
 import { MilkyWayBand } from './milky-way.js';
+import { AuroraCurtain, AURORA_RENDER_CONFIG } from './aurora.js';
+import { auroraVisibility, kpSampleApplies } from '../sky/aurora.js';
 import { SCENE_LAYOUT } from '../scene-layout.js';
 
 export const STAR_FIELD_CONFIG = Object.freeze({
@@ -57,16 +59,29 @@ function liveSatelliteElementsAllowed() {
  * stars and real planets in real places, just a thinner sky behind them.
  * The Milky Way band goes with the constellations: it is one draw call, but a
  * large translucent one, and it is never built on a tier that drops it.
+ * The aurora curtain follows the same rule.
  *
- * @typedef {{faintStars: number, constellations: boolean, labels: boolean, milkyWay: boolean}} SkyQualityTier
+ * @typedef {{faintStars: number, constellations: boolean, labels: boolean, milkyWay: boolean, aurora: boolean}} SkyQualityTier
  * @type {Readonly<Record<string, SkyQualityTier>>}
  */
 export const SKY_QUALITY_TIERS = Object.freeze({
-    high: { faintStars: STAR_FIELD_CONFIG.faintStarCount, constellations: true, labels: true, milkyWay: true },
-    focused: { faintStars: STAR_FIELD_CONFIG.faintStarCount, constellations: true, labels: true, milkyWay: true },
-    medium: { faintStars: 1100, constellations: true, labels: true, milkyWay: true },
-    low: { faintStars: 450, constellations: false, labels: false, milkyWay: false },
-    thumbnail: { faintStars: 200, constellations: false, labels: false, milkyWay: false }
+    high: {
+        faintStars: STAR_FIELD_CONFIG.faintStarCount,
+        constellations: true,
+        labels: true,
+        milkyWay: true,
+        aurora: true
+    },
+    focused: {
+        faintStars: STAR_FIELD_CONFIG.faintStarCount,
+        constellations: true,
+        labels: true,
+        milkyWay: true,
+        aurora: true
+    },
+    medium: { faintStars: 1100, constellations: true, labels: true, milkyWay: true, aurora: true },
+    low: { faintStars: 450, constellations: false, labels: false, milkyWay: false, aurora: false },
+    thumbnail: { faintStars: 200, constellations: false, labels: false, milkyWay: false, aurora: false }
 });
 
 /**
@@ -200,6 +215,22 @@ export class StarField {
          * @type {MilkyWayBand|null}
          */
         this.milkyWay = null;
+        /**
+         * The aurora curtain. Local (alt/az), so it hangs off the scene, not the
+         * equatorial sky group. Built only once a night passes the Kp floor.
+         * @type {AuroraCurtain|null}
+         */
+        this.aurora = null;
+        /** @type {import('../sky/aurora.js').KpSample|null} */
+        this.auroraSample = null;
+        /**
+         * Debug override (`setDebugAurora`); beats the live sample and its time window.
+         * @type {number|null}
+         */
+        this.auroraKpOverride = null;
+        /** @type {import('../sky/aurora.js').AuroraVisibility|null} */
+        this._auroraVisibility = null;
+        this._auroraOpacity = 0;
 
         this.skyGroup = new THREE.Group();
         this.skyGroup.matrixAutoUpdate = false;
@@ -752,6 +783,7 @@ export class StarField {
         if (targetOpacity <= 0.01) {
             this._opacity = 0;
             this.milkyWay?.update(0);
+            this._updateAurora(0);
             this.skyGroup.visible = false;
             return;
         }
@@ -784,6 +816,78 @@ export class StarField {
         if (this._tier.milkyWay && MilkyWayBand.opacityFor(faintOpacity) > 0) this._ensureMilkyWay();
         this.milkyWay?.update(faintOpacity, this._tier.milkyWay);
         this.satellites?.update(this.showSatellites ? brightOpacity : 0);
+        this._updateAurora(targetOpacity);
+    }
+
+    /** Kp driving the curtain right now, or null when there is none for this instant. */
+    _effectiveKp() {
+        if (this.auroraKpOverride != null) return this.auroraKpOverride;
+        return kpSampleApplies(this.auroraSample, this.observerDate) ? (this.auroraSample?.kp ?? null) : null;
+    }
+
+    /**
+     * Fade the curtain with twilight and cloud. Cloud is already inside the
+     * predicate's intensity, so it snuffs the curtain the way it snuffs stars.
+     * @param {number} twilight - The star field's twilight fade, 0…1.
+     */
+    _updateAurora(twilight) {
+        const visibility = auroraVisibility({
+            latitudeDeg: this.latitude,
+            kp: this._effectiveKp(),
+            cloudCover: this.cloudCover / 100
+        });
+        this._auroraVisibility = visibility;
+        const dimming = 1 - AURORA_RENDER_CONFIG.lightPollutionDimming * this.lightPollution;
+        const opacity = this._tier.aurora && visibility.visible ? twilight * visibility.intensity * dimming : 0;
+        this._auroraOpacity = opacity;
+        if (opacity > 0.002 && !this.aurora && !this._disposed) {
+            // Born on the TSL path after WebGPU init, like the Milky Way.
+            this.aurora = new AuroraCurtain(this.scene, { nodeModules: this._nodeModules });
+        }
+        this.aurora?.update({ opacity, bearing: visibility.bearing, reducedMotion: this.reducedMotion });
+    }
+
+    /**
+     * The latest planetary K-index from the live feed, or null after a failed
+     * fetch (which hides the curtain).
+     * @param {import('../sky/aurora.js').KpSample|null} sample
+     */
+    setAuroraActivity(sample) {
+        this.auroraSample = sample && Number.isFinite(sample.kp) && Number.isFinite(sample.time) ? sample : null;
+    }
+
+    /**
+     * Force a Kp for debugging (`setDebugAurora`), or clear it with null. The
+     * curtain still needs a dark, clear-enough sky, exactly like a real one.
+     * @param {number|null} kp
+     */
+    setAuroraKpOverride(kp) {
+        this.auroraKpOverride = kp != null && Number.isFinite(kp) ? Math.max(0, Math.min(9, kp)) : null;
+    }
+
+    /**
+     * Predicate inputs and drawn opacity, for `aetherDebug.getAuroraState()`.
+     * @returns {{inputs: import('../sky/aurora.js').AuroraInputs, source: 'debug'|'swpc'|null, sampleTime: number|null, enabled: boolean, built: boolean, backend: string|null, visible: boolean, intensity: number, bearing: number, kpFloor: number, opacity: number, reducedMotion: boolean}}
+     */
+    getAuroraState() {
+        const kp = this._effectiveKp();
+        const inputs = { latitudeDeg: this.latitude, kp, cloudCover: this.cloudCover / 100 };
+        const visibility = auroraVisibility(inputs);
+        const drawn = this.aurora?.getState();
+        return {
+            inputs,
+            source: this.auroraKpOverride != null ? 'debug' : kp != null ? 'swpc' : null,
+            sampleTime: this.auroraSample?.time ?? null,
+            enabled: this._tier.aurora,
+            built: !!this.aurora,
+            backend: drawn?.backend ?? null,
+            visible: !!drawn?.visible,
+            intensity: visibility.intensity,
+            bearing: visibility.bearing,
+            kpFloor: visibility.kpFloor,
+            opacity: this._auroraOpacity,
+            reducedMotion: this.reducedMotion
+        };
     }
 
     /**
@@ -898,6 +1002,7 @@ export class StarField {
         this.mesh = this.catalogStars;
         this.uniforms = this.catalogMaterial.userData.starUniforms;
         this.milkyWay?.initWebGPU(modules);
+        this.aurora?.initWebGPU(modules);
         this._webgpu = true;
         await this.satellites?.initWebGPU();
     }
@@ -941,6 +1046,8 @@ export class StarField {
         this.zodiac.dispose();
         this.milkyWay?.dispose();
         this.milkyWay = null;
+        this.aurora?.dispose();
+        this.aurora = null;
         this._disposed = true;
         this.satellites?.dispose();
         this.satellites = null;

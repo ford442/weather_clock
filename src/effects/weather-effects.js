@@ -272,6 +272,15 @@ export class WeatherEffects {
     }
 
     /**
+     * Hand the night sky the latest planetary K-index (null after a failed
+     * fetch, which hides the aurora).
+     * @param {import('../sky/aurora.js').KpSample|null} sample
+     */
+    setAuroraActivity(sample) {
+        this.starField?.setAuroraActivity?.(sample);
+    }
+
+    /**
      * Toggle the optional night-sky overlays so the sky can stay uncluttered.
      * @param {{constellations?: boolean, planets?: boolean, labels?: boolean, zodiac?: boolean, zodiacMode?: import('../sky/zodiac.js').ZodiacMode, satellites?: boolean, lightPollution?: number}} options
      * @returns {Promise<void>} Settles once an optional layer that loads on demand (satellites) is ready.

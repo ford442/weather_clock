@@ -58,6 +58,7 @@ import {
 import { t, formatTime, formatTemp } from './i18n/strings.js';
 import { AnimationController } from './animation.js';
 import { setupDebugAPI } from './debug.js';
+import { startKpFeed } from './sky/aurora.js';
 import { setupCapture } from './capture/index.js';
 import { AmbienceEngine } from './audio/AmbienceEngine.js';
 import { ModeController } from './ModeController.js';
@@ -1000,6 +1001,14 @@ async function bootstrap() {
 
         if (!navigator.onLine) {
             showLatestOfflineStatus();
+        }
+
+        // Aurora: live Kp from NOAA SWPC, fire-and-forget so it can never hold
+        // up the weather boot. Off under ?test=1 so baselines stay deterministic,
+        // unless a spec opts back in with &aurora=live (to stub the endpoint).
+        const bootParams = new URLSearchParams(window.location.search);
+        if (!bootParams.has('test') || bootParams.get('aurora') === 'live') {
+            startKpFeed((sample) => weatherEffects.setAuroraActivity(sample));
         }
 
         await fetchAndDisplayWeather();
