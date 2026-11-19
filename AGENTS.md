@@ -362,7 +362,7 @@ _WebGL path. Under WebGPU these are simulated by TSL compute nodes in `src/effec
 ### Known Issues / Blockers
 _Last verified 2026-11-19. The 150–155 batch is closed. Its decisions are on `main` and still hold: the in-repo `SkyMaterial` and logarithmic depth, Z-wrapped precipitation, JS as the kernel source of truth with WASM off, the true sundial, and the satellite layer. Only currently open issues belong here._
 
-- **[#172](https://github.com/ford442/weather_clock/issues/172) — Satellite orbital radius** — the satellite layer paints onto the star sphere, so the ISS and a star at the same alt/az share one depth; `SCENE_LAYOUT.orbital.radius` between the star sphere and the sky is the fix. Still unconfirmed from #155: whether Celestrak sends CORS headers for the Pages origin (if not, the snapshot is all users get until a same-origin proxy exists). WebGPU satellites are still 1-px points; only the catalog and planets are sized sprites.
+- **Satellites** — the layer now sits on `SCENE_LAYOUT.orbital.radius` (20000), between the star sphere and the sky. Still unconfirmed from #155: whether Celestrak sends CORS headers for the Pages origin (if not, the snapshot is all users get until a same-origin proxy exists). WebGPU satellites are still 1-px points; only the catalog and planets are sized sprites.
 
 ---
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createStarFieldMaterial, createStarFieldMaterialWebGPU } from '../webgpu/materials/StarFieldMaterial.js';
 import { equatorialToVector } from '../sky/celestialCoordinates.js';
+import { SCENE_LAYOUT } from '../scene-layout.js';
 import { SATELLITE_CONFIG, getSatellitePositions, propagateSatellite } from '../sky/satellites.js';
 import { getSnapshotCatalog } from '../sky/satelliteCatalog.js';
 import { magnitudeToBrightness, magnitudeToPointSize } from './star-field.js';
@@ -53,7 +54,7 @@ export class SatelliteLayer {
      */
     constructor(parent, options = {}) {
         this.parent = parent;
-        this.radius = options.radius ?? 2000;
+        this.radius = options.radius ?? SCENE_LAYOUT.orbital.radius;
         this.reducedMotion = !!options.reducedMotion;
         this.visible = false;
 
