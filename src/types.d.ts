@@ -367,6 +367,7 @@ interface Window {
     aetherDebug?: Record<string, unknown>;
     aetherPerf?: Record<string, unknown>;
     modeController?: import('./ModeController.js').ModeController;
+    setDebugAurora?: (kp?: number | null) => unknown;
     setDebugDailyForecast?: (...args: any[]) => any;
     setDebugForecastDay?: (...args: any[]) => any;
     setDebugTime?: (...args: any[]) => any;

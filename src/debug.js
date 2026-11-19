@@ -124,6 +124,13 @@ export function setupDebugAPI(state, services, scene3d) {
         }
     };
 
+    // Debug function: force the aurora's Kp (null clears it). The curtain still
+    // needs night and a clear-enough sky, so pair it with setDebugTime/Weather.
+    window.setDebugAurora = (kp = 9) => {
+        weatherEffects.starField?.setAuroraKpOverride?.(kp);
+        return weatherEffects.starField?.getAuroraState?.() ?? null;
+    };
+
     // Expose internal objects for verification
     window.aetherDebug = {
         scene,
@@ -205,11 +212,14 @@ export function setupDebugAPI(state, services, scene3d) {
                 zodiac: starField.showZodiac,
                 zodiacMode: starField.zodiacMode,
                 satellites: starField.showSatellites,
+                milkyWay: starField.getMilkyWayState?.() ?? null,
                 opacity: starField._opacity
             };
         },
         /** Sun/Moon/planet placements in the twelve signs, under the active convention. */
         getZodiacState: () => weatherEffects.starField?.zodiac?.getState?.() ?? null,
+        /** Aurora predicate inputs (latitude, Kp, cloud), its result, and the drawn opacity. */
+        getAuroraState: () => weatherEffects.starField?.getAuroraState?.() ?? null,
         setLightPollution: (amount) => weatherEffects.setSkyLayers?.({ lightPollution: amount }),
         /** Turn the satellite layer on/off without persisting; resolves once its chunk has loaded. */
         setSatellites: (visible = true) => weatherEffects.setSkyLayers?.({ satellites: visible }),
@@ -320,6 +330,7 @@ export function setupDebugAPI(state, services, scene3d) {
 export function cleanupDebugAPI() {
     delete window.setDebugWeather;
     delete window.setDebugTime;
+    delete window.setDebugAurora;
     delete window.setDebugDailyForecast;
     delete window.setDebugForecastDay;
     delete window.aetherDebug;

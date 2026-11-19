@@ -261,3 +261,90 @@ ${LOG_DEPTH_FRAGMENT}
     gl_FragColor = vec4(vColor, vOpacity * strength);
 }
 `;
+
+/**
+ * The Milky Way band. A ribbon on the star sphere, parented to the star
+ * field's sky group; the texture carries the band's tint (rgb) and surface
+ * brightness (a). Depth comes from the log-depth chunks like every other sky
+ * shader — nothing here writes `gl_FragDepth` or pins `gl_Position.z`.
+ */
+export const milkyWayVertexShader = `
+uniform float uHorizonRadius;
+varying vec2 vUv;
+varying float vHorizon;
+
+${LOG_DEPTH_VERTEX_PARS}
+void main() {
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+${LOG_DEPTH_VERTEX}
+    vUv = uv;
+    // Same horizon fade as the stars, so the band sinks with them.
+    vHorizon = smoothstep(-0.03, 0.04, worldPosition.y / max(1.0, uHorizonRadius));
+}
+`;
+
+export const milkyWayFragmentShader = `
+uniform sampler2D uMap;
+uniform float uOpacity;
+uniform float uIntensity;
+varying vec2 vUv;
+varying float vHorizon;
+${LOG_DEPTH_FRAGMENT_PARS}
+void main() {
+${LOG_DEPTH_FRAGMENT}
+    vec4 band = texture2D(uMap, vUv);
+    float alpha = band.a * uOpacity * uIntensity * vHorizon;
+    if (alpha <= 0.002) discard;
+    gl_FragColor = vec4(band.rgb, alpha);
+}
+`;
+
+/**
+ * The aurora curtain. Ribbons standing on the sky toward the geomagnetic pole,
+ * in the local (alt/az) frame rather than the star field's equatorial group.
+ * uv.x runs along a ribbon, uv.y from its bright lower hem (0) up into the
+ * fading red top (1); `aSeed` decorrelates the ribbons. The traveling wave is
+ * `uTime`, which the CPU holds still under reduced motion. Log depth only —
+ * no `gl_FragDepth`.
+ */
+export const auroraVertexShader = `
+uniform float uHorizonRadius;
+attribute float aSeed;
+varying vec2 vUv;
+varying float vSeed;
+varying float vHorizon;
+
+${LOG_DEPTH_VERTEX_PARS}
+void main() {
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+${LOG_DEPTH_VERTEX}
+    vUv = uv;
+    vSeed = aSeed;
+    vHorizon = smoothstep(-0.03, 0.04, worldPosition.y / max(1.0, uHorizonRadius));
+}
+`;
+
+export const auroraFragmentShader = `
+uniform float uOpacity;
+uniform float uTime;
+varying vec2 vUv;
+varying float vSeed;
+varying float vHorizon;
+${LOG_DEPTH_FRAGMENT_PARS}
+void main() {
+${LOG_DEPTH_FRAGMENT}
+    float u = vUv.x;
+    float v = vUv.y;
+    // Vertical rays drifting along the curtain.
+    float rays = sin(u * 83.0 + vSeed * 13.0 + uTime * 0.55) * sin(u * 31.0 - uTime * 0.23 + vSeed * 5.0);
+    rays = 0.45 + 0.55 * clamp(rays * 0.5 + 0.5, 0.0, 1.0);
+    float hem = smoothstep(0.0, 0.07, v) * pow(1.0 - v, 1.7);
+    float ends = smoothstep(0.0, 0.18, u) * smoothstep(0.0, 0.18, 1.0 - u);
+    vec3 color = mix(vec3(0.22, 1.0, 0.52), vec3(0.78, 0.22, 0.52), smoothstep(0.35, 0.95, v));
+    float alpha = uOpacity * hem * ends * rays * vHorizon;
+    if (alpha <= 0.002) discard;
+    gl_FragColor = vec4(color, alpha);
+}
+`;
