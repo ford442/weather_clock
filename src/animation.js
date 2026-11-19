@@ -199,11 +199,13 @@ export class AnimationController {
         /** @type {ReturnType<import('./astronomy.js').AstronomyService['update']>|null} */
         let astroData = null;
         if (!inForecastVignette) {
-            sundial.update(state.simulationTime);
-
             const lat = weatherService.latitude;
             const lon = weatherService.longitude;
             astroData = astronomyService.update(state.simulationTime, lat, lon, 20);
+
+            // Same instant and observer as the sun light, so the gnomon's shadow
+            // and the night pointer read one clock.
+            sundial.update(state.simulationTime, astroData);
 
             sunLight.position.copy(astroData.sunPosition);
             moonGroup.position.copy(astroData.moonPosition);
