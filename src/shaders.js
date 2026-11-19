@@ -261,3 +261,41 @@ ${LOG_DEPTH_FRAGMENT}
     gl_FragColor = vec4(vColor, vOpacity * strength);
 }
 `;
+
+/**
+ * The Milky Way band. A ribbon on the star sphere, parented to the star
+ * field's sky group; the texture carries the band's tint (rgb) and surface
+ * brightness (a). Depth comes from the log-depth chunks like every other sky
+ * shader — nothing here writes `gl_FragDepth` or pins `gl_Position.z`.
+ */
+export const milkyWayVertexShader = `
+uniform float uHorizonRadius;
+varying vec2 vUv;
+varying float vHorizon;
+
+${LOG_DEPTH_VERTEX_PARS}
+void main() {
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+${LOG_DEPTH_VERTEX}
+    vUv = uv;
+    // Same horizon fade as the stars, so the band sinks with them.
+    vHorizon = smoothstep(-0.03, 0.04, worldPosition.y / max(1.0, uHorizonRadius));
+}
+`;
+
+export const milkyWayFragmentShader = `
+uniform sampler2D uMap;
+uniform float uOpacity;
+uniform float uIntensity;
+varying vec2 vUv;
+varying float vHorizon;
+${LOG_DEPTH_FRAGMENT_PARS}
+void main() {
+${LOG_DEPTH_FRAGMENT}
+    vec4 band = texture2D(uMap, vUv);
+    float alpha = band.a * uOpacity * uIntensity * vHorizon;
+    if (alpha <= 0.002) discard;
+    gl_FragColor = vec4(band.rgb, alpha);
+}
+`;

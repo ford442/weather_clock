@@ -205,6 +205,7 @@ export function setupDebugAPI(state, services, scene3d) {
                 zodiac: starField.showZodiac,
                 zodiacMode: starField.zodiacMode,
                 satellites: starField.showSatellites,
+                milkyWay: starField.getMilkyWayState?.() ?? null,
                 opacity: starField._opacity
             };
         },

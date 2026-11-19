@@ -17,6 +17,7 @@ import { CONSTELLATIONS, STARS, STAR_INDEX, colorFromBV, getConstellationLineInd
 import { NAKED_EYE_PLANETS, getPlanetPositions } from '../sky/planets.js';
 import { createTextSprite } from './text-sprite.js';
 import { ZodiacOverlay } from './zodiac-overlay.js';
+import { MilkyWayBand } from './milky-way.js';
 import { SCENE_LAYOUT } from '../scene-layout.js';
 
 export const STAR_FIELD_CONFIG = Object.freeze({
@@ -54,16 +55,18 @@ function liveSatelliteElementsAllowed() {
  * call plus a per-frame line rebuild for something that is deliberately drawn
  * at very low opacity anyway. A low-tier machine therefore still gets real
  * stars and real planets in real places, just a thinner sky behind them.
+ * The Milky Way band goes with the constellations: it is one draw call, but a
+ * large translucent one, and it is never built on a tier that drops it.
  *
- * @typedef {{faintStars: number, constellations: boolean, labels: boolean}} SkyQualityTier
+ * @typedef {{faintStars: number, constellations: boolean, labels: boolean, milkyWay: boolean}} SkyQualityTier
  * @type {Readonly<Record<string, SkyQualityTier>>}
  */
 export const SKY_QUALITY_TIERS = Object.freeze({
-    high: { faintStars: STAR_FIELD_CONFIG.faintStarCount, constellations: true, labels: true },
-    focused: { faintStars: STAR_FIELD_CONFIG.faintStarCount, constellations: true, labels: true },
-    medium: { faintStars: 1100, constellations: true, labels: true },
-    low: { faintStars: 450, constellations: false, labels: false },
-    thumbnail: { faintStars: 200, constellations: false, labels: false }
+    high: { faintStars: STAR_FIELD_CONFIG.faintStarCount, constellations: true, labels: true, milkyWay: true },
+    focused: { faintStars: STAR_FIELD_CONFIG.faintStarCount, constellations: true, labels: true, milkyWay: true },
+    medium: { faintStars: 1100, constellations: true, labels: true, milkyWay: true },
+    low: { faintStars: 450, constellations: false, labels: false, milkyWay: false },
+    thumbnail: { faintStars: 200, constellations: false, labels: false, milkyWay: false }
 });
 
 /**
@@ -191,6 +194,12 @@ export class StarField {
          * @type {import('../webgpu/materials/StarFieldMaterial.js').StarFieldNodeModules|null}
          */
         this._nodeModules = null;
+        /**
+         * The galactic band. Built on the first dark frame under a tier that can
+         * afford it, so daytime and low-tier sessions never bake its texture.
+         * @type {MilkyWayBand|null}
+         */
+        this.milkyWay = null;
 
         this.skyGroup = new THREE.Group();
         this.skyGroup.matrixAutoUpdate = false;
@@ -447,6 +456,7 @@ export class StarField {
         this._refreshCatalogPositions(this.observerDate);
         this._refreshPlanets(this.observerDate);
         this.zodiac.setDate(this.observerDate);
+        this.milkyWay?.setDate(this.observerDate);
         if (this.showSatellites) this._refreshSatellites();
         this._refreshSkyRotation();
     }
@@ -471,6 +481,14 @@ export class StarField {
     _applyQualityTier() {
         const drawn = Math.max(0, Math.min(this._faintStarCount, this._tier.faintStars));
         this.faintStars.geometry.setDrawRange(0, drawn);
+    }
+
+    _ensureMilkyWay() {
+        if (this.milkyWay || this._disposed) return;
+        // After WebGPU init the band is born on the TSL path, so a WebGL
+        // material never reaches the WebGPU renderer.
+        this.milkyWay = new MilkyWayBand(this.skyGroup, { radius: this.radius, nodeModules: this._nodeModules });
+        this.milkyWay.setDate(this.observerDate);
     }
 
     /** How many filler stars the active tier actually draws. */
@@ -733,6 +751,7 @@ export class StarField {
 
         if (targetOpacity <= 0.01) {
             this._opacity = 0;
+            this.milkyWay?.update(0);
             this.skyGroup.visible = false;
             return;
         }
@@ -760,6 +779,10 @@ export class StarField {
 
         this._updateLabelOpacity(brightOpacity);
         this.zodiac.update(brightOpacity);
+        // Same twilight × cloud × skyglow product as the faint field; the band
+        // is a dimmer surface, so it goes first (see MILKY_WAY_CONFIG).
+        if (this._tier.milkyWay && MilkyWayBand.opacityFor(faintOpacity) > 0) this._ensureMilkyWay();
+        this.milkyWay?.update(faintOpacity, this._tier.milkyWay);
         this.satellites?.update(this.showSatellites ? brightOpacity : 0);
     }
 
@@ -792,6 +815,22 @@ export class StarField {
             sprite.visible = constellationOpacity > 0.02;
             sprite.material.opacity = constellationOpacity;
         }
+    }
+
+    /**
+     * Whether the galactic band is built and how strongly it is drawn right
+     * now, for `aetherDebug.getNightSkyState()`.
+     * @returns {{enabled: boolean, built: boolean, visible: boolean, opacity: number, backend: string|null}}
+     */
+    getMilkyWayState() {
+        const state = this.milkyWay?.getState();
+        return {
+            enabled: this._tier.milkyWay,
+            built: !!state,
+            visible: !!state?.visible,
+            opacity: state?.opacity ?? 0,
+            backend: state?.backend ?? null
+        };
     }
 
     /** Catalog sizes behind the current sky, for the debug API and tests. */
@@ -858,6 +897,7 @@ export class StarField {
 
         this.mesh = this.catalogStars;
         this.uniforms = this.catalogMaterial.userData.starUniforms;
+        this.milkyWay?.initWebGPU(modules);
         this._webgpu = true;
         await this.satellites?.initWebGPU();
     }
@@ -899,6 +939,8 @@ export class StarField {
     dispose() {
         this._disposeLabels();
         this.zodiac.dispose();
+        this.milkyWay?.dispose();
+        this.milkyWay = null;
         this._disposed = true;
         this.satellites?.dispose();
         this.satellites = null;

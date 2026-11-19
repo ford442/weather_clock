@@ -44,6 +44,7 @@ an `async initWebGPU()` when the WebGPU backend is active.
 | ------------------ | ----------------------------------------- | --------------------------------------------------- | ------------------------------------------ |
 | Clouds             | `effects/cloud-system.js`                 | `createCloudMaterial` (`onBeforeCompile` injection) | `createCloudMaterialWebGPU` (TSL)          |
 | Stars              | `effects/star-field.js`                   | `createStarFieldMaterial`                           | `createStarFieldMaterialWebGPU` (TSL)      |
+| Milky Way          | `effects/milky-way.js`                    | `createMilkyWayMaterial`                            | `buildMilkyWayMaterialWebGPU` (TSL)        |
 | Ground             | `ground.js` / `effects/ground-effects.js` | `MeshStandardMaterial` + patches                    | `createGroundMaterialWebGPU` (TSL)         |
 | Sundial snow/frost | `effects/material-patches.js`             | `onBeforeCompile` patches                           | `webgpu/materials/weather-node-patches.js` |
 | Moon               | `moonPhase.js`                            | `createMoonMaterial`                                | `createMoonMaterialWebGPU`                 |
