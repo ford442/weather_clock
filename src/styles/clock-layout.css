@@ -751,3 +751,39 @@ body.time-warping .time-display {
         box-shadow: 0 0 18px rgba(224, 90, 90, 0.75);
     }
 }
+
+/* Visible tooltip on hover/keyboard focus for icon-only buttons (mirrors aria-label) */
+#top-bar .mode-toggle-btn,
+#top-bar .search-btn,
+#top-bar .retry-btn {
+    position: relative;
+}
+
+#top-bar .mode-toggle-btn[aria-label]::after,
+#top-bar .search-btn[aria-label]::after,
+#top-bar .retry-btn[aria-label]::after {
+    content: attr(aria-label);
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(10, 10, 20, 0.92);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 20;
+}
+
+#top-bar .mode-toggle-btn:hover::after,
+#top-bar .mode-toggle-btn:focus-visible::after,
+#top-bar .search-btn:hover::after,
+#top-bar .search-btn:focus-visible::after,
+#top-bar .retry-btn:hover::after,
+#top-bar .retry-btn:focus-visible::after {
+    opacity: 1;
+}

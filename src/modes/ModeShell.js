@@ -121,7 +121,6 @@ export class ModeShell {
             toggleBtn.className = 'mode-toggle-btn';
             toggleBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/><line x1="8" y1="8" x2="8" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="8" y1="8" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
             toggleBtn.title = 'Cycle views: Clock / Timeline / 10-Day Forecast (T)';
-            toggleBtn.setAttribute('aria-label', 'Cycle between clock, timeline and forecast views');
 
             const centerPanel = document.getElementById('panel-center');
             if (centerPanel) {
@@ -292,12 +291,15 @@ export class ModeShell {
         if (this.currentMode === 'clock') {
             toggleBtn.innerHTML = CLOCK_SVG;
             toggleBtn.title = 'Switch to Timeline View (T)';
+            toggleBtn.setAttribute('aria-label', 'Switch to timeline view');
         } else if (this.currentMode === 'timeline') {
             toggleBtn.innerHTML = TIMELINE_SVG;
             toggleBtn.title = 'Switch to 10-Day Forecast (T)';
+            toggleBtn.setAttribute('aria-label', 'Switch to 10-day forecast');
         } else {
             toggleBtn.innerHTML = FORECAST_SVG;
             toggleBtn.title = 'Switch to Clock View (T)';
+            toggleBtn.setAttribute('aria-label', 'Switch to clock view');
         }
     }
 
